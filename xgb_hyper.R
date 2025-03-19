@@ -5,9 +5,9 @@ library(xgboost)
 library(dplyr)
 library(permimp)
 
-xgb_hyper = reactive(function(current_data,response_var,coves_to_use,nd_val,tntc_val,tntc_multy,MC_runs,
-                     loggy,randomize,xgb_tech,drop_rates,etas,gammas,max_depths,min_child_weights,subsamples,
-                     colsample_bytrees,nroundss,early_stopping_roundss,nfolds,progress_list) {
+xgb_hyper = function(current_data,response_var,coves_to_use,nd_val,tntc_val,tntc_multy,MC_runs,loggy,randomize,
+                     tree_method,xgb_tech,rate_drop_list,skip_drop_list,eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,
+                     colsamp_list,nrounds_list,nfold_list,early_stops_list,normalize_type,sample_type) {
   
   cove_data=current_data[,coves_to_use]
   ncoves = ncol(cove_data)
@@ -17,45 +17,82 @@ xgb_hyper = reactive(function(current_data,response_var,coves_to_use,nd_val,tntc
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data=data[!is.na(data[,1]),]
   
-  hyper_grid = expand.grid(
-    booster = xgb_tech,
-    rate_drop = drop_rates,
-    eta = etas,
-    gamma= gammas,
-    max_depth = max_depths,
-    min_child_weight = min_child_weights,
-    subsample = subsamples,
-    colsample_bytree = colsample_bytrees,
-    early_stopping_rounds = early_stopping_roundss,
-    nrounds=nroundss,
-    nfold=nfolds,
-  )
+  if (xgb_tech == "dart") {
+    hyper_grid = expand.grid(
+        booster = xgb_tech,
+        rate_drop = rate_drop_list,
+        skip_drop = skip_drop_list,
+        normalize_type = normalize_type,
+        sample_type = sample_type,
+        
+        tree_method = tree_method,
+        eta = eta_list,
+        gamma = gamma_list,
+        max_depth = max_depth_list,
+        min_child_weight = min_child_weight_list,
+        subsample = subsamp_list,
+        colsample_bytree = colsamp_list,
+        early_stopping_rounds = early_stops_list,
+        nrounds=nrounds_list,
+        nfold=nfold_list)
+  } else {
+    hyper_grid = expand.grid(
+      booster = xgb_tech,
+      
+      tree_method = tree_method,
+      eta = eta_list,
+      gamma = gamma_list,
+      max_depth = max_depth_list,
+      min_child_weight = min_child_weight_list,
+      subsample = subsamp_list,
+      colsample_bytree = colsamp_list,
+      early_stopping_rounds = early_stops_list,
+      nrounds=nrounds_list,
+      nfold=nfold_list)
+  }
   
-  grid_rows=as.numeric(nrow(hyper_grid))
+  print(hyper_grid)
+  
+  grid_rows=nrow(hyper_grid)
   
   results=matrix(0, nrow = grid_rows, ncol=MC_runs)
   
-  withProgress( 
-    message = 'Calculation in progress', 
-    detail = paste0("Gridrow ",a=1," iteration ",i=1, "completed."), 
+  withProgress(
+    message = 'Calculation in progress',
+    detail = paste0("Gridrow:",i=1,"/",grid_rows,"; Current iteration:",a=1,"/",MC_runs),
     value = 0,
     {
       
       for(i in 1:grid_rows) {
         
-        params = list(
-          booster = hyper_grid$xgb_tech,
-          rate_drop = hyper_grid$drop_rates[i],
-          eta = hyper_grid$etas[i],
-          gamma = hyper_grid$gammas[i],
-          max_depth = hyper_grid$max_depths[i],
-          min_child_weight = hyper_grid$min_child_weights[i],
-          subsample = hyper_grid$subsamples[i],
-          colsample_bytree = hyper_grid$colsample_bytrees[i],
-          early_stopping_rounds = hyper_grid$early_stopping_roundss[i],
-          nrounds = hyper_grid$nroundss[i],
-          nfold = hyper_grid$nfolds[i],
-        )
+        if (xgb_tech == "dart") {
+          
+          params = list(
+            booster = hyper_grid$booster[i],
+            rate_drop = hyper_grid$rate_drop[i],
+            skip_drop = hyper_grid$skip_drop[i],
+            normalize_type = hyper_grid$normalize_type[i],
+            sample_type = hyper_grid$sample_type[i],
+            
+            tree_method = hyper_grid$tree_method[i],
+            eta = hyper_grid$eta[i],
+            gamma = hyper_grid$gamma[i],
+            max_depth = hyper_grid$max_depth[i],
+            min_child_weight = hyper_grid$min_child_weight[i],
+            subsample = hyper_grid$subsample[i],
+            colsample_bytree = hyper_grid$colsample_bytree[i])
+
+        } else {
+          params = list(
+            booster = hyper_grid$booster[i],
+            tree_method = hyper_grid$tree_method[i],
+            eta = hyper_grid$eta[i],
+            gamma = hyper_grid$gamma[i],
+            max_depth = hyper_grid$max_depth[i],
+            min_child_weight = hyper_grid$min_child_weight[i],
+            subsample = hyper_grid$subsample[i],
+            colsample_bytree = hyper_grid$colsample_bytree[i])
+        }
         
         for (a in 1:MC_runs) {
           
@@ -90,20 +127,22 @@ xgb_hyper = reactive(function(current_data,response_var,coves_to_use,nd_val,tntc
             data = data[random_index, ]
           }
           
-          model = xgb.cv(data = as.matrix(data[,-1]), label=data[,1], params=params, verbose=0)
+          model = xgb.cv(data = as.matrix(data[,-1]), label=data[,1], params=params, nrounds=hyper_grid$nrounds[i],early_stopping_rounds = hyper_grid$early_stopping_rounds[i],nfold=hyper_grid$nfold[i], verbose=0)
           
           results[i,a] = min(model$evaluation_log$test_rmse_mean)
           
-          incProgress(1/(length(grid_rows)*MC_runs),detail = paste0("Gridrow ",a," iteration ",i, "completed."))
+          incProgress(1/(grid_rows*MC_runs),detail = paste0("Gridrow:",i,"/",grid_rows,"; Current iteration:",a,"/",MC_runs))
         }
       }
-      text("Done computing!")
-    }
-  )
+    })
   
   # Return the best hyperparameters
-  summary_results=rowMeans(results)
+  summary_results=round(rowMeans(results),digits=5)
   winner=which.min(summary_results)
   
-  return(best_values=hyper_grid[winner,])
-})
+  output = cbind(summary_results,hyper_grid)
+  
+  colnames(output)=c("Mean Test RMSE",colnames(hyper_grid))
+  
+  return(output)
+}

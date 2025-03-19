@@ -4,8 +4,8 @@ library(dplyr)
 library(permimp)
 
 xgb_uncert = function(current_data,response_var,id_var,coves_to_use,nd_val,tntc_val,tntc_multy,MC_runs,
-                      loggy,randomize,xgb_tech,drop_rate,eta,gamma,max_depth,min_child_weight,subsample,
-                      colsample_bytree,samp_prop,nrounds,early_stopping_rounds) {
+                      loggy,randomize,xgb_tech,drop_rate,skip_rate,eta,gamma,max_depth,min_child_weight,subsamp,
+                      colsamp,samp_prop,nrounds,normalize_type,sample_type) {
   
   cove_data=current_data[,coves_to_use]
   ncoves = ncol(cove_data)
@@ -21,6 +21,36 @@ xgb_uncert = function(current_data,response_var,id_var,coves_to_use,nd_val,tntc_
   
   fits_data = matrix(0, nrow = smp_size, ncol = 3*MC_runs)
   predicts_data = matrix(0, nrow = (nrow(data)-smp_size), ncol = 3*MC_runs)
+  
+  if (xgb_tech == "dart") {
+    params =
+      list(
+        booster = xgb_tech,
+        rate_drop = drop_rate,
+        skip_drop = skip_drop,
+        normalize_type = normalize_type,
+        sample_type = sample_type,
+        
+        tree_method = tree_method,
+        eta = eta,
+        gamma = gamma,
+        max_depth = max_depth,
+        min_child_weight = min_child_weight,
+        subsample = subsamp,
+        colsample_bytree = colsamp)
+  } else {
+    params =
+      list(
+        booster = xgb_tech,
+        
+        tree_method = tree_method,
+        eta = eta,
+        gamma = gamma,
+        max_depth = max_depth,
+        min_child_weight = min_child_weight,
+        subsample = subsamp,
+        colsample_bytree = colsamp)
+  }
   
   for (a in 1:MC_runs) {
     
@@ -55,23 +85,12 @@ xgb_uncert = function(current_data,response_var,id_var,coves_to_use,nd_val,tntc_
       data = data[random_index, ]
     }
     
-    params = list(
-      booster = xgb_tech,
-      rate_drop = drop_rate,
-      eta = eta,
-      gamma = gamma,
-      max_depth = max_depth,
-      min_child_weight = min_child_weight,
-      subsample = subsample,
-      colsample_bytree = colsample_bytree
-    )
-    
     # Split Dataset into Training and Testing
     train_ind = sample(seq_len(nrow(data)), size = smp_size)
     train_data = data[train_ind, ]
     test-data = data[-train_ind, ]
     
-    model = xgboost(data = as.matrix(train_data[,-c(1:2)]), label=train_data[,2], params=params, early_stopping_rounds = early_stopping_rounds, nrounds = nrounds, verbose=0)
+    model = xgboost(data = as.matrix(train_data[,-c(1:2)]), label=train_data[,2], params=params, nrounds = nrounds, verbose=0)
     
     models[[a]]=model
     
@@ -84,6 +103,13 @@ xgb_uncert = function(current_data,response_var,id_var,coves_to_use,nd_val,tntc_
     fits_data[,3*a]=fit1_values[-1]
     
     fit2_values = rep(NA,1)
+    
+    if (xgb_tech == "dart") {
+      fits2 = predict(model,as.matrix(test[,-c(1:2)]))
+    } else {
+      fits2 = predict(model,as.matrix(test[,-c(1:2)]))
+    }
+    
     fits2 = predict(model,as.matrix(test[,-c(1:2)]))
     fit2_values = append(fit2_values,fits2)
     
@@ -92,5 +118,5 @@ xgb_uncert = function(current_data,response_var,id_var,coves_to_use,nd_val,tntc_
     predicts_data[,3*a]=fit2_values[-1]
   }
   
-  c(fits_data,predicts_data)
+  c(models,fits_data,predicts_data)
 }

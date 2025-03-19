@@ -77,15 +77,26 @@ ModelingPanel = sidebarLayout(
           ))) %>%
       
       bs_append (
-        title = "XGB Modeling",
-        content = card(
+        title = "XGB Modeling", content= card(
           fluidRow(
-            column(12,actionButton("xgb_params", "Hyperparameters", style = 'width:100px; padding:5px;'))
-          ),
-          actionButton("xgb_select", "Coefficient Estimation", style = 'width:150px; padding:5px;'),
-          actionButton("xgb_uncert", "Prediction Uncertainty", style = 'width:150px; padding:5px;')
-        )
-      ) %>%
+            column(6, selectInput("tree_method",
+                                  label = "Tree Method",
+                                  selected ="hist",
+                                  choices = c("hist","exact","approx"))),
+            column(6, selectInput("xgb_tech",
+                                  label = "Booster",
+                                  selected ="gbtree",
+                                  choices = c("gbtree","dart","gblinear")))),
+          fluidRow(
+            column(12,align="center",actionButton("xgb_hyper_ranges", "Hyperparameter Optimization", style = 'background-color:#eaeaea; width:200px; padding:2px;'))),
+          fluidRow(
+            column(12,align="center",actionButton("xgb_params", "Set Hyperparameters", style = 'background-color:#eaeaea; width:200px; padding:2px;'))),
+          fluidRow(
+            column(12,tags$hr(style = "border-color: #2c3e50;"))),
+          fluidRow(
+            column(12,align="center",actionButton("xgb_select", "Feature Selection", style = 'width:200px; padding:2px;'))),
+          fluidRow(
+            column(12,align="center",actionButton("xgb_uncert", "Prediction Uncertainty", style = 'width:200px; padding:2px;'))))) %>%
       
       bs_accordion_multi(multi = FALSE, open = c())
     
@@ -93,8 +104,15 @@ ModelingPanel = sidebarLayout(
   
   mainPanel = mainPanel(
     width = 10,
-    id = "output",
-    DT::dataTableOutput('model_output'),
-    tags$style(type = "text/css", "#userdatatable {height: calc(100vh - 70px) !important;}")
+    id = "modeling_output",
+    navset_tab(id = "modeling_tabs",
+      nav_panel("LARS Coefficient Results", DT::dataTableOutput('lars_coeffs'),
+                tags$style(type = "text/css", "#larscoeffstable {height: calc(100vh - 70px) !important;}")),
+      nav_panel("LARS Prediction Uncertainty", "LARS Prediction Uncertainty"), 
+      nav_panel("XGB Hyperparameter Grid Search", DT::dataTableOutput('xgb_hyper'),
+                tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
+      nav_panel("XGB Feature Selection", "XGB Feature Selection"),
+      nav_panel("XGB Prediction Uncertainty", "XGB Prediction Uncertainty"),
+    )
   )
 )

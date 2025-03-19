@@ -62,26 +62,6 @@ DataPanel = sidebarLayout(
               column(12,
                      inputPanel(
                        selectInput(
-                         "rainplot",
-                         label = "Raincloud Plot",
-                         selected =
-                           "-",
-                         choices = c("-"))))),
-            
-            fluidRow(
-              column(12,
-                     inputPanel(
-                       selectInput(
-                         "lineplot",
-                         label = "Line/Time Series Plot",
-                         selected =
-                           "-",
-                         choices = c("-"))))),
-            
-            fluidRow(
-              column(12,
-                     inputPanel(
-                       selectInput(
                          "scatterx",
                          label = "Scatterplot X",
                          selected =
@@ -94,6 +74,28 @@ DataPanel = sidebarLayout(
                        selectInput(
                          "scattery",
                          label = "Scatterplot Y",
+                         selected =
+                           "-",
+                         choices = c("-"))))),
+            
+            fluidRow(column(12,tags$hr(style = "border-color: #2c3e50;"))),
+            
+            fluidRow(
+              column(12,
+                     inputPanel(
+                       selectInput(
+                         "rainplot",
+                         label = "Raincloud Plot",
+                         selected =
+                           "-",
+                         choices = c("-"))))),
+            
+            fluidRow(
+              column(12,
+                     inputPanel(
+                       selectInput(
+                         "lineplot",
+                         label = "Line/Time Series Plot",
                          selected =
                            "-",
                          choices = c("-")))))))) %>%

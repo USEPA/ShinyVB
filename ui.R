@@ -6,7 +6,7 @@ source("ui_map.R")
 
 # Define UI
 ui = fluidPage(
-
+  
   tags$style(HTML("
   
     .tabbable > .nav > li > a                  {background-color: lightgray;  color:black}
@@ -23,7 +23,11 @@ ui = fluidPage(
     .bslib-card .card-body {
        overflow:hidden;
     }
-    
+    .shiny-notification {
+       position: fixed;
+       top: 20%;
+       left: 65%;
+    }
     .btn-default:hover {
        background-color: #2c3e50;
        color: #18bc9c;

@@ -1,4 +1,4 @@
-setwd("C:/Users/mcytersk/OneDrive - Environmental Protection Agency (EPA)/Profile/Desktop/VBWEB_Shiny/Shiny_VB")
+setwd(getwd())
 
 library(bsicons)
 library(bslib)
@@ -59,6 +59,20 @@ server= function(input,output,session) {
   cove_names = reactiveVal()
   date_format = reactiveVal()
   progress_list = reactiveVal()
+  
+  rate_drop_set = reactiveVal(0.1)
+  skip_drop_set = reactiveVal(0.5)
+  eta_set = reactiveVal(0.1)
+  gamma_set = reactiveVal(0.5)
+  max_depth_set = reactiveVal(3)
+  min_child_weight_set = reactiveVal(3)
+  nrounds_set = reactiveVal(1000)
+  early_stop_set = reactiveVal(100)
+  nfold_set = reactiveVal(10)
+  subsamp_set = reactiveVal(0.8)
+  colsamp_set = reactiveVal(0.8)
+  
+  xgb_hyper_result = reactiveVal()
   
   init_data = data.frame()
   date_format_string = ""
@@ -196,9 +210,9 @@ server= function(input,output,session) {
     
     showModal(modalDialog(
       paste0("The second column has been designated as the response variable by default. To change this, click on the column name at the BOTTOM of the table."),
-      easyClose = T
-    ))
-    
+      easyClose = F,
+      footer = div(modalButton('Close'))
+      ))
   })
   
   observeEvent(input$id, ignoreInit = T, {
@@ -230,7 +244,8 @@ server= function(input,output,session) {
       
       output$rainplot = renderPlot(raincloud(rain_data1))
       
-      boxx = modalDialog(plotOutput("rainplot"),title=paste0(input$rainplot," Raincloud Plot"),easyClose = TRUE,size="l")
+      boxx = modalDialog(plotOutput("rainplot"),title=paste0(input$rainplot," Raincloud Plot"),easyClose = F,size="l",
+            footer = div(modalButton('Close')))
       
       showModal(boxx)
     }
@@ -242,7 +257,7 @@ server= function(input,output,session) {
       
       output$lineplot = renderPlot(lineplot(current_data(),input$lineplot,id_var()))
       
-      boxx = modalDialog(plotOutput("lineplot"),title=paste0(input$lineplot," Line Plot"),easyClose = TRUE,size="l")
+      boxx = modalDialog(plotOutput("lineplot"),title=paste0(input$lineplot," Line Plot"),easyClose = F,size="l",footer = div(modalButton('Close')))
       
       showModal(boxx)
     }
@@ -266,13 +281,13 @@ server= function(input,output,session) {
       
       output$scatter = renderPlot(scatter(scatter_data1,input$scatterx,input$scattery))
       
-      scatt = modalDialog(plotOutput("scatter"),title=paste0("Scatter Plot: ",input$scattery," by ", input$scatterx), easyClose = TRUE, size="l")
+      scatt = modalDialog(plotOutput("scatter"),title=paste0("Scatter Plot: ",input$scattery," by ", input$scatterx), easyClose = F, size="l",footer = div(modalButton('Close')))
       
       showModal(scatt)
     }
   })
   
-  observeEvent(input$continue, {
+  observeEvent(input$continue_impute, {
     
     removeModal()
     
@@ -284,7 +299,7 @@ server= function(input,output,session) {
 
   })
   
-  observeEvent(input$end, {
+  observeEvent(input$end_impute, {
     removeModal()
     renderdata(current_data(),response_var(),id_var())
   })
@@ -320,7 +335,7 @@ server= function(input,output,session) {
       
       showModal(modalDialog(
         paste0("WARNING: Row numbers (", listing, "), have quite a few missing values. Imputation results for these rows will be highly uncertain. Consider deleting these from the dataset."),
-        footer = tagList(actionButton("continue", "Impute Anyways"),actionButton("end", "Exit"))))
+        footer = tagList(actionButton("continue_impute", "Impute Anyways"),actionButton("end_impute", "Exit"))))
       
     } else {
     
@@ -388,7 +403,7 @@ server= function(input,output,session) {
   observeEvent(input$xgb_uncert, {
     
     xgb_uncert = xgb_uncert(current_data(),response_var(),id_var(),input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
-                            input$loggy,input$randomize,input$xgb_tech,input$drop_rate,input$eta,input$gamma,input$max_depth,input$min_child_weight,input$subsample,
+                            input$loggy,input$randomize,input$xgb_tech,input$rate_drop,input$eta,input$gamma,input$max_depth,input$min_child_weight,input$subsample,
                             input$colsample_bytree,input$samp_prop,input$nrounds,input$early_stopping_rounds) 
     
     xgb_fits = xgb_uncert[,1]
@@ -402,21 +417,155 @@ server= function(input,output,session) {
   observeEvent(input$xgb_select, {
     
     xgb_select = xgb_select(current_data(),response_var(),input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
-                            input$loggy,input$randomize,input$xgb_tech,input$drop_rate,input$eta,input$gamma,input$max_depth,input$min_child_weight,input$subsample,
+                            input$loggy,input$randomize,input$xgb_tech,input$rate_drop,input$eta,input$gamma,input$max_depth,input$min_child_weight,input$subsample,
                             input$colsample_bytree,input$samp_prop,input$nrounds,input$early_stopping_rounds) 
-    
-    print(xgb_select)
     
   })
   
-  observeEvent(input$xgb_hyper, {
+  observeEvent(input$xgb_hyper_ranges, {
     
-    xgb_hyper = xgb_hyper(current_data(),response_var(),input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
-                          input$loggy,input$randomize,input$xgb_tech,input$drop_rates,input$etas,input$gammas,input$max_depths,input$min_child_weights,input$subsamples,
-                          input$colsample_bytrees,input$nroundss,input$early_stopping_roundss,input$nfolds)
+    if (input$xgb_tech == "dart") {
+      
+      showModal(modalDialog(title="Hyperparameter Grid Search Ranges",card(
+        
+        fluidRow(
+          column(12,sliderInput("eta_r", "eta", 0, 1, width="100%", value=c(0.1,0.20), step = 0.05,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("gamma_r", "gamma", 0, 10, width="100%", value=c(0.5,0.75), step = 0.25,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("max_depth_r", "Max Tree Depth", 1, 10, width="100%", value=c(2,4), step = 1,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("min_child_weight_r", "Min Node Members", 1, 20, width="100%", value=c(2,4), step = 1,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("nrounds_r", "Number of Iterations", 100, 2000, width="100%", value=c(500,1000), step = 100,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("early_stop_r", "Early Stopping", 10, 100, width="100%", value=c(40,50), step = 10,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("nfold_r", "CV Folds", 2, 20, width="100%", value=c(5,10), step = 1,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("subsamp_r", "Subsampling Prop", 0, 1, width="100%", value=c(0.75,0.85), step = 0.05,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("colsamp_r", "Column Sample Prop", 0, 1, width="100%", value=c(0.75,0.85), step = 0.05,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("rate_drop_r", "DART Drop Rate", 0, 1, width="100%", value=c(0.10,0.15), step = 0.05,
+                                ticks = F, dragRange = TRUE))),
+        fluidRow(
+          column(12,sliderInput("skip_drop_r", "DART Skip Rate", 0, 1, width="100%", value=c(0.5,0.6), step = 0.1,
+                                ticks = F, dragRange = TRUE)))),
+        footer = div(actionButton("xgb_hyper_run", "Run"),modalButton('Close'))
+      ))
+      
+      } else {
+      
+    showModal(modalDialog(title="Hyperparameter Grid Search Ranges",card(
+      
+      fluidRow(
+        column(12,sliderInput("eta_r", "eta", 0, 1, width="100%", value=c(0.1,0.20), step = 0.05,
+                              ticks = F, dragRange = TRUE))),
+      fluidRow(
+        column(12,sliderInput("gamma_r", "gamma", 0, 10, width="100%", value=c(0.5,0.75), step = 0.25,
+                              ticks = F, dragRange = TRUE))),
+      fluidRow(
+        column(12,sliderInput("max_depth_r", "Max Tree Depth", 1, 10, width="100%", value=c(2,4), step = 1,
+                              ticks = F, dragRange = TRUE))),
+      fluidRow(
+        column(12,sliderInput("min_child_weight_r", "Min Node Members", 1, 20, width="100%", value=c(2,4), step = 1,
+                              ticks = F, dragRange = TRUE))),
+      fluidRow(
+        column(12,sliderInput("nrounds_r", "Number of Iterations", 100, 2000, width="100%", value=c(500,1000), step = 100,
+                              ticks = F, dragRange = TRUE))),
+      fluidRow(
+        column(12,sliderInput("early_stop_r", "Early Stopping", 10, 100, width="100%", value=c(40,50), step = 10,
+                              ticks = F, dragRange = TRUE))),
+      fluidRow(
+        column(12,sliderInput("nfold_r", "CV Folds", 2, 20, width="100%", value=c(5,10), step = 1,
+                              ticks = F, dragRange = TRUE))),
+      fluidRow(
+        column(12,sliderInput("subsamp_r", "Subsampling Prop", 0, 1, width="100%", value=c(0.75,0.85), step = 0.05,
+                              ticks = F, dragRange = TRUE))),
+      fluidRow(
+        column(12,sliderInput("colsamp_r", "Column Sample Prop", 0, 1, width="100%", value=c(0.75,0.85), step = 0.05,
+                              ticks = F, dragRange = TRUE)))),
+      footer = div(actionButton("xgb_hyper_run", "Run"),modalButton('Close'))
+      ))
+    }
+  })
+  
+  observeEvent(input$xgb_hyper_run, {
     
-    print(xgb_hyper)
+    eta_list = seq(from = input$eta_r[1], to = input$eta_r[2],by = 0.05)
     
+    gamma_list = seq(from = input$gamma_r[1], to = input$gamma_r[2],by = 0.25)
+    
+    max_depth_list = seq(from = input$max_depth_r[1], to = input$max_depth_r[2],by = 1)
+    
+    min_child_weight_list = seq(from = input$min_child_weight_r[1], to = input$min_child_weight_r[2],by = 1)
+    
+    nrounds_list = seq(from = input$nrounds_r[1], to = input$nrounds_r[2],by = 100)
+    
+    early_stops_list =seq(from = input$early_stop_r[1], to = input$early_stop_r[2],by = 10)
+    
+    nfold_list = seq(from = input$nfold_r[1], to = input$nfold_r[2],by = 1)
+    
+    subsamp_list = seq(from = input$subsamp_r[1], to = input$subsamp_r[2],by = 0.05)
+    
+    colsamp_list = seq(from = input$colsamp_r[1], to = input$colsamp_r[2],by = 0.05)
+    
+    if (input$xgb_tech == "dart") {
+      rate_drop_list = seq(from = input$rate_drop_r[1], to = input$rate_drop_r[2],by = 0.05)
+      skip_drop_list = seq(from = input$skip_drop_r[1], to = input$skip_drop_r[2],by = 0.1)
+    } else {
+      rate_drop_list = 0.1
+      skip_drop_list = 0.5
+    }
+    
+    xgb_hyper_results = xgb_hyper(current_data(),response_var(),input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,input$loggy,input$randomize,
+                          input$tree_method,input$xgb_tech,rate_drop_list,skip_drop_list,eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,
+                          colsamp_list,nrounds_list,nfold_list,early_stops_list,input$normalize_type,input$sample_type)
+    
+    xgb_hyper_result(as.data.frame(xgb_hyper_results))
+    
+    output$xgb_hyper = DT::renderDataTable(server=T,{
+      datatable(xgb_hyper_result(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
+                options = list(
+                  autoWidth=F,
+                  paging = TRUE,
+                  pageLength = 25,
+                  scrollX = TRUE,
+                  scrollY = TRUE,
+                  columnDefs = list(list(targets = '_all', className = 'dt-center')),
+                  initComplete = JS("function(settings, json) {",
+                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))
+    })
+  })
+  
+  observeEvent(input$xgb_hyper_rows_selected, ignoreInit = T, {
+    
+    matrix = xgb_hyper_result()
+    
+    if (input$xgb_tech == "dart") {
+      rate_drop_set(matrix[input$xgb_hyper_rows_selected,matrix$rate_drop])
+      skip_drop_set(matrix[input$xgb_hyper_rows_selected,matrix$skip_drop])
+    }
+    
+    eta_set(matrix[input$xgb_hyper_rows_selected,"eta"])
+    gamma_set(matrix[input$xgb_hyper_rows_selected,"gamma"])
+    max_depth_set(matrix[input$xgb_hyper_rows_selected,"max_depth"])
+    min_child_weight_set(matrix[input$xgb_hyper_rows_selected,"min_child_weight"])
+    nrounds_set(matrix[input$xgb_hyper_rows_selected,"nrounds"])
+    early_stop_set(matrix[input$xgb_hyper_rows_selected,"early_stopping_rounds"])
+    nfold_set(matrix[input$xgb_hyper_rows_selected,"nfold"])
+    subsamp_set(matrix[input$xgb_hyper_rows_selected,"subsample"])
+    colsamp_set(matrix[input$xgb_hyper_rows_selected,"colsample_bytree"])
   })
   
   output$map = renderLeaflet({ 
@@ -428,38 +577,52 @@ server= function(input,output,session) {
   observeEvent(input$map_click, {map_click(input$map_click,rv,bo)})
   
   observeEvent(input$xgb_params, {
-    showModal(div(modalDialog(
-      numericInput("eta", label="eta", value = 0.1, min=0,max=1),
-      numericInput("gamma", label="gamma", value = 0.5, min=0),
-      numericInput("max_depth", label="max tree depth", value = 3, min=1),
-      numericInput("min_child_weight", label="min node members", value = 2, min=1),
-      numericInput("subsamp", label="Subsampling prop", value = 0.75, min=0,max=1),
-      numericInput("colsamp", label="Column sampling prop", value = 0.75, min=0,max=1),
-      numericInput("nrounds", label="nrounds", value = 1000, min=10),
-      numericInput("early_stop", label="early stopping", value = 10, min=5),
-      selectInput(
-        "tree_method",
-        label = "Tree Method",
-        selected ="hist",
-        choices = c("hist","exact","approx")),
-      selectInput(
-        "xgb_tech",
-        label = "Booster",
-        selected ="DART",
-        choices = c("DART","gbtree","gblinear")),
-      numericInput("drop_rate", label="Drop Rate", value = 0.1, min=0,max=1),
-      numericInput("skip_drop", label="Skip Prob", value = 0.5, min=0,max=1),
-      selectInput(
-        "normalize_type",
-        label = "Normalization Type",
-        selected ="tree",
-        choices = c("tree","forest")),
-      selectInput(
-        "sample_type",
-        label = "Sample Algorithm",
-        selected ="uniform",
-        choices = c("uniform","weighted"))),
-    style = 'width:900px; padding:5px;'))
+      
+    showModal(modalDialog(title="XGB Hyperparameters",easyClose=F,card(
+      fluidRow(
+        column(4,numericInput("eta", label="Eta", value = eta_set(),min=0,max=1)),
+        column(4,numericInput("gamma", label="Gamma", value = gamma_set(), min=0)),
+        column(4,numericInput("max_depth", label="Max Tree Depth", value = max_depth_set(), min=1))),
+      fluidRow(
+        column(6,numericInput("min_child_weight", label="Min Child Weight", value = min_child_weight_set(), min=1)),
+        column(6,numericInput("nfold", label="CV Folds", value = nfold_set(), min=2,max=20))),
+      fluidRow(
+        column(6,numericInput("nrounds", label="Iteration Rounds", value = nrounds_set(), min=100)),
+        column(6,numericInput("early_stop", label="Early Stopping", value = early_stop_set(), min=10))),
+      fluidRow(
+        column(6,numericInput("subsamp", label="Subsample Proportion", value = subsamp_set(), min=0,max=1)),
+        column(6,numericInput("colsamp", label="Column Sample Proportion", value = colsamp_set(), min=0,max=1)))),
+      footer = div(modalButton('Close'))
+      ))
+  })
+      # fluidRow(
+      #   column(12, selectInput("objective",
+      #          label = "Objective Fcn",
+      #          selected ="reg:linear",
+      #          choices = c("reg:linear","reg:logistic","binary:logistic","multi:softmax","multi:softprob")))))))
+  
+  observeEvent(input$xgb_tech, {
+    
+    if (input$xgb_tech == "dart") {
+      
+      showModal(modalDialog(title="DART Options",card(
+        fluidRow(
+          column(6, selectInput(
+            "normalize_type",
+            label = "Normalization Type",
+            selected ="tree",
+            choices = c("tree","forest"))),
+          column(6, selectInput(
+            "sample_type",
+            label = "Sample Algorithm",
+            selected ="uniform",
+            choices = c("uniform","weighted")))),
+        fluidRow(
+          column(6,numericInput("rate_drop", label="Drop Rate", value = rate_drop_set(), min=0,max=1)),
+          column(6,numericInput("skip_drop", label="Skip Prob", value = skip_drop_set(), min=0,max=1)))),
+        footer = div(modalButton('Close'))
+        ))
+    }
   })
 }
   
