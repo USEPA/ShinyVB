@@ -6,8 +6,8 @@ library(dplyr)
 library(permimp)
 
 xgb_hyper = function(current_data,response_var,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,MC_runs,loggy,randomize,
-                     hyper_metric,eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,
-                     colsamp_list,nrounds_list,nfold_list,early_stops_list) {
+                     tree_method,xgb_tech,rate_drop_list,skip_drop_list,eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,
+                     colsamp_list,nrounds_list,nfold_list,early_stops_list,normalize_type,sample_type) {
   
   cove_data=current_data[,coves_to_use]
   ncoves = ncol(cove_data)
@@ -17,8 +17,29 @@ xgb_hyper = function(current_data,response_var,coves_to_use,lc_lowval,lc_upval,r
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data=data[!is.na(data[,1]),]
   
-  hyper_grid = expand.grid(
-      hyper_metric = hyper_metric,
+  if (xgb_tech == "dart") {
+    hyper_grid = expand.grid(
+        booster = xgb_tech,
+        rate_drop = rate_drop_list,
+        skip_drop = skip_drop_list,
+        normalize_type = normalize_type,
+        sample_type = sample_type,
+        
+        tree_method = tree_method,
+        eta = eta_list,
+        gamma = gamma_list,
+        max_depth = max_depth_list,
+        min_child_weight = min_child_weight_list,
+        subsample = subsamp_list,
+        colsample_bytree = colsamp_list,
+        early_stopping_rounds = early_stops_list,
+        nrounds=nrounds_list,
+        nfold=nfold_list)
+  } else {
+    hyper_grid = expand.grid(
+      booster = xgb_tech,
+      
+      tree_method = tree_method,
       eta = eta_list,
       gamma = gamma_list,
       max_depth = max_depth_list,
@@ -28,6 +49,9 @@ xgb_hyper = function(current_data,response_var,coves_to_use,lc_lowval,lc_upval,r
       early_stopping_rounds = early_stops_list,
       nrounds=nrounds_list,
       nfold=nfold_list)
+  }
+  
+  print(hyper_grid)
   
   grid_rows=nrow(hyper_grid)
   
@@ -40,15 +64,35 @@ xgb_hyper = function(current_data,response_var,coves_to_use,lc_lowval,lc_upval,r
     {
       
       for(i in 1:grid_rows) {
+        
+        if (xgb_tech == "dart") {
           
           params = list(
-            hyper_metric = hyper_grid$hyper_metric[i],
+            booster = hyper_grid$booster[i],
+            rate_drop = hyper_grid$rate_drop[i],
+            skip_drop = hyper_grid$skip_drop[i],
+            normalize_type = hyper_grid$normalize_type[i],
+            sample_type = hyper_grid$sample_type[i],
+            
+            tree_method = hyper_grid$tree_method[i],
             eta = hyper_grid$eta[i],
             gamma = hyper_grid$gamma[i],
             max_depth = hyper_grid$max_depth[i],
             min_child_weight = hyper_grid$min_child_weight[i],
             subsample = hyper_grid$subsample[i],
             colsample_bytree = hyper_grid$colsample_bytree[i])
+
+        } else {
+          params = list(
+            booster = hyper_grid$booster[i],
+            tree_method = hyper_grid$tree_method[i],
+            eta = hyper_grid$eta[i],
+            gamma = hyper_grid$gamma[i],
+            max_depth = hyper_grid$max_depth[i],
+            min_child_weight = hyper_grid$min_child_weight[i],
+            subsample = hyper_grid$subsample[i],
+            colsample_bytree = hyper_grid$colsample_bytree[i])
+        }
         
         for (a in 1:MC_runs) {
           

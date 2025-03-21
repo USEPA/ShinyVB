@@ -3,8 +3,8 @@ source("bs_multi.R")
 ModelingPanel = sidebarLayout(
   sidebarPanel = sidebarPanel(
     id = "modelingsidepanel",
-    width = 2,
-    tags$style(type = "text/css", "#datasidepanel {height: calc(100vh - 70px) !important;}"),
+    width = 3,
+    tags$style(type = "text/css", "#modelingsidepanel {width: 350px !important;}"),
     
     checkboxGroupInput(
       "coves_to_use",
@@ -15,104 +15,88 @@ ModelingPanel = sidebarLayout(
     
     tags$hr(style = "border-color: #2c3e50;"),
     
-    bs_accordion(id = "modeling") %>%
+    bs_accordion(id = "Modeling") %>%
       
       bs_set_opts(panel_type = "primary") %>%
       
       bs_append (
         title = "Modeling Options",
         content = card(
-          
           fluidRow(
-            column(6, HTML('Non-Detect Limit')),
-            column(6, HTML('Number of MC Runs'))
-          ),
+            column(12, tags$h4("Left-Censored Limits"))),
           fluidRow(
-            column(4, numericInput("nd_val", label=NULL, value = 3, min=1)),
-            column(2,p()),
-            column(4, numericInput("MC_runs",  label=NULL, value = 10, min=1)),
-            column(2,p())
-          ),
+            column(4,numericInput("lc_lowval", label='Lower', value = 0, min=0)),
+            column(4, numericInput("lc_upval", label='Upper', value = 3, min=0)),
+            column(4)),
           fluidRow(
-            column(6, HTML('Upper Measure Limit')),
-            column(6,  HTML('UML Multiplier'))
-          ),
+            column(12, tags$h4("Right-Censored Limits"))),
           fluidRow(
-            column(4, numericInput("tntc_val",  label=NULL, value = 1000, min=1)),
-            column(2,),
-            column(4, numericInput("tntc_multy",  label=NULL, value = 10, min=1)),
-            column(2)
-          ),
-          
-          checkboxInput("loggy", "Response Variable Logged?", FALSE),
-          
-          checkboxInput("randomize", "Randomize Dataset Before Analysis?", FALSE)
-          
-        )) %>%
+            column(5,numericInput("rc_lowval", label='Lower', value = 1000, min=1)),
+            column(5, numericInput("rc_upval", label='Upper', value = 10000, min=1)),
+            column(2)),
+          fluidRow(align="left",
+            column(12, numericInput("MC_runs",  label="Monte Carlo Runs", value = 10, min=1,step=1))),
+          fluidRow(align="left",
+            column(12, checkboxInput("loggy", "Log Response?", FALSE))),
+          fluidRow(align="left",
+            column(12, checkboxInput("randomize", "Randomize Data?", FALSE)))
+          )) %>%
       
       bs_append (
         title = "LARS",
         content = card(
           
           fluidRow(
-            column(12,checkboxInput("standardize", "Standardize the Covariates?", TRUE))
+            column(12,checkboxInput("standardize", "Standardize Covariates?", TRUE))
           ),
           
           fluidRow(
             column(9, inputPanel(
               selectInput(
                 "lars_tech",
-                label = "LARS Technique",
+                label = "Fitting Technique",
                 selected ="lasso",
                 choices = c("lasso","lar","forward.stagewise","stepwise")))),
             column(3)
           ),
           fluidRow(
-            column(4, numericInput("max_steps",  label="Maximum Steps", value = 250, min=1)),
-            column(8)
+            column(12, numericInput("max_lars_steps",  label="Maximum Steps", value = 250, min=1,step=1))
           ),
           fluidRow(
-          column(6,actionButton("lars_coeff", "Estimate Coeffs", style = 'width:140px; padding:2px;')),
-          column(6,actionButton("lars_uncert", "Predictive Success", style = 'width:140px; padding:2px;'))
+            column(12,actionButton("lars_coeff", "Covariate Importance", style = 'width:160px; padding:2px;'))),
+          fluidRow(
+            column(12,actionButton("lars_uncert", "Predictive Uncertainty", style = 'width:170px; padding:2px;'))
           ))) %>%
       
       bs_append (
         title = "XGB Modeling", content= card(
           fluidRow(
-            column(6, selectInput("tree_method",
-                                  label = "Tree Method",
-                                  selected ="hist",
-                                  choices = c("hist","exact","approx"))),
-            column(6, selectInput("xgb_tech",
-                                  label = "Booster",
-                                  selected ="gbtree",
-                                  choices = c("gbtree","dart","gblinear")))),
+            column(12,align="left",actionButton("xgb_hyper_ranges", "Hyperparameter Optimization", style = 'background-color:#eee; width:200px; padding:2px;'))),
           fluidRow(
-            column(12,align="center",actionButton("xgb_hyper_ranges", "Hyperparameter Optimization", style = 'background-color:#eaeaea; width:200px; padding:2px;'))),
-          fluidRow(
-            column(12,align="center",actionButton("xgb_params", "Set Hyperparameters", style = 'background-color:#eaeaea; width:200px; padding:2px;'))),
+            column(12,align="left",actionButton("xgb_params", "Set Hyperparameters", style = 'background-color:#eee; width:150px; padding:2px;'))),
           fluidRow(
             column(12,tags$hr(style = "border-color: #2c3e50;"))),
           fluidRow(
-            column(12,align="center",actionButton("xgb_select", "Feature Selection", style = 'width:200px; padding:2px;'))),
+            column(12,align="left",actionButton("xgb_select", "Covariate Selection", style = 'width:140px; padding:2px;'))),
           fluidRow(
-            column(12,align="center",actionButton("xgb_uncert", "Prediction Uncertainty", style = 'width:200px; padding:2px;'))))) %>%
+            column(12,align="left",actionButton("xgb_uncert", "Predictive Uncertainty", style = 'width:170px; padding:2px;'))))) %>%
       
       bs_accordion_multi(multi = FALSE, open = c())
     
   ),
   
   mainPanel = mainPanel(
-    width = 10,
+    width = 9,
     id = "modeling_output",
-    navset_tab(id = "modeling_tabs",
-      nav_panel("LARS Coefficient Results", DT::dataTableOutput('lars_coeffs'),
+    tabsetPanel(id = "modeling_tabs",
+      tabPanel("General Plots",plotOutput("plot", height="100%",width="100%")),
+      tabPanel("LARS: Covariates", DT::dataTableOutput('lars_coeffs'),
                 tags$style(type = "text/css", "#larscoeffstable {height: calc(100vh - 70px) !important;}")),
-      nav_panel("LARS Prediction Uncertainty", "LARS Prediction Uncertainty"), 
-      nav_panel("XGB Hyperparameter Grid Search", DT::dataTableOutput('xgb_hyper'),
+      tabPanel("LARS: Pred. Uncertainty", "LARS Prediction Uncertainty"), 
+      tabPanel("XGB: Hyperparameter Optimization",DT::dataTableOutput('xgb_hyper'),
                 tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
-      nav_panel("XGB Feature Selection", "XGB Feature Selection"),
-      nav_panel("XGB Prediction Uncertainty", "XGB Prediction Uncertainty"),
+      tabPanel("XGB: Covariate Selection", "XGB Feature Selection"),
+      tabPanel("XGB: Pred. Uncertainty", "XGB Prediction Uncertainty"),
     )
   )
 )
