@@ -8,6 +8,7 @@ library(corrplot)
 library(devtools)
 library(dplyr)
 library(DT)
+library(future)
 library(ggdist)
 library(gghalves)
 library(ggplot2)
@@ -18,12 +19,14 @@ library(hash)
 library(Hmisc)
 library(hrbrthemes)
 library(htmltools)
+library(ipc)
 library(leaflet)
 library(lubridate)
 library(magrittr)
 library(Nmisc)
 library(plotly)
 library(plyr)
+library(promises)
 library(ragg)
 library(RColorBrewer)
 library(reshape2)
@@ -37,6 +40,7 @@ library(shinyjs)
 library(shinythemes)
 library(tidyr)
 library(units)
+plan(multicore)
 
 source("renderdata.R")
 source("rain.R")
@@ -85,6 +89,8 @@ server= function(input,output,session) {
   colsamp_set = reactiveVal(0.8)
   
   xgb_hyper_result = reactiveVal()
+  xgb_hyper_calculation = NULL
+  running = reactiveVal(FALSE)
   
   init_data = data.frame()
   date_format_string = ""
@@ -347,9 +353,12 @@ server= function(input,output,session) {
   })
   
   observeEvent(input$create, {
-      
-    current_data(createAO(col_names(),input$speed,input$direct,input$A_name,input$O_name,current_data(),bo()))
-      
+  
+    results = createAO(col_names(),input$speed,input$direct,input$A_name,input$O_name,current_data(),bo(),feat_props)
+    
+    current_data(results[[1]])
+    feat_props <<- results[[2]]
+    
     col_names(colnames(current_data()))
       
     renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
@@ -425,9 +434,6 @@ server= function(input,output,session) {
   
   observeEvent(input$xgb_hyper_ranges, {
     
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Hyperparameter Optimization')
-    
     showModal(modalDialog(title="Hyperparameter Grid Search Ranges", card(
       
       fluidRow(
@@ -460,11 +466,15 @@ server= function(input,output,session) {
       fluidRow(
         column(12,sliderInput("colsamp_r", "Column Sample Prop", 0, 1, width="100%", value=c(0.75,0.85), step = 0.05,
                               ticks = F, dragRange = TRUE)))),
-      footer = div(actionButton("xgb_hyper_run", "Run"),modalButton('Close'))
+      footer = div(actionButton("run_xgb_hyper", "Run"),modalButton('Close'),actionButton("stop_xgb_hyper", "Cancel the Calculation"))
       ))
   })
   
-  observeEvent(input$xgb_hyper_run, {
+  observeEvent(input$run_xgb_hyper, {
+    
+    if(running())
+      return(NULL)
+    running(TRUE)
     
     eta_list = seq(from = input$eta_r[1], to = input$eta_r[2],by = 0.05)
     
@@ -484,12 +494,41 @@ server= function(input,output,session) {
     
     colsamp_list = seq(from = input$colsamp_r[1], to = input$colsamp_r[2],by = 0.05)
     
-    xgb_hyper_results = xgb_hyper(current_data(),response_var(),input$coves_to_use,input$lc_lowval,input$lc_upval,input$rc_lowval,input$rc_upval,
-                          input$MC_runs,input$loggy,input$randomize,input$hyper_metric,eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,
-                          colsamp_list,nrounds_list,nfold_list,early_stops_list)
+    xgb_hyper_data = current_data()
+    resvar = response_var()
+    coves_to_use = input$coves_to_use
+    lc_lowval = input$lc_lowval
+    lc_upval = input$lc_upval
+    rc_lowval = input$rc_lowval
+    rc_upval = input$rc_upval
+    MC_runs = input$MC_runs
+    loggy = input$loggy
+    randomize = input$randomize
+    xgb_hyper_metric = input$hyper_metric
+
+    xgb_hyper_result(NULL)
     
-    xgb_hyper_result(as.data.frame(xgb_hyper_results))
+    xgb_hyper_calculation <<- future({
+      
+      xgb_hyper(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_hyper_metric,
+                eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,colsamp_list,nrounds_list,nfold_list,early_stops_list)
+  
+    }, seed=TRUE)
     
+    
+    prom = xgb_hyper_calculation %...>% xgb_hyper_result
+    
+    prom <- catch(xgb_hyper_calculation,
+                  function(e){
+                    xgb_hyper_result(NULL)
+                    showModal(modalDialog(paste0("Hyperparameter Grid Search cancelled. No results generated."),footer = modalButton("Close")))
+                  })
+    
+    prom = finally(prom, function(){
+      print("Done")
+      running(FALSE) #declare done with run
+    })
+
     output$xgb_hyper = DT::renderDataTable(server=T,{
       datatable(xgb_hyper_result(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
                 options = list(
@@ -503,6 +542,17 @@ server= function(input,output,session) {
                     "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))
     })
     
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Hyperparameter Optimization')
+    
+    #Return something other than the future so we don't block the UI
+    NULL
+    
+  })
+  
+  observeEvent(input$stop_xgb_hyper, {
+    print("Stopping calculation...")
+    stopMulticoreFuture(xgb_hyper_calculation)
   })
   
   observeEvent(input$xgb_hyper_rows_selected, ignoreInit = T, {
@@ -565,17 +615,17 @@ server= function(input,output,session) {
             label = "Sample Algorithm",
             selected =sample_type_set(),
             choices = c("uniform","weighted"))))),
+        # fluidRow(
+        #   column(12, selectInput("objective",
+        #          label = "Objective Fcn",
+        #          selected ="reg:linear",
+        #          choices = c("reg:linear","reg:logistic","binary:logistic","multi:softmax","multi:softprob")))),
         fluidRow(
           column(6,disabled(numericInput("rate_drop", label="Drop Rate", value = rate_drop_set(), min=0,max=1))),
           column(6,disabled(numericInput("skip_drop", label="Skip Prob", value = skip_drop_set(), min=0,max=1))))),
         footer = div(actionButton("xgb_hyper_settings",label='Close'))))
   })
-      # fluidRow(
-      #   column(12, selectInput("objective",
-      #          label = "Objective Fcn",
-      #          selected ="reg:linear",
-      #          choices = c("reg:linear","reg:logistic","binary:logistic","multi:softmax","multi:softprob")))))))
-  
+
   observeEvent(input$xgb_hyper_settings, ignoreInit = T, {
     
     eta_set(input$eta)
@@ -599,7 +649,6 @@ server= function(input,output,session) {
     removeModal()
 
   })
-  
   
   observe({
      shinyjs::toggleState("normalize_type",condition=input$xgb_tech == "dart")

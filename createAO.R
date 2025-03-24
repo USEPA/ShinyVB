@@ -1,4 +1,6 @@
-createAO = function(col_names,speed,direct,A_name,O_name,current_data,bo) {
+library(hash)
+
+createAO = function(col_names,speed,direct,A_name,O_name,current_data,bo,feat_props) {
   
   col_list = col_names
   
@@ -18,9 +20,15 @@ createAO = function(col_names,speed,direct,A_name,O_name,current_data,bo) {
       
       new_data = cbind(new_data,A_comp,O_comp)
       
+      feat_props_temp = hash()
+      
+      for (i in (ncol(new_data)-1):ncol(new_data)) {
+        .set(feat_props_temp,keys=colnames(new_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA,prop5=NA))
+      }
+      
       colnames(new_data) = c(col_list,Aname,Oname)
       
-      return(new_data)
+      return(new_data,feat_props_temp)
 
     } else {
       showModal(modalDialog(div("ERROR: BOTH new component columns must have different names than any currently existing column names.",style="font-size:160%"),easyClose = T))

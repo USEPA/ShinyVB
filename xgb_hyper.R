@@ -5,20 +5,19 @@ library(xgboost)
 library(dplyr)
 library(permimp)
 
-xgb_hyper = function(current_data,response_var,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,MC_runs,loggy,randomize,
-                     hyper_metric,eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,
-                     colsamp_list,nrounds_list,nfold_list,early_stops_list) {
+xgb_hyper = function(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_hyper_metric,
+                     eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,colsamp_list,nrounds_list,nfold_list,early_stops_list) {
   
-  cove_data=current_data[,coves_to_use]
+  cove_data=xgb_hyper_data[,coves_to_use]
   ncoves = ncol(cove_data)
   cove_names = colnames(cove_data)
-  data = cbind(current_data[,response_var],cove_data)
+  data = cbind(xgb_hyper_data[,resvar],cove_data)
   
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data=data[!is.na(data[,1]),]
   
   hyper_grid = expand.grid(
-      hyper_metric = hyper_metric,
+      xgb_hyper_metric = xgb_hyper_metric,
       eta = eta_list,
       gamma = gamma_list,
       max_depth = max_depth_list,
@@ -42,7 +41,7 @@ xgb_hyper = function(current_data,response_var,coves_to_use,lc_lowval,lc_upval,r
       for(i in 1:grid_rows) {
           
           params = list(
-            hyper_metric = hyper_grid$hyper_metric[i],
+            xgb_hyper_metric = hyper_grid$xgb_hyper_metric[i],
             eta = hyper_grid$eta[i],
             gamma = hyper_grid$gamma[i],
             max_depth = hyper_grid$max_depth[i],
@@ -57,22 +56,22 @@ xgb_hyper = function(current_data,response_var,coves_to_use,lc_lowval,lc_upval,r
             
             for (j in 1:nrow(data)){
               if (data[j,1]=="TNTC") {
-                data[j,1]=log10(runif(1, min = tntc_val, max = tntc_mult*tntc_val))
+                data[j,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
               }
               
               if (data[j,1]=="ND") {
-                data[j,1]=log10(runif(1, min = 0, max = nd_val))
+                data[j,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
               }
             }
           } else {
             
             for (j in 1:nrow(data)){
               if (data[j,1]=="TNTC") {
-                data[j,1]=(runif(1, min = tntc_val, max = tntc_mult*tntc_val))
+                data[j,1]=(runif(1, min = rc_lowval, max = rc_upval))
               }
               
               if (data[j,1]=="ND") {
-                data[j,1]=(runif(1, min = 0, max = nd_val))
+                data[j,1]=(runif(1, min = lc_lowval, max = lc_upval))
               }
             }
           }

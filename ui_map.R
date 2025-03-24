@@ -1,5 +1,5 @@
 MapPanel = sidebarLayout(
-  sidebarPanel = sidebarPanel(id="mapsidepanel",width=3,tags$style(type = "text/css", "#mapsidepanel {width: 350px !important;}"),
+  sidebarPanel = sidebarPanel(id="mapsidepanel",width=3,tags$style(type = "text/css"), #, "#mapsidepanel {width: 350px !important;}"),
                               tags$h4("Beach Orientation Calculator"),
                               tags$hr(style = "border-color: darkblue; width:300px !important;"),
                               htmlOutput("bo_text"),
