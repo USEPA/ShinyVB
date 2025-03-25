@@ -1,14 +1,23 @@
 library(rsample)
+library(caret)
 library(shiny)
-library(bslib)
 library(xgboost)
 library(dplyr)
 library(permimp)
 
-xgb_hyper = function(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_hyper_metric,
-                     eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,colsamp_list,nrounds_list,nfold_list,early_stops_list) {
+xgb_hyper = function(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_standardize,xgb_hyper_metric,
+                     eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,colsamp_list,nrounds_list,nfold_list,early_stop_list) {
   
   cove_data=xgb_hyper_data[,coves_to_use]
+  
+  minMax <- function(x) {
+    (x - min(x)) / (max(x) - min(x))
+  }
+  
+  if (xgb_standardize==TRUE) {
+    cove_data=lapply(cove_data, minMax)
+  }
+  
   ncoves = ncol(cove_data)
   cove_names = colnames(cove_data)
   data = cbind(xgb_hyper_data[,resvar],cove_data)

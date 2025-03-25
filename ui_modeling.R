@@ -39,7 +39,7 @@ ModelingPanel = sidebarLayout(
           fluidRow(align="left",
             column(12, checkboxInput("loggy", "Log Response?", FALSE))),
           fluidRow(align="left",
-            column(12, checkboxInput("randomize", "Randomize Data?", FALSE)))
+            column(12, checkboxInput("randomize", "Randomize Data", FALSE)))
           )) %>%
       
       bs_append (
@@ -47,17 +47,15 @@ ModelingPanel = sidebarLayout(
         content = card(
           
           fluidRow(
-            column(12,checkboxInput("standardize", "Standardize Covariates?", TRUE))
+            column(12,checkboxInput("normalize", "Normalize Covariates", TRUE))
           ),
-          
           fluidRow(
-            column(9, inputPanel(
+            column(6, inputPanel(
               selectInput(
                 "lars_tech",
                 label = "Fitting Technique",
                 selected ="lasso",
-                choices = c("lasso","lar","forward.stagewise","stepwise")))),
-            column(3)
+                choices = c("lasso","lar","forward.stagewise","stepwise"))))
           ),
           fluidRow(
             column(12, numericInput("max_lars_steps",  label="Maximum Steps", value = 250, min=1,step=1))
@@ -65,21 +63,56 @@ ModelingPanel = sidebarLayout(
           fluidRow(
             column(12,actionButton("lars_coeff", "Covariate Importance", style = 'width:160px; padding:2px;'))),
           fluidRow(
-            column(12,actionButton("lars_uncert", "Predictive Uncertainty", style = 'width:170px; padding:2px;'))
+            column(12,actionButton("lars_uncert", "Predictive Performance", style = 'width:170px; padding:2px;'))
           ))) %>%
       
       bs_append (
-        title = "XGB Modeling", content= card(
+        title = "Logistic Regression",
+        content = card(
+          
+          fluidRow(
+            column(12,checkboxInput("normalize", "Normalize Covariates", TRUE))
+          ),
+          fluidRow(
+            column(12, numericInput("logist_train_pct",  label="Proportion Training Data", value = 0.75, min=0.25,max=1,step=0.05))
+            ),
+          fluidRow(
+            column(6, numericInput("logist_regularz",  label="Regularization", value = 0, min=0,max=1,step=0.05)),
+            column(6, numericInput("logist_mixture",  label="Lasso Penalty", value = 1, min=0,max=1,step=0.05))
+          ),
+          fluidRow(
+            column(12, inputPanel(
+              selectInput(
+                "logist_engine",
+                label = "Engine",
+                selected ="glm",
+                choices = c("glm","glmnet"))))
+            ),
+          fluidRow(
+            column(12, inputPanel(
+              selectInput(
+                "logist_pred",
+                label = "Prediction",
+                selected ="Probability",
+                choices = c("Probability","Value"))))
+            ),
+          fluidRow(
+            column(12,actionButton("logist_analysis", "Logistic Analysis", style = 'width:160px; padding:2px;')))
+          ))) %>%
+      
+      bs_append (
+        title = "XGBoost", content= card(
           fluidRow(
             column(12,align="left",actionButton("xgb_hyper_ranges", "Hyperparameter Optimization", style = 'background-color:#eee; width:200px; padding:2px;'))),
           fluidRow(
             column(12,align="left",actionButton("xgb_params", "Set Hyperparameters", style = 'background-color:#eee; width:150px; padding:2px;'))),
           fluidRow(
-            column(12,tags$hr(style = "border-color: #2c3e50;"))),
+            column(12,checkboxInput("xgb_standardize", "Min/Max Standardization", TRUE))
+          ),
           fluidRow(
             column(12,align="left",actionButton("xgb_select", "Covariate Selection", style = 'width:140px; padding:2px;'))),
           fluidRow(
-            column(12,align="left",actionButton("xgb_uncert", "Predictive Uncertainty", style = 'width:170px; padding:2px;'))))) %>%
+            column(12,align="left",actionButton("xgb_uncert", "Predictive Performance", style = 'width:170px; padding:2px;'))))) %>%
       
       bs_accordion_multi(multi = FALSE, open = c())
     
@@ -92,7 +125,9 @@ ModelingPanel = sidebarLayout(
       tabPanel("General Plots",plotOutput("plot", height="100%",width="100%")),
       tabPanel("LARS: Covariates", DT::dataTableOutput('lars_coeffs'),
                 tags$style(type = "text/css", "#larscoeffstable {height: calc(100vh - 70px) !important;}")),
-      tabPanel("LARS: Pred. Uncertainty", "LARS Prediction Uncertainty"), 
+      tabPanel("LARS: Pred. Uncertainty", "LARS Prediction Uncertainty"),
+      tabPanel("Logistic: Covariates", "Logistic Regression Covariate Importance"),
+      tabPanel("Logistic: Pred. Uncertainty", "Logistic Regression Prediction Uncertainty"),
       tabPanel("XGB: Hyperparameter Optimization",DT::dataTableOutput('xgb_hyper'),
                 tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
       tabPanel("XGB: Covariate Selection", "XGB Feature Selection"),

@@ -4,40 +4,47 @@ library(dplyr)
 library(SHAPforxgboost)
 library(permimp)
 
-xgb_select = function(current_data,response_var,coves_to_use,nd_val,tntc_val,tntc_multy,MC_runs,
-                      loggy,randomize,selector,xgb_tech,drop_rate,eta,gamma,max_depth,min_child_weight,
-                      subsample,colsample_bytree,samp_prop,nrounds,early_stopping_rounds,test_weight,train_weight) {
+xgb_select = function(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_booster,dart_normalize_type,
+                      dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,nfold,early_stops) {
   
-  cove_data=current_data[,coves_to_use]
+  cove_data=xgb_select_data[,coves_to_use]
+  
+  minMax <- function(x) {
+    (x - min(x)) / (max(x) - min(x))
+  }
+  
+  if (standardize==TRUE) {
+    cove_data=lapply(cove_data, minMax)
+  }
+  
   ncoves = ncol(cove_data)
   cove_names = colnames(cove_data)
-  data = cbind(current_data[,response_var],cove_data)
+  data = cbind(xgb_select_data[,response_var],cove_data)
   
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data=data[!is.na(data[,1]),]
 
-    
   # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
   if (loggy==TRUE) {
     
     for (j in 1:nrow(data)){
       if (data[j,1]=="TNTC") {
-        data[j,1]=log10(runif(1, min = tntc_val, max = tntc_mult*tntc_val))
+        data[j,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
       }
       
       if (data[j,1]=="ND") {
-        data[j,1]=log10(runif(1, min = 0, max = nd_val))
+        data[j,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
       }
     }
   } else {
     
     for (j in 1:nrow(data)){
       if (data[j,1]=="TNTC") {
-        data[j,1]=(runif(1, min = tntc_val, max = tntc_mult*tntc_val))
+        data[j,1]=(runif(1, min = rc_lowval, max = rc_upval))
       }
       
       if (data[j,1]=="ND") {
-        data[j,1]=(runif(1, min = 0, max = nd_val))
+        data[j,1]=(runif(1, min = lc_lowval, max = lc_upval))
       }
     }
   }

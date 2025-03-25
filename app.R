@@ -38,6 +38,7 @@ library(shinydashboard)
 library(shinydashboardPlus)
 library(shinyjs)
 library(shinythemes)
+library(tidymodels)
 library(tidyr)
 library(units)
 plan(multicore)
@@ -71,10 +72,10 @@ server= function(input,output,session) {
   date_format = reactiveVal()
   progress_list = reactiveVal()
   
-  tree_method_set = reactiveVal("hist")
-  xgb_tech_set = reactiveVal("-")
-  normalize_type_set = reactiveVal("tree")
-  sample_type_set = reactiveVal("uniform")
+  xgb_tree_method_set = reactiveVal("hist")
+  xgb_booster_set = reactiveVal("-")
+  dart_normalize_type_set = reactiveVal("tree")
+  dart_sample_type_set = reactiveVal("uniform")
   
   rate_drop_set = reactiveVal(0.1)
   skip_drop_set = reactiveVal(0.5)
@@ -90,6 +91,9 @@ server= function(input,output,session) {
   
   xgb_hyper_result = reactiveVal()
   xgb_hyper_calculation = NULL
+  
+  xgb_select_result = reactiveVal()
+  xgb_select_calculation = NULL
   running = reactiveVal(FALSE)
   
   init_data = data.frame()
@@ -426,9 +430,72 @@ server= function(input,output,session) {
   
   observeEvent(input$xgb_select, {
     
-    xgb_select = xgb_select(current_data(),response_var(),input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
-                            input$loggy,input$randomize,input$xgb_tech,input$rate_drop,input$eta,input$gamma,input$max_depth,input$min_child_weight,input$subsample,
-                            input$colsample_bytree,input$samp_prop,input$nrounds,input$early_stopping_rounds) 
+    eta = eta_set()
+    gamma = gamma_set()
+    max_depth = max_depth_set()
+    min_child_weight = min_child_weight_set()
+    nrounds = nrounds_set()
+    early_stop = early_stop_set()
+    subsamp = subsamp_set()
+    colsamp = colsamp_set()
+    
+    xgb_select_data = current_data()
+    resvar = response_var()
+    
+    xgb_tree_method = xgb_tree_method_set()
+    xgb_booster = xgb_booster_set()
+    dart_normalize_type = dart_normalize_type_set()
+    dart_sample_type = dart_sample_type_set()
+    rate_drop = rate_drop_set()
+    skip_drop = skip_drop_set()
+    
+    xgb_standardize = input$xgb_standardize
+    coves_to_use = input$coves_to_use
+    lc_lowval = input$lc_lowval
+    lc_upval = input$lc_upval
+    rc_lowval = input$rc_lowval
+    rc_upval = input$rc_upval
+    MC_runs = input$MC_runs
+    loggy = input$loggy
+    randomize = input$randomize
+    
+    xgb_select_result(NULL)
+    
+    xgb_select_calculation <<- future({
+      
+      xgb_select(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_booster,
+                 dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop)
+      
+    }, seed=TRUE)
+    
+    
+    prom = xgb_select_calculation %...>% xgb_select_result
+    
+    prom <- catch(xgb_select_calculation,
+                  function(e){
+                    xgb_select_result(NULL)
+                    showModal(modalDialog(paste0("XGB covariate search cancelled. No results generated."),footer = modalButton("Close")))
+                  })
+    
+    prom = finally(prom, function(){
+      running(FALSE)
+    })
+    
+    output$xgb_select = DT::renderDataTable(server=T,{
+      datatable(xgb_select_result,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
+                options = list(
+                  autoWidth=F,
+                  paging = TRUE,
+                  pageLength = 25,
+                  scrollX = TRUE,
+                  scrollY = TRUE,
+                  columnDefs = list(list(targets = '_all', className = 'dt-center')),
+                  initComplete = JS("function(settings, json) {",
+                                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))
+    })
+    
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Hyperparameter Optimization')
     
   })
   
@@ -437,7 +504,7 @@ server= function(input,output,session) {
     showModal(modalDialog(title="Hyperparameter Grid Search Ranges", card(
       
       fluidRow(
-        column(6,selectInput("hyper_metric", "Evaluation Metric", choices = c("rmse","mae","mape","logloss"), selected = "rmse")),
+        column(6,selectInput("xgb_hyper_metric", "Evaluation Metric", choices = c("rmse","mae","mape","logloss"), selected = "rmse")),
         column(6)),
       fluidRow(
         column(12,sliderInput("eta_r", "eta", 0, 1, width="100%", value=c(0.1,0.20), step = 0.05,
@@ -486,7 +553,7 @@ server= function(input,output,session) {
     
     nrounds_list = seq(from = input$nrounds_r[1], to = input$nrounds_r[2],by = 100)
     
-    early_stops_list =seq(from = input$early_stop_r[1], to = input$early_stop_r[2],by = 10)
+    early_stop_list =seq(from = input$early_stop_r[1], to = input$early_stop_r[2],by = 10)
     
     nfold_list = seq(from = input$nfold_r[1], to = input$nfold_r[2],by = 1)
     
@@ -504,14 +571,15 @@ server= function(input,output,session) {
     MC_runs = input$MC_runs
     loggy = input$loggy
     randomize = input$randomize
-    xgb_hyper_metric = input$hyper_metric
+    xgb_standardize = input$xgb_standardize
+    xgb_hyper_metric = input$xgb_hyper_metric
 
     xgb_hyper_result(NULL)
     
     xgb_hyper_calculation <<- future({
       
-      xgb_hyper(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_hyper_metric,
-                eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,colsamp_list,nrounds_list,nfold_list,early_stops_list)
+      xgb_hyper(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_standardize,xgb_hyper_metric,
+                eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,colsamp_list,nrounds_list,nfold_list,early_stop_list)
   
     }, seed=TRUE)
     
@@ -525,8 +593,7 @@ server= function(input,output,session) {
                   })
     
     prom = finally(prom, function(){
-      print("Done")
-      running(FALSE) #declare done with run
+      running(FALSE)
     })
 
     output$xgb_hyper = DT::renderDataTable(server=T,{
@@ -596,24 +663,24 @@ server= function(input,output,session) {
           column(6,numericInput("subsamp", label="Subsample Proportion", value = subsamp_set(), min=0,max=1)),
           column(6,numericInput("colsamp", label="Column Sample Proportion", value = colsamp_set(), min=0,max=1))),
         fluidRow(
-          column(4, selectInput("tree_method",
+          column(4, selectInput("xgb_tree_method",
                                 label = "Tree Method",
-                                selected =tree_method_set(),
+                                selected =xgb_tree_method_set(),
                                 choices = c("hist","exact","approx"))),
-          column(4, selectInput("xgb_tech",
+          column(4, selectInput("xgb_booster",
                                 label = "Booster",
                                 selected ="-",
                                 choices = c("-","gbtree","gblinear","dart")))),
         fluidRow(
           column(6, disabled(selectInput(
-            "normalize_type",
+            "dart_normalize_type",
             label = "Normalization Type",
-            selected =normalize_type_set(),
+            selected =dart_normalize_type_set(),
             choices = c("tree","forest")))),
           column(6, disabled(selectInput(
-            "sample_type",
+            "dart_sample_type",
             label = "Sample Algorithm",
-            selected =sample_type_set(),
+            selected =dart_sample_type_set(),
             choices = c("uniform","weighted"))))),
         # fluidRow(
         #   column(12, selectInput("objective",
@@ -638,11 +705,11 @@ server= function(input,output,session) {
     subsamp_set(input$subsamp)
     colsamp_set(input$colsamp)
     
-    tree_method_set(input$tree_method)
-    #xgb_tech_set(input$xgb_tech)
-    normalize_type_set(input$normalize_type)
-    sample_type_set(input$sample_type)
+    xgb_tree_method_set(input$xgb_tree_method)
+    xgb_booster_set(input$xgb_booster)
     
+    dart_normalize_type_set(input$dart_normalize_type)
+    dart_sample_type_set(input$dart_sample_type)
     rate_drop_set(input$rate_drop)
     skip_drop_set(input$skip_drop)
     
