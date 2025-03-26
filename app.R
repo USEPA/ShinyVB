@@ -84,7 +84,7 @@ server= function(input,output,session) {
   max_depth_set = reactiveVal(3)
   min_child_weight_set = reactiveVal(3)
   nrounds_set = reactiveVal(1000)
-  early_stop_set = reactiveVal(100)
+  early_stop_set = reactiveVal(50)
   nfold_set = reactiveVal(10)
   subsamp_set = reactiveVal(0.8)
   colsamp_set = reactiveVal(0.8)
@@ -94,10 +94,12 @@ server= function(input,output,session) {
   
   xgb_select_result = reactiveVal()
   xgb_select_calculation = NULL
+  
   running = reactiveVal(FALSE)
   
   init_data = data.frame()
   date_format_string = ""
+  init_feat_props = hash()
   feat_props = hash()
   
   correls = function(current_data,id_var,response_var) {
@@ -128,13 +130,22 @@ server= function(input,output,session) {
     id_var(1)
     col_names(colnames(init_data))
     current_data(init_data)
+    feat_props <<- init_feat_props
 
+    updateSelectInput(session,"id",choices=c(col_names()))
     updateSelectInput(session,"rainplot",selected="-")
     updateSelectInput(session,"lineplot",selected="-")
     updateSelectInput(session,"scatterx",selected="-")
     updateSelectInput(session,"scattery",selected="-")
     updateSelectInput(session,"speed",selected="-")
     updateSelectInput(session,"direct",selected="-")
+    
+
+    updateSelectInput(session,"col_props",choices=c("-",col_names()))
+    updateSelectInput(session,"rainplot",choices=c("-",col_names()))
+    updateSelectInput(session,"lineplot",choices=c("-",col_names()))
+    updateSelectInput(session,"scatterx",choices=c("-",col_names()))
+    updateSelectInput(session,"scattery",choices=c("-",col_names()))
     
     renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
     
@@ -169,10 +180,12 @@ server= function(input,output,session) {
     feat_props_temp = hash()
     
     for (i in 1:ncol(init_data)) {
-      .set(feat_props_temp,keys=colnames(init_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA,prop5=NA))
+      .set(feat_props_temp,keys=colnames(init_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA))
     }
     
+    init_feat_props <<- feat_props_temp
     feat_props <<- feat_props_temp
+    
     
     if (date_format() == "YMD") {
       init_data[,1] = ymd(init_data[,1])
@@ -278,11 +291,11 @@ server= function(input,output,session) {
     }
   })
   
-  toListen = reactive({
+  ScatPlot = reactive({
     list(input$scatterx, input$scattery)
   })
   
-  observeEvent(toListen(), ignoreInit = T, {
+  observeEvent(ScatPlot(), ignoreInit = T, {
     
     if (input$scatterx != "-" & input$scattery!= "-") {
       
@@ -357,15 +370,36 @@ server= function(input,output,session) {
   })
   
   observeEvent(input$create, {
-  
-    results = createAO(col_names(),input$speed,input$direct,input$A_name,input$O_name,current_data(),bo(),feat_props)
     
-    current_data(results[[1]])
-    feat_props <<- results[[2]]
-    
-    col_names(colnames(current_data()))
+    if (input$speed != "-" & input$direct != "-") {
       
-    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+      if (!(input$A_name %in% col_names()) & !(input$O_name %in% col_names())) {
+        
+        new_data = createAO(col_names(),input$speed,input$direct,input$A_name,input$O_name,current_data(),bo())
+
+        for (i in (ncol(new_data)-1):ncol(new_data)) {
+          .set(feat_props,keys=colnames(new_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA))
+        }
+
+        current_data(new_data)
+        col_names(colnames(current_data()))
+
+        updateSelectInput(session,"id",choices=c(col_names()))
+        updateSelectInput(session,"col_props",choices=c("-",col_names()))
+        updateSelectInput(session,"rainplot",choices=c("-",col_names()))
+        updateSelectInput(session,"lineplot",choices=c("-",col_names()))
+        updateSelectInput(session,"scatterx",choices=c("-",col_names()))
+        updateSelectInput(session,"scattery",choices=c("-",col_names()))
+
+        renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+        
+      } else {
+        showModal(modalDialog(div("ERROR: BOTH new component columns must have different names than any currently existing column names.",style="font-size:160%"),easyClose = T))
+      }
+      
+    } else {
+      showModal(modalDialog(div("ERROR: A speed and direction data column must be specified.",style="font-size:160%"),easyClose = T))
+    }
   })
   
   observeEvent(input$shinyVB, {
@@ -430,6 +464,10 @@ server= function(input,output,session) {
   
   observeEvent(input$xgb_select, {
     
+    if(running())
+      return(NULL)
+    running(TRUE)
+    
     eta = eta_set()
     gamma = gamma_set()
     max_depth = max_depth_set()
@@ -443,7 +481,7 @@ server= function(input,output,session) {
     resvar = response_var()
     
     xgb_tree_method = xgb_tree_method_set()
-    xgb_booster = xgb_booster_set()
+    xgb_boost = xgb_booster_set()
     dart_normalize_type = dart_normalize_type_set()
     dart_sample_type = dart_sample_type_set()
     rate_drop = rate_drop_set()
@@ -455,34 +493,41 @@ server= function(input,output,session) {
     lc_upval = input$lc_upval
     rc_lowval = input$rc_lowval
     rc_upval = input$rc_upval
+    train_prop = input$train_prop
     MC_runs = input$MC_runs
     loggy = input$loggy
     randomize = input$randomize
+    test_weight = input$test_weight
     
     xgb_select_result(NULL)
     
     xgb_select_calculation <<- future({
       
-      xgb_select(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_booster,
-                 dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop)
+      xgb_select(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_boost,
+                 dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight)
       
     }, seed=TRUE)
     
     
     prom = xgb_select_calculation %...>% xgb_select_result
     
-    prom <- catch(xgb_select_calculation,
+    prom = catch(xgb_select_calculation,
                   function(e){
                     xgb_select_result(NULL)
-                    showModal(modalDialog(paste0("XGB covariate search cancelled. No results generated."),footer = modalButton("Close")))
+                    showModal(modalDialog(paste0("XGB covariate filtering cancelled. No results generated."),footer = modalButton("Close")))
                   })
     
     prom = finally(prom, function(){
       running(FALSE)
     })
     
+    final_data = xgb_select_result()
+    final_data[,1] = as.numeric(final_data[,1])
+    
+    print(final_data)
+    
     output$xgb_select = DT::renderDataTable(server=T,{
-      datatable(xgb_select_result,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
+      datatable(xgb_select_result(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
                 options = list(
                   autoWidth=F,
                   paging = TRUE,
@@ -491,11 +536,12 @@ server= function(input,output,session) {
                   scrollY = TRUE,
                   columnDefs = list(list(targets = '_all', className = 'dt-center')),
                   initComplete = JS("function(settings, json) {",
-                                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))
+                                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
+                  formatRound(columns=c(1,3,5:8), digits=c(0,5,5,5,5,5))
     })
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Hyperparameter Optimization')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Covariates')
     
   })
   
@@ -610,7 +656,7 @@ server= function(input,output,session) {
     })
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Hyperparameter Optimization')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Hyperparm Optim')
     
     #Return something other than the future so we don't block the UI
     NULL
@@ -697,7 +743,7 @@ server= function(input,output,session) {
     
     eta_set(input$eta)
     gamma_set(input$gamma)
-    max_depth_set(input$max_depth_set)
+    max_depth_set(input$max_depth)
     min_child_weight_set(input$min_child_weight)
     nrounds_set(input$nrounds)
     early_stop_set(input$early_stop)
@@ -717,32 +763,14 @@ server= function(input,output,session) {
 
   })
   
-  observe({
-     shinyjs::toggleState("normalize_type",condition=input$xgb_tech == "dart")
-     shinyjs::toggleState("sample_type",condition=input$xgb_tech == "dart")
-     shinyjs::toggleState("rate_drop",condition=input$xgb_tech == "dart")
-     shinyjs::toggleState("skip_drop",condition=input$xgb_tech == "dart")
-  })
-  
-  observeEvent(input$dart_options, {
-      
-      showModal(modalDialog(title="DART Options",card(
-        fluidRow(
-          column(6, selectInput(
-            "normalize_type",
-            label = "Normalization Type",
-            selected ="tree",
-            choices = c("tree","forest"))),
-          column(6, selectInput(
-            "sample_type",
-            label = "Sample Algorithm",
-            selected ="uniform",
-            choices = c("uniform","weighted")))),
-        fluidRow(
-          column(6,numericInput("rate_drop", label="Drop Rate", value = rate_drop_set(), min=0,max=1)),
-          column(6,numericInput("skip_drop", label="Skip Prob", value = skip_drop_set(), min=0,max=1)))),
-        footer = div(modalButton('Close'))
-        ))
+  observeEvent(input$xgb_booster, {
+    
+    if (input$xgb_booster == "dart") {
+      shinyjs::toggleState("dart_normalize_type")
+      shinyjs::toggleState("dart_sample_type")
+      shinyjs::toggleState("rate_drop")
+      shinyjs::toggleState("skip_drop")
+    }
   })
 }
   

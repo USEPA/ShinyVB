@@ -3,12 +3,12 @@ library(hash)
 
 renderdata = function(current_data,response_var,id_var,date_format_string,feat_props,output){
   
-  pushed_data = current_data
-  
   sig_digies = c()
   
-  for (i in 1:ncol(pushed_data)) {
-    sig_digies = append(sig_digies,as.numeric(values(feat_props,keys=colnames(pushed_data)[i])[1]))
+  col_names = colnames(current_data)
+  
+  for (i in 1:ncol(current_data)) {
+    sig_digies = append(sig_digies,values(feat_props,keys=col_names[i])[1])
   }
   
   if (date_format_string != "-") {
@@ -18,7 +18,7 @@ renderdata = function(current_data,response_var,id_var,date_format_string,feat_p
     sig_digies = sig_digies[-id_var]
     
     output$data = DT::renderDataTable(server=T,{
-      datatable(pushed_data,rownames=F,selection=list(selected = list(rows = NULL, cols = response_var-1),
+      datatable(current_data,rownames=F,selection=list(selected = list(rows = NULL, cols = response_var-1),
                                                       target = "row+column",mode="single"),editable=T,
                 options = list(
                   autoWidth=F,
@@ -42,7 +42,7 @@ renderdata = function(current_data,response_var,id_var,date_format_string,feat_p
   } else {
     
     output$data = DT::renderDataTable(server=T,{
-      datatable(pushed_data,rownames=F,selection=list(selected = list(rows = NULL, cols = response_var-1),
+      datatable(current_data,rownames=F,selection=list(selected = list(rows = NULL, cols = response_var-1),
                                                       target = "row+column",mode="single"),editable=T,
                 options = list(
                   autoWidth=F,
@@ -59,7 +59,7 @@ renderdata = function(current_data,response_var,id_var,date_format_string,feat_p
                     "}"))) %>%
         formatStyle(id_var,backgroundColor = 'lightgray') %>%
         formatStyle(response_var,backgroundColor = "#b0bed9") %>%
-        formatRound(columns=1:ncol(pushed_data), digits=sig_digies)
+        formatRound(columns=1:ncol(current_data), digits=sig_digies)
     })
   }
 }

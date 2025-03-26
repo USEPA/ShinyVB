@@ -36,6 +36,9 @@ ui = fluidPage(
     #max_lars_steps {
       width: 100px;
     }
+    #test_weight {
+      width: 100px;
+    }
     #logist_train_pct {
       width: 100px;
     }

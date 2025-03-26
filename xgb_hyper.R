@@ -10,12 +10,15 @@ xgb_hyper = function(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lo
   
   cove_data=xgb_hyper_data[,coves_to_use]
   
-  minMax <- function(x) {
-    (x - min(x)) / (max(x) - min(x))
-  }
-  
   if (xgb_standardize==TRUE) {
-    cove_data=lapply(cove_data, minMax)
+    
+    for (i in 1:nrow(cove_data)) {
+      for (j in 1:ncol(cove_data)) {
+        if (is.numeric(cove_data[i,j])==TRUE) {
+          cove_data[i,j]=(cove_data[i,j] - min(na.omit(cove_data[,j]))) / (max(na.omit(cove_data[,j])) - min(na.omit(cove_data[,j])))
+        }
+      }
+    }
   }
   
   ncoves = ncol(cove_data)
@@ -33,7 +36,7 @@ xgb_hyper = function(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lo
       min_child_weight = min_child_weight_list,
       subsample = subsamp_list,
       colsample_bytree = colsamp_list,
-      early_stopping_rounds = early_stops_list,
+      early_stopping_rounds = early_stop_list,
       nrounds=nrounds_list,
       nfold=nfold_list)
   
@@ -106,7 +109,7 @@ xgb_hyper = function(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lo
   
   output = cbind(summary_results,hyper_grid)
   
-  colnames(output)=c("Mean Test RMSE",colnames(hyper_grid))
+  colnames(output)=c("Mean Test Metric",colnames(hyper_grid))
   
   return(output)
 }
