@@ -6,9 +6,11 @@ library(permimp)
 library(Metrics)
 library(lime)
 library(pdp)
+library(DBI)
+library(RSQLite)
 
 xgb_select = function(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_booster,dart_normalize_type,
-                      dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight) {
+                      dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db) {
   
   selector = "SHAP"
   cove_data=xgb_select_data[,coves_to_use]
@@ -201,7 +203,7 @@ xgb_select = function(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_
         
         # fill out sub-iteration results
         
-        Iteration_results[i,1] = as.numeric(i)
+        Iteration_results[i,1] = i
         Iteration_results[i,2] = loser_gain_name
         Iteration_results[i,3] = lowest_gain
         Iteration_results[i,4] = loser_shap_name
@@ -222,5 +224,9 @@ xgb_select = function(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_
         }
       } #END the Iteration Loop
     })
+  
+  dbWriteTable(temp_db, "xgb_select_results", data.frame(Iteration_results), overwrite = TRUE)
+
+  Iteration_results = Iteration_results[,c(1,4:8)]
   Iteration_results
 }

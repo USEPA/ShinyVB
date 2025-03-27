@@ -5,6 +5,7 @@ library(bslib)
 library(bsplus)
 library(colorspace)
 library(corrplot)
+library(DBI)
 library(devtools)
 library(dplyr)
 library(DT)
@@ -29,6 +30,7 @@ library(plyr)
 library(promises)
 library(ragg)
 library(RColorBrewer)
+library(RSQLite)
 library(reshape2)
 library(reactable)
 library(readxl)
@@ -51,16 +53,18 @@ source("map_click.R")
 source("scatter.R")
 source("impute.R")
 source("lars_coeff.R")
-source("lars_uncert.R")
+source("lars_perform.R")
 source("xgb_hyper.R")
 source("xgb_select.R")
-source("xgb_uncert.R")
+source("xgb_perform.R")
 source("createAO.R")
 
 #all.functions = list.functions.in.file("app.R", alphabetic = TRUE)
 
 # Define server logic --
 server= function(input,output,session) {
+  
+  temp_db = dbConnect(RSQLite::SQLite(), ":memory:")
   
   bo = reactiveVal(0)
   current_data = reactiveVal()
@@ -128,6 +132,7 @@ server= function(input,output,session) {
 
     response_var(2)
     id_var(1)
+    cove_names(NULL)
     col_names(colnames(init_data))
     current_data(init_data)
     feat_props <<- init_feat_props
@@ -160,7 +165,7 @@ server= function(input,output,session) {
     },height = 1000, width = 1000)
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'General Plots')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'Plots')
   })
   
   output$bo_text = renderUI({
@@ -417,9 +422,11 @@ server= function(input,output,session) {
       
       coves = coves[,remaining]
       
-      cove_names = c(colnames(coves))
+      covar_names = c(colnames(coves))
       
-      updateCheckboxGroupInput(session,"coves_to_use",choices=cove_names,selected=cove_names,inline=T)
+      updateCheckboxGroupInput(session,"coves_to_use",choices=covar_names,selected=covar_names,inline=T)
+      
+      cove_names(covar_names)
     
     } else {
       return()
@@ -504,10 +511,9 @@ server= function(input,output,session) {
     xgb_select_calculation <<- future({
       
       xgb_select(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_boost,
-                 dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight)
+                 dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db)
       
     }, seed=TRUE)
-    
     
     prom = xgb_select_calculation %...>% xgb_select_result
     
@@ -521,28 +527,53 @@ server= function(input,output,session) {
       running(FALSE)
     })
     
-    final_data = xgb_select_result()
-    final_data[,1] = as.numeric(final_data[,1])
-    
-    print(final_data)
-    
     output$xgb_select = DT::renderDataTable(server=T,{
-      datatable(xgb_select_result(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
+      data = datatable(xgb_select_result(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
                 options = list(
                   autoWidth=F,
                   paging = TRUE,
                   pageLength = 25,
                   scrollX = TRUE,
                   scrollY = TRUE,
-                  columnDefs = list(list(targets = '_all', className = 'dt-center')),
+                  columnDefs = list(list(className = 'dt-center',orderable=T,targets=0)),
                   initComplete = JS("function(settings, json) {",
                                     "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
-                  formatRound(columns=c(1,3,5:8), digits=c(0,5,5,5,5,5))
+                  formatRound(columns=c(1,3:6), digits=c(0,5,5,5,5))
+      data$x$data[[1]] = as.numeric(data$x$data[[1]]) 
+      data
     })
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Covariates')
     
+    #Return something other than the future so we don't block the UI
+    NULL
+    
+  })
+  
+  observeEvent(input$xgb_select_cancel, {
+    print("Stopping calculation...")
+    stopMulticoreFuture(xgb_select_calculation)
+  })
+  
+  observeEvent(input$xgb_select_rows_selected, ignoreInit = T, {
+    
+    all_covar = cove_names()
+    temp_data = dbReadTable(temp_db, "xgb_select_results")
+    
+    crit_val = as.numeric(input$xgb_select_rows_selected[1])
+    
+    if (crit_val > 1) {
+      
+    covar_drop_list = temp_data[which(as.numeric(temp_data$Iteration) < crit_val),"Worst.SHAP"]
+    remaining = all_covar[-which(all_covar %in% covar_drop_list)]
+    
+    } else {
+      
+      remaining = all_covar
+    }
+    
+    updateCheckboxGroupInput(session,"coves_to_use",choices=cove_names(),selected=remaining,inline=T)
   })
   
   observeEvent(input$xgb_hyper_ranges, {
@@ -656,7 +687,7 @@ server= function(input,output,session) {
     })
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Hyperparm Optim')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Hyper Optimize')
     
     #Return something other than the future so we don't block the UI
     NULL

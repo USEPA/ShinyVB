@@ -47,8 +47,8 @@ ui = fluidPage(
     }
     .shiny-notification {
        position: fixed;
-       top: 20%;
-       left: 65%;
+       top: 25%;
+       left: 25%;
     }
     .btn-default:hover {
        background-color: #2c3e50;

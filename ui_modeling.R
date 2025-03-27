@@ -35,15 +35,12 @@ ModelingPanel = sidebarLayout(
             column(5, numericInput("rc_upval", label='Upper', value = 10000, min=1)),
             column(2)),
           fluidRow(align="left",
-            column(5, numericInput("train_prop",  label="Training Proportion", value = 0.75, min=0,max=1,step=0.05)),
-            column(7)),
-          fluidRow(align="left",
-            column(12, numericInput("MC_runs",  label="Monte Carlo Runs", value = 10, min=1,step=1))),
+            column(6, numericInput("train_prop",  label="Train Prop", value = 0.75, min=0,max=1,step=0.05)),
+            column(6, numericInput("MC_runs",  label="Monte Carlo Runs", value = 10, min=1,step=1))),
           fluidRow(align="left",
             column(12, checkboxInput("loggy", "Log Response", FALSE))),
           fluidRow(align="left",
-            column(12, checkboxInput("randomize", "Randomize Data", FALSE)))
-          )) %>%
+            column(12, checkboxInput("randomize", "Randomize Data", FALSE))))) %>%
       
       bs_append (
         title = "LARS",
@@ -64,10 +61,13 @@ ModelingPanel = sidebarLayout(
             column(12, numericInput("max_lars_steps",  label="Maximum Steps", value = 250, min=1,step=1))
           ),
           fluidRow(
-            column(12,actionButton("lars_coeff", "Covariate Importance", style = 'width:160px; padding:2px;'))),
+            column(5,actionButton("lars_coeff", "Covariates", style = 'width:130px; padding:2px;')),
+            column(1),
+            column(4,actionButton("lars_coeff_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(
-            column(12,actionButton("lars_uncert", "Predictive Performance", style = 'width:170px; padding:2px;'))
-          ))) %>%
+            column(5,actionButton("lars_perform", "Performance", style = 'width:130px; padding:2px;')),
+            column(1),
+            column(4,actionButton("lars_perform_cancel", "Cancel", style = 'width:90px; padding:2px;'))))) %>%
       
       bs_append (
         title = "Logistic Regression",
@@ -112,16 +112,15 @@ ModelingPanel = sidebarLayout(
           fluidRow(
             column(12,checkboxInput("xgb_standardize", "Min/Max Standardization", TRUE))),
           fluidRow(
-            column(12,align="left",actionButton("xgb_select", "Covariate Selection", style = 'width:140px; padding:2px;'))),
-          # fluidRow(
-          #   tags$head(
-          #     tags$style(type="text/css", "#inline label{ display: table-cell; text-align: center; vertical-align: middle; } 
-          #       #inline .form-group { display: table-row;}")),
-          #   column(12,tags$div(id="inline",numericInput("test_weight", label = "Test Weight:", value = 0.65, min = 0, max=1, step=0.05)))),
+            column(5,align="left",actionButton("xgb_select", "Covariates", style = 'width:130px; padding:2px;')),
+            column(1),
+            column(4,align="left",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(
             column(12,numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05))),
           fluidRow(
-            column(12,align="left",actionButton("xgb_uncert", "Predictive Performance", style = 'width:170px; padding:2px;')))))),
+            column(5,align="left",actionButton("xgb_uncert", "Performance", style = 'width:130px; padding:2px;')),
+            column(1),
+            column(4,align="left",actionButton("xgb_perform_cancel", "Cancel", style = 'width:90px; padding:2px;')))))),
   
   mainPanel = mainPanel(
     width = 9,
@@ -130,14 +129,14 @@ ModelingPanel = sidebarLayout(
       tabPanel("General Plots",plotOutput("plot", height="100%",width="100%")),
       tabPanel("LARS: Covariates", DT::dataTableOutput('lars_coeffs'),
                 tags$style(type = "text/css", "#larscoeffstable {height: calc(100vh - 70px) !important;}")),
-      tabPanel("LARS: Pred Perform", "LARS Prediction Uncertainty"),
+      tabPanel("LARS: Performance", "LARS Prediction Uncertainty"),
       tabPanel("Logistic: Covariates", "Logistic Regression Covariate Importance"),
-      tabPanel("Logistic: Pred Perform", "Logistic Regression Prediction Uncertainty"),
-      tabPanel("XGB: Hyperparm Optim",DT::dataTableOutput('xgb_hyper'),
+      tabPanel("Logistic: Performance", "Logistic Regression Prediction Uncertainty"),
+      tabPanel("XGB: Hyper Optimize",DT::dataTableOutput('xgb_hyper'),
                 tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
       tabPanel("XGB: Covariates",DT::dataTableOutput('xgb_select'),
                 tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
-      tabPanel("XGB: Pred Perform", "XGB Prediction Uncertainty")
+      tabPanel("XGB: Performance", "XGB Prediction Uncertainty")
     )
   )
 )
