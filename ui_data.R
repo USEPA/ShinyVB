@@ -28,10 +28,7 @@ DataPanel = sidebarLayout(
       column(6,inputPanel(selectInput("col_props",label = "Column Properties",selected ="-",choices = c("-"))))),
     
     fluidRow(
-      column(12,actionButton("impute_check", "Impute Covariates"),actionButton("corr_check", "Covariate Correlations"))),
-    
-    fluidRow(
-      column(12,align="center",actionButton("restore", "Restore Input Data"))),
+      column(12,actionButton("impute_check", "Impute Features"),actionButton("restore", "Restore Input Data"))),
     
     bs_accordion(id="plotting") %>%
       
@@ -39,25 +36,23 @@ DataPanel = sidebarLayout(
       
       bs_append (title="Plotting", content = card(
         
-        div(style = "height: 460px",
+        div(style = "height: 425px",
+            
+            # fluidRow(
+            #   column(6,h5("Plot Output Tab"))
+            # ),
+            # fluidRow(
+            #   column(6, selectInput(
+            #   "send_plot",
+            #   label = NULL,
+            #   selected =
+            #     "Plot1",
+            #   choices = c("Plot1", "Plot2", "Plot3","Plot4"))),
+            #   column(6, actionButton("plot_save", "Save Plot", style='width: 75px; padding:2px;'))),
             
             fluidRow(
-              column(5,
-                     selectInput(
-                         "scatterx",
-                         label = "Scatter X",
-                         selected =
-                           "-",
-                         choices = c("-"))),
-              column(7,
-                     selectInput(
-                         "scattery",
-                         label = "Scatter Y",
-                         selected =
-                           "-",
-                         choices = c("-")))),
-            
-            fluidRow(column(12,tags$hr(style = "border-color: #2c3e50;"))),
+              column(5,selectInput("scatterx",label = "Scatter X",selected ="-",choices = c("-"))),
+              column(7,selectInput("scattery",label = "Scatter Y",selected ="-",choices = c("-")))),
             
             fluidRow(
               column(12,
@@ -77,7 +72,8 @@ DataPanel = sidebarLayout(
                          label = "Line/Time Series Plot",
                          selected =
                            "-",
-                         choices = c("-")))))))) %>%
+                         choices = c("-"))))),
+            fluidRow(column(12,actionButton("corr_check", "Feature Correlations", style='width: 170px; padding:8px;')))))) %>%
       
       bs_append (title="Wind/Wave/Current Decomposition", content = card(
         
@@ -120,8 +116,16 @@ DataPanel = sidebarLayout(
       bs_accordion_multi(multi=FALSE,open=c())
   ),
   
-  mainPanel = mainPanel(width=9, id = "userdatatable",
-                        DT::dataTableOutput('data'),
-                        tags$style(type = "text/css", "#userdatatable {height: calc(100vh - 70px) !important;}")
+  mainPanel = mainPanel(width=9, id = "data_main_panel",
+                        tabsetPanel(id = "data_tabs",
+                                    tabPanel("Data Table",DT::dataTableOutput('data'),
+                                             tags$style(type = "text/css", "#userdatatable {height: calc(100vh - 70px) !important;}")),
+                                    tabPanel("Correlations",actionButton("save_corr", "Save Plot", style='width: 100px; padding:2px;'),plotOutput("corrplot",width="100%",height="700px")),
+                                    tabPanel("Raincloud",actionButton("save_rain", "Save Plot", style='width: 100px; padding:2px;'),
+                                             plotOutput("rainplot", height = "800px", width="100%")),
+                                    tabPanel("Line Plot",actionButton("save_line", "Save Plot", style='width: 100px; padding:2px;'),
+                                             plotlyOutput("lineplott", height="750px",width="100%")),
+                                    tabPanel("Scatterplot",downloadButton("save_scat", "Save Plot", style='width: 100px; padding:2px;'),
+                                             plotlyOutput("scatplot", height="900px",width="70%")))
   )
 )

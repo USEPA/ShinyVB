@@ -1,13 +1,13 @@
 raincloud = function(rain_data) {
-
-  rain_data = as.data.frame(rain_data)
+  
+  rain_data = data.frame(rain_data)
   
   add_sample <- function(x) {
     return(c(y = max(x) + .025, 
              label = length(x)))
   }
 
-  rain = ggplot(rain_data, aes(1,V2)) +
+  rain = ggplot(rain_data, aes(1,rain_data[,2])) +
     
     ggdist::stat_halfeye(
       fill="cadetblue",
@@ -40,8 +40,8 @@ raincloud = function(rain_data) {
       parse=T,
       family = "Roboto Mono",
       fontface = "bold",
-      size = 5,
-      vjust = -11.5
+      size = 6,
+      vjust = -23
     ) +
     
     stat_summary(
@@ -51,8 +51,8 @@ raincloud = function(rain_data) {
       aes(label=paste0(round(after_stat(y), 1))),
       family = "Roboto Mono",
       fontface = "bold",
-      size = 5,
-      vjust = -6,
+      size = 6,
+      vjust = -14,
       hjust = -0.1
     ) +
       
@@ -63,17 +63,19 @@ raincloud = function(rain_data) {
       aes(label=paste("n =", after_stat(label))),
       family = "Roboto Condensed",
       fontface = "bold",
-      size = 4,
+      size = 6,
       hjust = 3,
-      vjust = -9,
+      vjust = -19,
     ) +
       
-    labs(x = NULL,y = "Values") +
+    labs(x = NULL,y = colnames(rain_data)[2]) +
     
     theme_bw() +
     
-    theme(axis.text=element_text(size=14, face="bold"),
-          axis.title=element_text(size=20,face="bold")) +
+    theme(axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
+    
+    theme(axis.text.x=element_text(size=14, face="bold"),
+          axis.title.x=element_text(size=20,face="bold")) +
       
     coord_flip()
   

@@ -11,6 +11,8 @@ ui = fluidPage(
   
   tags$head(tags$style(HTML('
     .selectize-input {white-space: nowrap}
+    #send_plot+ div>.selectize-dropdown{width: 100px !important;}
+    #send_plot+ div>.selectize-input{width: 100px !important;padding: 3px;}
     #scatterx+ div>.selectize-dropdown{width: 175px !important;}
     #scatterx+ div>.selectize-input{width: 130px !important;padding: 3px;}
     #scattery+ div>.selectize-dropdown{width: 175px !important;}

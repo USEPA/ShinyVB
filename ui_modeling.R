@@ -8,7 +8,7 @@ ModelingPanel = sidebarLayout(
     
     checkboxGroupInput(
       "coves_to_use",
-      "Covariates to Use:",
+      "Features to Use:",
       choices = "",
       inline = TRUE
     ),
@@ -47,7 +47,7 @@ ModelingPanel = sidebarLayout(
         content = card(
           
           fluidRow(
-            column(12,checkboxInput("normalize", "Normalize Covariates", TRUE))
+            column(12,checkboxInput("normalize", "Normalize Features", TRUE))
           ),
           fluidRow(
             column(6, inputPanel(
@@ -61,7 +61,7 @@ ModelingPanel = sidebarLayout(
             column(12, numericInput("max_lars_steps",  label="Maximum Steps", value = 250, min=1,step=1))
           ),
           fluidRow(
-            column(5,actionButton("lars_coeff", "Covariates", style = 'width:130px; padding:2px;')),
+            column(5,actionButton("lars_coeff", "Feat. Importance", style = 'width:130px; padding:2px;')),
             column(1),
             column(4,actionButton("lars_coeff_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(
@@ -74,7 +74,7 @@ ModelingPanel = sidebarLayout(
         content = card(
           
           fluidRow(
-            column(12,checkboxInput("normalize", "Normalize Covariates", TRUE))
+            column(12,checkboxInput("normalize", "Normalize Features", TRUE))
           ),
           fluidRow(
             column(12, numericInput("logist_train_pct",  label="Proportion Training Data", value = 0.75, min=0.25,max=1,step=0.05))
@@ -97,7 +97,7 @@ ModelingPanel = sidebarLayout(
                 "logist_pred",
                 label = "Prediction",
                 selected ="Probability",
-                choices = c("Probability","Value"))))
+                choices = c("Probability","Binary"))))
             ),
           fluidRow(
             column(12,actionButton("logist_analysis", "Logistic Analysis", style = 'width:160px; padding:2px;')))
@@ -112,7 +112,7 @@ ModelingPanel = sidebarLayout(
           fluidRow(
             column(12,checkboxInput("xgb_standardize", "Min/Max Standardization", TRUE))),
           fluidRow(
-            column(5,align="left",actionButton("xgb_select", "Covariates", style = 'width:130px; padding:2px;')),
+            column(5,align="left",actionButton("xgb_select", "Feat. Selection", style = 'width:130px; padding:2px;')),
             column(1),
             column(4,align="left",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(
@@ -126,17 +126,16 @@ ModelingPanel = sidebarLayout(
     width = 9,
     id = "modeling_output",
     tabsetPanel(id = "modeling_tabs",
-      tabPanel("General Plots",plotOutput("plot", height="100%",width="100%")),
-      tabPanel("LARS: Covariates", DT::dataTableOutput('lars_coeffs'),
+      tabPanel("LARS: Feat. Importance", DT::dataTableOutput('lars_coeffs'),
                 tags$style(type = "text/css", "#larscoeffstable {height: calc(100vh - 70px) !important;}")),
-      tabPanel("LARS: Performance", "LARS Prediction Uncertainty"),
-      tabPanel("Logistic: Covariates", "Logistic Regression Covariate Importance"),
-      tabPanel("Logistic: Performance", "Logistic Regression Prediction Uncertainty"),
+      tabPanel("LARS: Performance", "LARS Performance"),
+      tabPanel("Logistic: Feat. Importance", "Logistic Regression Covariate Importance"),
+      tabPanel("Logistic: Performance", "Logistic Regression Performance"),
       tabPanel("XGB: Hyper Optimize",DT::dataTableOutput('xgb_hyper'),
                 tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
-      tabPanel("XGB: Covariates",DT::dataTableOutput('xgb_select'),
+      tabPanel("XGB: Feat. Selection",DT::dataTableOutput('xgb_select'),
                 tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
-      tabPanel("XGB: Performance", "XGB Prediction Uncertainty")
+      tabPanel("XGB: Performance", "XGB Performance")
     )
   )
 )

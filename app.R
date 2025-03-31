@@ -27,6 +27,7 @@ library(magrittr)
 library(Nmisc)
 library(plotly)
 library(plyr)
+library(png)
 library(promises)
 library(ragg)
 library(RColorBrewer)
@@ -160,12 +161,12 @@ server= function(input,output,session) {
     
     corr_data = correls(current_data(),id_var(),response_var())
     
-    output$plot = renderPlot({
-      corrplot(corr_data, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, type="lower",col.lim = c(-1.4, 1.4), col = COL2('PRGn'), tl.col="black", tl.srt= 45)
-    },height = 1000, width = 1000)
+    output$corrplot = renderPlot({
+               corrplot(corr_data, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, type="lower",col.lim = c(-1.4, 1.4), col = COL2('PRGn'), tl.col="black", tl.srt= 45)
+             },height = 1000, width = 1000)
     
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'Plots')
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = "Correlations")
   })
   
   output$bo_text = renderUI({
@@ -219,6 +220,9 @@ server= function(input,output,session) {
     
     renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
     
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
+    
     showModal(modalDialog(
       paste0("The second column has been designated as the response variable by default. To change this, click on the column name at the BOTTOM of the table."),
       easyClose = F,
@@ -241,9 +245,9 @@ server= function(input,output,session) {
       showModal(modalDialog(title=paste0(input$col_props," Column Properties"),card(
         fluidRow(
           column(3,numericInput("sig_digies",  label="Signif Digits", value = values(feat_props,keys=input$col_props)[1], min=0,max=12,step=1)),
-          column(3,numericInput("prop2",  label="Prop Missing", value = values(feat_props,keys=input$col_props)[2], min=0,max=1,step=0.05)),
-          column(3,textInput("prop3",  label="Color", value = values(feat_props,keys=input$col_props)[3])),
-          column(3,textInput("prop4",  label="Status", value = values(feat_props,keys=input$col_props)[4])))),
+          column(3,numericInput("prop2",  label="Prop2", value = values(feat_props,keys=input$col_props)[2], min=0,max=1,step=0.05)),
+          column(3,textInput("prop3",  label="Prop3", value = values(feat_props,keys=input$col_props)[3])),
+          column(3,textInput("prop4",  label="Prop4", value = values(feat_props,keys=input$col_props)[4])))),
           footer = div(actionButton("props_close",'Close'))))
     }
   })
@@ -277,12 +281,12 @@ server= function(input,output,session) {
       
       rain_data0 = current_data()
       rain_data1 = cbind(rain_data0[,id_var()],rain_data0[,input$rainplot])
-      output$rainplot = renderPlot(raincloud(rain_data1))
+      colnames(rain_data1) = c("ID",input$rainplot)
       
-      boxx = modalDialog(plotOutput("rainplot"),title=paste0(input$rainplot," Raincloud Plot"),easyClose = F,size="l",
-            footer = div(modalButton('Close')))
-      
-      showModal(boxx)
+      output$rainplot = renderPlot({raincloud(rain_data1)},height = 900, width = 1200)
+
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = "Raincloud")
     }
   })
   
@@ -290,15 +294,22 @@ server= function(input,output,session) {
     
     if (input$lineplot != "-") {
       
-      output$lineplot = renderPlot(lineplot(current_data(),input$lineplot,id_var()))
-      boxx = modalDialog(plotOutput("lineplot"),title=paste0(input$lineplot," Line Plot"),easyClose = F,size="l",footer = div(modalButton('Close')))
-      showModal(boxx)
+      line_data0 = current_data()
+      line_data1 = cbind(line_data0[,id_var()],line_data0[,input$lineplot])
+      colnames(line_data1) = c("ID",input$lineplot)
+      
+      output$lineplott = renderPlotly({lineplot(line_data1,input$lineplot)})
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Line Plot')
     }
   })
   
   ScatPlot = reactive({
     list(input$scatterx, input$scattery)
   })
+  
+  scatter_plot = NULL
   
   observeEvent(ScatPlot(), ignoreInit = T, {
     
@@ -312,13 +323,21 @@ server= function(input,output,session) {
       
       colnames(scatter_data1) = c("ID",input$scatterx,input$scattery)
       
-      output$scatter = renderPlot(scatter(scatter_data1,input$scatterx,input$scattery))
+      scatter_plot <<- function(){scatter(scatter_data1,input$scatterx,input$scattery,id_var())}
       
-      scatt = modalDialog(plotOutput("scatter"),title=paste0("Scatter Plot: ",input$scattery," by ", input$scatterx), easyClose = F, size="l",footer = div(modalButton('Close')))
+      output$scatplot = renderPlotly({scatter_plot()})
       
-      showModal(scatt)
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
+
     }
   })
+  
+  output$save_scat = downloadHandler(
+    filename= "Scatterplot.png", contentType = "image/png",
+    content = function(file) {
+      ggsave(file, output$scatplot, device = "png", width = 10, height = 10, units = "in", dpi = 300)
+    })
   
   observeEvent(input$continue_impute, {
     
@@ -539,12 +558,12 @@ server= function(input,output,session) {
                   initComplete = JS("function(settings, json) {",
                                     "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
                   formatRound(columns=c(1,3:6), digits=c(0,5,5,5,5))
-      data$x$data[[1]] = as.numeric(data$x$data[[1]]) 
+      data$x$data[[1]] = as.numeric(data$x$data[[1]])
       data
     })
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Covariates')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Feat. Selection')
     
     #Return something other than the future so we don't block the UI
     NULL

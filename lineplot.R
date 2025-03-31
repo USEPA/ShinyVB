@@ -1,20 +1,15 @@
-lineplot = function(current_data,lineplot,id_var) {
+lineplot = function(line_data,lineplot) {
   
-  line_data = current_data
+  data = data.frame(line_data)
   
-  print(line_data)
+  data=na.omit(data)
   
-  line = line_data %>%
-    ggplot(aes(x=line_data[,id_var], y=line_data[,lineplot])) +
-    geom_ribbon(aes(ymin = min(line_data[,lineplot]), ymax = line_data[,lineplot],fill = "red"),alpha=0.9, show.legend = FALSE) +
-    geom_line(aes(y = line_data[,lineplot]), color="darkgrey") +
-    ylab(lineplot) +
-    xlab("ID") +
-    theme_bw()+
-    theme(axis.text=element_text(size=14, face="bold"),
-        axis.title=element_text(size=20,face="bold")) +
-    scale_fill_manual(values=("red"="cadetblue")) +
-    theme(legend.key = element_blank())
-  
-return(line)
+  figure = plot_ly(data=data, x = ~data[,1], y = ~data[,2], type = 'scatter', text = ~paste(
+    "<b>ID: </b>",data[,1],
+    "<br><b>",lineplot,":</b> ",data[,2],
+    sep=""), hoveron = 'points',hoverinfo='text',
+    mode = 'none', fill = 'tozeroy', fillcolor = "cadetblue") %>%
+   layout(xaxis = list(title = list(text='ID',font=list(size=22))),yaxis = list(title = list(text=lineplot,font=list(size=22)),
+                                  range=c(min(0.999*min(data[,2]),1.001*min(data[,2])),max(0.999*max(data[,2]),1.001*max(data[,2])))))
+
 }
