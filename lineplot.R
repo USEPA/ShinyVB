@@ -10,6 +10,6 @@ lineplot = function(line_data,lineplot) {
     sep=""), hoveron = 'points',hoverinfo='text',
     mode = 'none', fill = 'tozeroy', fillcolor = "cadetblue") %>%
    layout(xaxis = list(title = list(text='ID',font=list(size=22))),yaxis = list(title = list(text=lineplot,font=list(size=22)),
-                                  range=c(min(0.999*min(data[,2]),1.001*min(data[,2])),max(0.999*max(data[,2]),1.001*max(data[,2])))))
+                                  range=c(min(0.99*min(data[,2]),1.01*min(data[,2])),max(0.99*max(data[,2]),1.01*max(data[,2])))))
 
 }

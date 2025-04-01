@@ -2,6 +2,8 @@ raincloud = function(rain_data) {
   
   rain_data = data.frame(rain_data)
   
+  name = colnames(rain_data)[2]
+  
   add_sample <- function(x) {
     return(c(y = max(x) + .025, 
              label = length(x)))
@@ -38,7 +40,6 @@ raincloud = function(rain_data) {
       color = "black",
       aes(label=paste0("bar(x) == ",round(after_stat(y), 1))),
       parse=T,
-      family = "Roboto Mono",
       fontface = "bold",
       size = 6,
       vjust = -23
@@ -49,7 +50,6 @@ raincloud = function(rain_data) {
       fun = "median",
       color = "black",
       aes(label=paste0(round(after_stat(y), 1))),
-      family = "Roboto Mono",
       fontface = "bold",
       size = 6,
       vjust = -14,
@@ -61,11 +61,10 @@ raincloud = function(rain_data) {
       fun.data = add_sample,
       color="black",
       aes(label=paste("n =", after_stat(label))),
-      family = "Roboto Condensed",
       fontface = "bold",
       size = 6,
-      hjust = 3,
-      vjust = -19,
+      hjust = 1,
+      vjust = -57,
     ) +
       
     labs(x = NULL,y = colnames(rain_data)[2]) +
@@ -74,8 +73,14 @@ raincloud = function(rain_data) {
     
     theme(axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
     
+    theme(panel.grid.minor.y = element_blank(), panel.grid.major.y = element_blank()) +
+    theme(panel.grid.minor.x = element_line(size = 0.1), panel.grid.major.x = element_line(size = 0.1)) +
+    
     theme(axis.text.x=element_text(size=14, face="bold"),
           axis.title.x=element_text(size=20,face="bold")) +
+    
+    ggtitle(paste(name," Scatterplot")) +
+    theme(plot.title = element_text(hjust = 0.5, size = 28, face = "bold")) +
       
     coord_flip()
   

@@ -290,6 +290,79 @@ server= function(input,output,session) {
     }
   })
   
+  observeEvent(input$save_rainn, ignoreInit = T, {
+    
+    rain_data = current_data()
+    rain_data1 = data.frame(cbind(rain_data[,id_var()],rain_data[,input$rainplot]))
+    colnames(rain_data1) = c("ID",input$rainplot)
+    
+    add_sample = function(x) {
+      return(c(y = max(x) + .025,
+               label = length(x)))
+    }
+    
+    stat1 = mean(rain_data1[,2])
+    stat2 = median(rain_data1[,2])
+    stat3 = length(rain_data1[,2])
+    stat4 = min(rain_data1[,2])
+    stat5 = max(rain_data1[,2])-min(rain_data1[,2])
+    
+    output$save_rain = downloadHandler(
+      filename= "Rainplot.png",
+      content = function(file) {
+        
+        on.exit(removeModal())
+        png(file, width=input$rain_width, height=input$rain_height, units="in", res=input$rain_rez)
+        plot(ggplot(rain_data1, aes(1,rain_data1[,2])) +
+               
+               ggdist::stat_halfeye(
+                 fill="cadetblue",
+                 adjust = 1, 
+                 width = .75, 
+                 .width = 0,
+                 justification = -0.7, 
+                 point_color = NA) +
+               
+               geom_boxplot(
+                 fill="navy",
+                 width = .25,
+                 position = position_nudge(x = 0.3),
+                 alpha = 0.5,
+                 outlier.shape = NA) +
+               
+               geom_point(
+                 color = "navy",
+                 size = 1,
+                 alpha = .3,
+                 position = position_jitter(seed = 1, width = .12)) +
+               
+               annotation_custom(grid::textGrob(paste("Mean = ",round(stat1,1)),just="left",gp = gpar(fontsize=6),x=unit(0.88,"npc"), y=unit(0.91,"npc"))) +
+               annotation_custom(grid::textGrob(paste("Median = ",round(stat2,1)),just="left",gp = gpar(fontsize=6),x=unit(0.88,"npc"), y=unit(0.87,"npc"))) +
+               annotation_custom(grid::textGrob(paste("n = ", stat3),just="left",gp = gpar(fontsize=6),x=unit(0.88,"npc"), y=unit(0.95,"npc"))) +
+               
+               labs(x = NULL,y = input$rainplot) +
+               
+               theme_bw() +
+               
+               theme(axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
+               theme(panel.grid.minor.y = element_blank(), panel.grid.major.y = element_blank()) +
+               theme(panel.grid.minor.x = element_line(size = 0.1), panel.grid.major.x = element_line(size = 0.1)) +
+               theme(axis.text.x=element_text(size=8, face="bold"),
+                     axis.title.x=element_text(size=10,face="bold")) +
+               
+               coord_flip())
+        
+        dev.off()
+      })
+    
+    showModal(modalDialog(title="Save Options", card(
+      fluidRow(
+        column(4,numericInput("rain_width", "Image Width (in)", value=6, min=2, max = 12, step = 0.5)),
+        column(4,numericInput("rain_height", "Image Height (in)", value=3, min=2, max = 12, step = 0.5)),
+        column(4,numericInput("rain_rez", "Image Resolution", value=400, min=100, max = 1200, step = 50)))),
+      footer = div(downloadButton("save_rain", "Save Image"),modalButton('Close'))))
+  })
+  
   observeEvent(input$lineplot, ignoreInit = T, {
     
     if (input$lineplot != "-") {
@@ -305,27 +378,53 @@ server= function(input,output,session) {
     }
   })
   
+  observeEvent(input$save_linee, ignoreInit = T, {
+    
+    temp_data = current_data()
+
+    output$save_line = downloadHandler(
+      filename= "Lineplot.png",
+      content = function(file) {
+        on.exit(removeModal())
+        
+        png(file, width=input$line_width, height=input$line_height, units="in", res=input$line_rez)
+
+        plot(ggplot(data=temp_data, aes(x=temp_data[,id_var()], y=temp_data[,input$lineplot])) +
+          geom_ribbon(aes(ymin = 0, ymax = temp_data[,input$lineplot] ,group=1), fill="cadetblue", show.legend = FALSE) +
+          geom_line(aes(y = temp_data[,input$lineplot]),size=0.1, color="darkgrey") +
+          ylab(input$lineplot) +
+          xlab("ID") +
+          coord_cartesian(ylim = (c(min(0.99*min(temp_data[,input$lineplot]),1.01*min(temp_data[,input$lineplot])),
+                                      max(0.99*max(temp_data[,input$lineplot]),1.01*max(temp_data[,input$lineplot]))))) +
+          theme_bw() +
+          theme(panel.grid.minor = element_line(size = 0.1), panel.grid.major = element_line(size = 0.1)) +
+          theme(axis.text=element_text(size=6, face="bold"),axis.title=element_text(size=8,face="bold")) +
+          theme(legend.key = element_blank()))
+
+        dev.off()
+      })
+    
+    showModal(modalDialog(title="Save Options", card(
+      fluidRow(
+        column(4,numericInput("line_width", "Image Width (in)", value=6, min=2, max = 12, step = 0.5)),
+        column(4,numericInput("line_height", "Image Height (in)", value=3, min=2, max = 12, step = 0.5)),
+        column(4,numericInput("line_rez", "Image Resolution", value=400, min=100, max = 1200, step = 50)))),
+      footer = div(downloadButton("save_line", "Save Image"),modalButton('Close'))))
+  })
+
   ScatPlot = reactive({
     list(input$scatterx, input$scattery)
   })
-  
-  scatter_plot = NULL
   
   observeEvent(ScatPlot(), ignoreInit = T, {
     
     if (input$scatterx != "-" & input$scattery!= "-") {
       
       scatter_data0 = current_data()
-      
-      ident_var = id_var()
-      
-      scatter_data1 = cbind(scatter_data0[,ident_var],scatter_data0[,input$scatterx],scatter_data0[,input$scattery])
-      
+      scatter_data1 = cbind(scatter_data0[,id_var()],scatter_data0[,input$scatterx],scatter_data0[,input$scattery])
       colnames(scatter_data1) = c("ID",input$scatterx,input$scattery)
       
-      scatter_plot <<- function(){scatter(scatter_data1,input$scatterx,input$scattery,id_var())}
-      
-      output$scatplot = renderPlotly({scatter_plot()})
+      output$scatplot = renderPlotly(scatter(scatter_data1,input$scatterx,input$scattery,id_var()))
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
@@ -333,17 +432,38 @@ server= function(input,output,session) {
     }
   })
   
-  output$save_scat = downloadHandler(
-    filename= "Scatterplot.png", contentType = "image/png",
-    content = function(file) {
-      ggsave(file, output$scatplot, device = "png", width = 10, height = 10, units = "in", dpi = 300)
-    })
+  observeEvent(input$save_scatt, ignoreInit = T, {
+    
+    temp_data = current_data()
+    
+    output$save_scat = downloadHandler(
+      filename= "Scatterplot.png",
+      content = function(file) {
+        on.exit(removeModal())
+        png(file, width=input$scat_width, height=input$scat_height, units="in", res=input$scat_rez)
+        
+        plot(ggplot(temp_data, aes(x=temp_data[,input$scatterx], y=temp_data[,input$scattery])) +
+               geom_point(size=1, shape=21, color="black", fill="cadetblue", aes(group=1)) +
+               geom_smooth(aes(group=1)) +
+               labs(x = paste0(input$scatterx), y = paste0(input$scattery)) +
+               theme_bw() +
+               theme(axis.text=element_text(size=10,face="bold"),axis.title=element_text(size=12,face="bold")))
+        
+        dev.off()
+      })
+    
+    showModal(modalDialog(title="Save Options", card(
+      fluidRow(
+        column(4,numericInput("scat_width", "Image Width (in)", value=5, min=2, max = 12, step = 0.5)),
+        column(4,numericInput("scat_height", "Image Height (in)", value=5, min=2, max = 12, step = 0.5)),
+        column(4,numericInput("scat_rez", "Image Resolution", value=500, min=100, max = 1200, step = 50)))),
+      footer = div(downloadButton("save_scat", "Save Image"),modalButton('Close'))))
+  })
   
   observeEvent(input$continue_impute, {
     
     removeModal()
     current_data(imputing(current_data(),id_var(),response_var()))
-    #add_busy_spinner(spin = "fading-circle")
     renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
   })
   

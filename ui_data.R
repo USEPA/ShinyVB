@@ -120,12 +120,12 @@ DataPanel = sidebarLayout(
                         tabsetPanel(id = "data_tabs",
                                     tabPanel("Data Table",DT::dataTableOutput('data'),
                                              tags$style(type = "text/css", "#userdatatable {height: calc(100vh - 70px) !important;}")),
-                                    tabPanel("Correlations",actionButton("save_corr", "Save Plot", style='width: 100px; padding:2px;'),plotOutput("corrplot",width="100%",height="700px")),
-                                    tabPanel("Raincloud",actionButton("save_rain", "Save Plot", style='width: 100px; padding:2px;'),
+                                    tabPanel("Correlations",actionButton("save_corrr", "Save Plot", style='width: 100px; padding:2px;'),plotOutput("corrplot",width="100%",height="700px")),
+                                    tabPanel("Raincloud",actionButton("save_rainn", "Save Plot", style='width: 100px; padding:2px;'),
                                              plotOutput("rainplot", height = "800px", width="100%")),
-                                    tabPanel("Line Plot",actionButton("save_line", "Save Plot", style='width: 100px; padding:2px;'),
+                                    tabPanel("Line Plot",actionButton("save_linee", "Save Plot", style='width: 100px; padding:2px;'),
                                              plotlyOutput("lineplott", height="750px",width="100%")),
-                                    tabPanel("Scatterplot",downloadButton("save_scat", "Save Plot", style='width: 100px; padding:2px;'),
+                                    tabPanel("Scatterplot",actionButton("save_scatt", "Save Plot", style='width: 100px; padding:2px;'),
                                              plotlyOutput("scatplot", height="900px",width="70%")))
   )
 )
