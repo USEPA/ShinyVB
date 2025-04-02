@@ -9,8 +9,7 @@ scatter = function(scatter_data,scatterx,scattery,id) {
     geom_smooth(aes(group=1)) +
     labs(x = paste0(scatterx), y = paste0(scattery)) +
     theme_bw() +
-    theme(axis.text=element_text(size=14,face="bold"),
-          axis.title=element_text(size=20,face="bold"))
+    theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1))
   
   figure = ggplotly(fig, tooltip = "text") %>%
     layout(hoverlabel = list(bgcolor = "#eeeeee", font = list(size = 12, color = "black")))

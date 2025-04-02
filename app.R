@@ -162,16 +162,44 @@ server= function(input,output,session) {
     corr_data = correls(current_data(),id_var(),response_var())
     
     output$corrplot = renderPlot({
-               corrplot(corr_data, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, type="lower",col.lim = c(-1.4, 1.4), col = COL2('PRGn'), tl.col="black", tl.srt= 45)
-             },height = 1000, width = 1000)
+               corrplot(corr_data, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, type="lower",col.lim = c(-1.4, 1.4),
+                col = COL2('PRGn'), tl.col="black", tl.srt= 45)},height = 900, width = 900)
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = "Correlations")
   })
   
+  observeEvent(input$save_corrr, ignoreInit = T, {
+    
+    corr_data = correls(current_data(),id_var(),response_var())
+    
+    output$save_corr = downloadHandler(
+      filename= "Correlations.png",
+      content = function(file) {
+        on.exit(removeModal())
+        png(file, width=input$corr_width, height=input$corr_height, units="in", res=input$corr_rez)
+        
+        corrplot(corr_data, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, mar=c(0,0,2,0),
+                      type="lower",col.lim = c(-1.4, 1.4), col = COL2('PRGn'), tl.col="black", tl.srt= 45, title=input$corr_title, cex.main = 2,)
+        
+        
+        dev.off()
+      })
+    
+    showModal(modalDialog(title="Save Options", card(
+      fluidRow(
+        column(4,numericInput("corr_width", "Image Width (in)", value=12, min=8, max = 16, step = 1)),
+        column(4,numericInput("corr_height", "Image Height (in)", value=12, min=8, max = 16, step = 1)),
+        column(4,numericInput("corr_rez", "Image Resolution", value=300, min=100, max = 500, step = 50))),
+      fluidRow(
+        column(12,textInput("corr_title", "Plot Title",value="My Correlations")))),
+      footer = div(downloadButton("save_corr", "Save Image"),modalButton('Close'))))
+  })
+  
   output$bo_text = renderUI({
-    HTML("To determine site orientation, click once anywhere on the shoreline, then again on another point on the shoreline. A third click, <b>made in the water</b>,
-          calculates/saves the site orientation. A fourth click clears the map, whereby the process can be repeated.<br><br><i>Note: Any newly calculated orientation replaces the previous one.</i>")
+    HTML("To determine site orientation, click once anywhere on the shoreline, then again on another point on the shoreline. 
+      A third click, <b>made in the water</b>, calculates/saves the site orientation. A fourth click clears the map, 
+      whereby the process can be repeated.<br><br><i>Note: Any newly calculated orientation replaces the previous one.</i>")
   })
 
   output$beach_orient = renderText({bo()})
@@ -224,7 +252,8 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
     
     showModal(modalDialog(
-      paste0("The second column has been designated as the response variable by default. To change this, click on the column name at the BOTTOM of the table."),
+      paste0("The second column has been designated as the response variable by default. 
+             To change this, click on the column name at the BOTTOM of the table."),
       easyClose = F,
       footer = div(modalButton('Close'))
       ))
@@ -344,9 +373,11 @@ server= function(input,output,session) {
                
                theme_bw() +
                
+               ggtitle(input$rain_title) +
+               theme(plot.title = element_text(hjust = 0.5, size = 14, face="bold")) +
                theme(axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
                theme(panel.grid.minor.y = element_blank(), panel.grid.major.y = element_blank()) +
-               theme(panel.grid.minor.x = element_line(size = 0.1), panel.grid.major.x = element_line(size = 0.1)) +
+               theme(panel.grid.minor.x = element_line(linewidth = 0.1), panel.grid.major.x = element_line(linewidth = 0.1)) +
                theme(axis.text.x=element_text(size=8, face="bold"),
                      axis.title.x=element_text(size=10,face="bold")) +
                
@@ -359,7 +390,9 @@ server= function(input,output,session) {
       fluidRow(
         column(4,numericInput("rain_width", "Image Width (in)", value=6, min=2, max = 12, step = 0.5)),
         column(4,numericInput("rain_height", "Image Height (in)", value=3, min=2, max = 12, step = 0.5)),
-        column(4,numericInput("rain_rez", "Image Resolution", value=400, min=100, max = 1200, step = 50)))),
+        column(4,numericInput("rain_rez", "Image Resolution", value=400, min=100, max = 1200, step = 50))),
+      fluidRow(
+        column(12,textInput("rain_title", "Plot Title",value="My Raincloud Plot")))),
       footer = div(downloadButton("save_rain", "Save Image"),modalButton('Close'))))
   })
   
@@ -397,7 +430,9 @@ server= function(input,output,session) {
           coord_cartesian(ylim = (c(min(0.99*min(temp_data[,input$lineplot]),1.01*min(temp_data[,input$lineplot])),
                                       max(0.99*max(temp_data[,input$lineplot]),1.01*max(temp_data[,input$lineplot]))))) +
           theme_bw() +
-          theme(panel.grid.minor = element_line(size = 0.1), panel.grid.major = element_line(size = 0.1)) +
+          ggtitle(input$line_title) +
+          theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold")) +
+          theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
           theme(axis.text=element_text(size=6, face="bold"),axis.title=element_text(size=8,face="bold")) +
           theme(legend.key = element_blank()))
 
@@ -408,7 +443,9 @@ server= function(input,output,session) {
       fluidRow(
         column(4,numericInput("line_width", "Image Width (in)", value=6, min=2, max = 12, step = 0.5)),
         column(4,numericInput("line_height", "Image Height (in)", value=3, min=2, max = 12, step = 0.5)),
-        column(4,numericInput("line_rez", "Image Resolution", value=400, min=100, max = 1200, step = 50)))),
+        column(4,numericInput("line_rez", "Image Resolution", value=400, min=100, max = 1200, step = 50))),
+      fluidRow(
+        column(12,textInput("line_title", "Plot Title",value="My Lineplot")))),
       footer = div(downloadButton("save_line", "Save Image"),modalButton('Close'))))
   })
 
@@ -447,6 +484,9 @@ server= function(input,output,session) {
                geom_smooth(aes(group=1)) +
                labs(x = paste0(input$scatterx), y = paste0(input$scattery)) +
                theme_bw() +
+               ggtitle(input$scat_title) +
+               theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold")) +
+               theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
                theme(axis.text=element_text(size=10,face="bold"),axis.title=element_text(size=12,face="bold")))
         
         dev.off()
@@ -457,6 +497,8 @@ server= function(input,output,session) {
         column(4,numericInput("scat_width", "Image Width (in)", value=5, min=2, max = 12, step = 0.5)),
         column(4,numericInput("scat_height", "Image Height (in)", value=5, min=2, max = 12, step = 0.5)),
         column(4,numericInput("scat_rez", "Image Resolution", value=500, min=100, max = 1200, step = 50)))),
+      fluidRow(
+        column(12,textInput("scat_title", "Plot Title",value="My Scatterplot"))),
       footer = div(downloadButton("save_scat", "Save Image"),modalButton('Close'))))
   })
   
@@ -502,7 +544,8 @@ server= function(input,output,session) {
     if (max_missing > crit_n) {
       
       showModal(modalDialog(
-        paste0("WARNING: Row numbers (", listing, "), have quite a few missing values. Imputation results for these rows will be highly uncertain. Consider deleting these from the dataset."),
+        paste0("WARNING: Row numbers (", listing, "), have quite a few missing values. Imputation results for these rows 
+               will be highly uncertain. Consider deleting these from the dataset."),
         footer = tagList(actionButton("continue_impute", "Impute Anyways"),actionButton("end_impute", "Exit"))))
       
     } else {
@@ -538,7 +581,8 @@ server= function(input,output,session) {
         renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
         
       } else {
-        showModal(modalDialog(div("ERROR: BOTH new component columns must have different names than any currently existing column names.",style="font-size:160%"),easyClose = T))
+        showModal(modalDialog(div("ERROR: BOTH new component columns must have different names 
+                                  than any currently existing column names.",style="font-size:160%"),easyClose = T))
       }
       
     } else {
@@ -594,14 +638,14 @@ server= function(input,output,session) {
     
   })
   
-  observeEvent(input$xgb_uncert, {
+  observeEvent(input$xgb_perform, {
     
-    xgb_uncert = xgb_uncert(current_data(),response_var(),id_var(),input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
+    xgb_perform = xgb_perform(current_data(),response_var(),id_var(),input$rnd_seed,input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
                             input$loggy,input$randomize,input$xgb_tech,input$rate_drop,input$eta,input$gamma,input$max_depth,input$min_child_weight,input$subsample,
                             input$colsample_bytree,input$samp_prop,input$nrounds,input$early_stopping_rounds) 
     
-    xgb_fits = xgb_uncert[,1]
-    xgb_predicts = xgb_uncert[,2]
+    xgb_fits = xgb_perform[,1]
+    xgb_predicts = xgb_perform[,2]
     
     print(xgb_fits)
     print(xgb_predicts)
@@ -644,12 +688,13 @@ server= function(input,output,session) {
     loggy = input$loggy
     randomize = input$randomize
     test_weight = input$test_weight
+    seed = input$rnd_seed
     
     xgb_select_result(NULL)
     
     xgb_select_calculation <<- future({
       
-      xgb_select(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_boost,
+      xgb_select(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_boost,
                  dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db)
       
     }, seed=TRUE)

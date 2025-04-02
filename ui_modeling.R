@@ -40,7 +40,9 @@ ModelingPanel = sidebarLayout(
           fluidRow(align="left",
             column(12, checkboxInput("loggy", "Log Response", FALSE))),
           fluidRow(align="left",
-            column(12, checkboxInput("randomize", "Randomize Data", FALSE))))) %>%
+            column(12, checkboxInput("randomize", "Randomize Data", FALSE))),
+          fluidRow(align="left",
+                   column(12, numericInput("rnd_seed",  label="Seed", value = 1234, min=1,step=1))))) %>%
       
       bs_append (
         title = "LARS",

@@ -74,13 +74,10 @@ raincloud = function(rain_data) {
     theme(axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
     
     theme(panel.grid.minor.y = element_blank(), panel.grid.major.y = element_blank()) +
-    theme(panel.grid.minor.x = element_line(size = 0.1), panel.grid.major.x = element_line(size = 0.1)) +
+    theme(panel.grid.minor.x = element_line(linewidth = 0.1), panel.grid.major.x = element_line(linewidth = 0.1)) +
     
     theme(axis.text.x=element_text(size=14, face="bold"),
           axis.title.x=element_text(size=20,face="bold")) +
-    
-    ggtitle(paste(name," Scatterplot")) +
-    theme(plot.title = element_text(hjust = 0.5, size = 28, face = "bold")) +
       
     coord_flip()
   

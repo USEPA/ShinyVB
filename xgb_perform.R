@@ -4,9 +4,14 @@ library(xgboost)
 library(dplyr)
 library(permimp)
 
-xgb_uncert = function(current_data,response_var,id_var,coves_to_use,nd_val,tntc_val,tntc_multy,MC_runs,
+# Set seed for reproducibility
+
+
+xgb_perform = function(current_data,response_var,id_var,seed,coves_to_use,nd_val,tntc_val,tntc_multy,MC_runs,
                       loggy,randomize,xgb_tech,drop_rate,skip_rate,eta,gamma,max_depth,min_child_weight,subsamp,
                       colsamp,samp_prop,nrounds,normalize_type,sample_type) {
+  
+  set.seed(seed)
   
   cove_data=current_data[,coves_to_use]
   ncoves = ncol(cove_data)

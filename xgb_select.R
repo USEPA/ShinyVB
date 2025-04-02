@@ -9,8 +9,10 @@ library(pdp)
 library(DBI)
 library(RSQLite)
 
-xgb_select = function(xgb_select_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_booster,dart_normalize_type,
+xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_booster,dart_normalize_type,
                       dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db) {
+  
+  set.seed(seed)
   
   selector = "SHAP"
   cove_data=xgb_select_data[,coves_to_use]
