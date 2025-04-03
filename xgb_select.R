@@ -69,7 +69,7 @@ xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upva
     data = data[random_index, ]
   }
   
-  # Variable Selection Routine based on variable importance in training data model
+  # Variable Selection Routine based on SHAP variable importance
   
   if (xgb_booster == "dart") {
     

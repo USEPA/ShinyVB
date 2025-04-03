@@ -55,7 +55,7 @@ source("scatter.R")
 source("impute.R")
 source("lars_coeff.R")
 source("lars_perform.R")
-source("xgb_hyper.R")
+source("xgb_pso.R")
 source("xgb_select.R")
 source("xgb_perform.R")
 source("createAO.R")
@@ -638,19 +638,19 @@ server= function(input,output,session) {
     
   })
   
-  observeEvent(input$xgb_perform, {
-    
-    xgb_perform = xgb_perform(current_data(),response_var(),id_var(),input$rnd_seed,input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
-                            input$loggy,input$randomize,input$xgb_tech,input$rate_drop,input$eta,input$gamma,input$max_depth,input$min_child_weight,input$subsample,
-                            input$colsample_bytree,input$samp_prop,input$nrounds,input$early_stopping_rounds) 
-    
-    xgb_fits = xgb_perform[,1]
-    xgb_predicts = xgb_perform[,2]
-    
-    print(xgb_fits)
-    print(xgb_predicts)
-    
-  })
+  # observeEvent(input$xgb_perform, {
+  #   
+  #   xgb_perform = xgb_perform(current_data(),response_var(),id_var(),input$rnd_seed,input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
+  #                           input$loggy,input$randomize,input$xgb_tech,input$rate_drop,input$eta,input$gamma,input$max_depth,input$min_child_weight,input$subsample,
+  #                           input$colsample_bytree,input$samp_prop,input$nrounds,input$early_stopping_rounds) 
+  #   
+  #   xgb_fits = xgb_perform[,1]
+  #   xgb_predicts = xgb_perform[,2]
+  #   
+  #   print(xgb_fits)
+  #   print(xgb_predicts)
+  #   
+  # })
   
   observeEvent(input$xgb_select, {
     
@@ -760,144 +760,76 @@ server= function(input,output,session) {
     updateCheckboxGroupInput(session,"coves_to_use",choices=cove_names(),selected=remaining,inline=T)
   })
   
-  observeEvent(input$xgb_hyper_ranges, {
+  observeEvent(input$xgb_perform, {
     
-    showModal(modalDialog(title="Hyperparameter Grid Search Ranges", card(
+    showModal(modalDialog(title="XGB Performance", card(
       
       fluidRow(
-        column(6,selectInput("xgb_hyper_metric", "Evaluation Metric", choices = c("rmse","mae","mape","logloss"), selected = "rmse")),
-        column(6)),
+        column(12,selectInput("xgb_hyper_metric", "Evaluation Metric", choices = c("rmse","mae","mape","logloss"), selected = "rmse"))),
       fluidRow(
-        column(12,sliderInput("eta_r", "eta", 0, 1, width="100%", value=c(0.1,0.20), step = 0.05,
-                              ticks = F, dragRange = TRUE))),
-      fluidRow(
-        column(12,sliderInput("gamma_r", "gamma", 0, 10, width="100%", value=c(0.5,0.75), step = 0.25,
-                              ticks = F, dragRange = TRUE))),
-      fluidRow(
-        column(12,sliderInput("max_depth_r", "Max Tree Depth", 1, 10, width="100%", value=c(2,4), step = 1,
-                              ticks = F, dragRange = TRUE))),
-      fluidRow(
-        column(12,sliderInput("min_child_weight_r", "Min Node Members", 1, 20, width="100%", value=c(2,4), step = 1,
-                              ticks = F, dragRange = TRUE))),
-      fluidRow(
-        column(12,sliderInput("nrounds_r", "Number of Iterations", 100, 2000, width="100%", value=c(500,1000), step = 100,
-                              ticks = F, dragRange = TRUE))),
-      fluidRow(
-        column(12,sliderInput("early_stop_r", "Early Stopping", 10, 100, width="100%", value=c(40,50), step = 10,
-                              ticks = F, dragRange = TRUE))),
-      fluidRow(
-        column(12,sliderInput("nfold_r", "CV Folds", 2, 20, width="100%", value=c(5,10), step = 1,
-                              ticks = F, dragRange = TRUE))),
-      fluidRow(
-        column(12,sliderInput("subsamp_r", "Subsampling Prop", 0, 1, width="100%", value=c(0.75,0.85), step = 0.05,
-                              ticks = F, dragRange = TRUE))),
-      fluidRow(
-        column(12,sliderInput("colsamp_r", "Column Sample Prop", 0, 1, width="100%", value=c(0.75,0.85), step = 0.05,
-                              ticks = F, dragRange = TRUE)))),
-      footer = div(actionButton("run_xgb_hyper", "Run"),modalButton('Close'),actionButton("stop_xgb_hyper", "Cancel the Calculation"))
+        column(6,numericInput("pso_max_iter", "Max Iterations", min=1, max=200, value=10, step = 1)),
+        column(6,numericInput("pso_swarm_size", "Swarm Size", min=1, max=200, value=20, step = 1)))),
+      footer = div(actionButton("run_xgb_perform", "Run"),modalButton('Close'),actionButton("stop_xgb_perform", "Cancel the Calculation"))
       ))
   })
   
-  observeEvent(input$run_xgb_hyper, {
+  observeEvent(input$run_xgb_perform, {
     
-    if(running())
-      return(NULL)
-    running(TRUE)
+    set.seed(seed)
     
-    eta_list = seq(from = input$eta_r[1], to = input$eta_r[2],by = 0.05)
+    xgb_perform_data = current_data()
     
-    gamma_list = seq(from = input$gamma_r[1], to = input$gamma_r[2],by = 0.25)
+    # REMOVE NA'S FROM RESPONSE VARIABLE
+    xgb_perform_data = xgb_perform_data[!is.na(xgb_perform_data[, 1]), ]
     
-    max_depth_list = seq(from = input$max_depth_r[1], to = input$max_depth_r[2],by = 1)
+    if (xgb_standardize == TRUE) {
+      for (i in 1:nrow(xgb_perform_data)) {
+        for (j in 1:ncol(xgb_perform_data)) {
+          if (is.numeric(xgb_perform_data[i, j]) == TRUE) {
+            xgb_perform_data[i, j] = (xgb_perform_data[i, j] - min(na.omit(xgb_perform_data[, j]))) / (max(na.omit(xgb_perform_data[, j])) - min(na.omit(xgb_perform_data[, j])))
+          }
+        }
+      }
+    }
     
-    min_child_weight_list = seq(from = input$min_child_weight_r[1], to = input$min_child_weight_r[2],by = 1)
+    #Randomly shuffle the data
+    xgb_perform_data = xgb_perform_data[sample(nrow(xgb_perform_data)),]
     
-    nrounds_list = seq(from = input$nrounds_r[1], to = input$nrounds_r[2],by = 100)
+    #Create 5 equally size folds
+    folds = cut(seq(1,nrow(xgb_perform_data)),breaks=5,labels=FALSE)
     
-    early_stop_list =seq(from = input$early_stop_r[1], to = input$early_stop_r[2],by = 10)
-    
-    nfold_list = seq(from = input$nfold_r[1], to = input$nfold_r[2],by = 1)
-    
-    subsamp_list = seq(from = input$subsamp_r[1], to = input$subsamp_r[2],by = 0.05)
-    
-    colsamp_list = seq(from = input$colsamp_r[1], to = input$colsamp_r[2],by = 0.05)
-    
-    xgb_hyper_data = current_data()
-    resvar = response_var()
-    coves_to_use = input$coves_to_use
-    lc_lowval = input$lc_lowval
-    lc_upval = input$lc_upval
-    rc_lowval = input$rc_lowval
-    rc_upval = input$rc_upval
-    MC_runs = input$MC_runs
-    loggy = input$loggy
-    randomize = input$randomize
-    xgb_standardize = input$xgb_standardize
-    xgb_hyper_metric = input$xgb_hyper_metric
-
-    xgb_hyper_result(NULL)
-    
-    xgb_hyper_calculation <<- future({
+    #Perform 5 fold cross validation
+    for(i in 1:5) {
       
-      xgb_hyper(xgb_hyper_data,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval, MC_runs,loggy,randomize,xgb_standardize,xgb_hyper_metric,
-                eta_list,gamma_list,max_depth_list,min_child_weight_list,subsamp_list,colsamp_list,nrounds_list,nfold_list,early_stop_list)
-  
-    }, seed=TRUE)
-    
-    
-    prom = xgb_hyper_calculation %...>% xgb_hyper_result
-    
-    prom <- catch(xgb_hyper_calculation,
-                  function(e){
-                    xgb_hyper_result(NULL)
-                    showModal(modalDialog(paste0("Hyperparameter Grid Search cancelled. No results generated."),footer = modalButton("Close")))
-                  })
-    
-    prom = finally(prom, function(){
-      running(FALSE)
-    })
-
-    output$xgb_hyper = DT::renderDataTable(server=T,{
-      datatable(xgb_hyper_result(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
-                options = list(
-                  autoWidth=F,
-                  paging = TRUE,
-                  pageLength = 25,
-                  scrollX = TRUE,
-                  scrollY = TRUE,
-                  columnDefs = list(list(targets = '_all', className = 'dt-center')),
-                  initComplete = JS("function(settings, json) {",
-                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))
-    })
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Hyper Optimize')
-    
-    #Return something other than the future so we don't block the UI
-    NULL
-    
+      testIndexes = which(folds==i,arr.ind=TRUE)
+      testData = xgb_perform_data[testIndexes, ]
+      trainData = xgb_perform_data[-testIndexes, ]
+      
+      pso_result = xgb_perform(trainData,testData,response_var(),input$coves_to_use,input$lc_lowval,input$lc_upval,input$rc_lowval,input$rc_upval,
+              input$MC_runs,input$loggy,input$randomize,input$xgb_standardize,input$xgb_hyper_metric,input$pso_max_iter,input$pso_swarm_size)
+      
   })
   
-  observeEvent(input$stop_xgb_hyper, {
+  observeEvent(input$stop_xgb_perform, {
     print("Stopping calculation...")
-    stopMulticoreFuture(xgb_hyper_calculation)
+    stopMulticoreFuture(xgb_perform_calculation)
   })
   
-  observeEvent(input$xgb_hyper_rows_selected, ignoreInit = T, {
-    
-    matrix = xgb_hyper_result()
-    
-    eta_set(matrix[input$xgb_hyper_rows_selected,"eta"])
-    gamma_set(matrix[input$xgb_hyper_rows_selected,"gamma"])
-    max_depth_set(matrix[input$xgb_hyper_rows_selected,"max_depth"])
-    min_child_weight_set(matrix[input$xgb_hyper_rows_selected,"min_child_weight"])
-    nrounds_set(matrix[input$xgb_hyper_rows_selected,"nrounds"])
-    early_stop_set(matrix[input$xgb_hyper_rows_selected,"early_stopping_rounds"])
-    nfold_set(matrix[input$xgb_hyper_rows_selected,"nfold"])
-    subsamp_set(matrix[input$xgb_hyper_rows_selected,"subsample"])
-    colsamp_set(matrix[input$xgb_hyper_rows_selected,"colsample_bytree"])
-    
-  })
+  # observeEvent(input$xgb_hyper_rows_selected, ignoreInit = T, {
+  #   
+  #   matrix = xgb_hyper_result()
+  #   
+  #   eta_set(matrix[input$xgb_hyper_rows_selected,"eta"])
+  #   gamma_set(matrix[input$xgb_hyper_rows_selected,"gamma"])
+  #   max_depth_set(matrix[input$xgb_hyper_rows_selected,"max_depth"])
+  #   min_child_weight_set(matrix[input$xgb_hyper_rows_selected,"min_child_weight"])
+  #   nrounds_set(matrix[input$xgb_hyper_rows_selected,"nrounds"])
+  #   early_stop_set(matrix[input$xgb_hyper_rows_selected,"early_stopping_rounds"])
+  #   nfold_set(matrix[input$xgb_hyper_rows_selected,"nfold"])
+  #   subsamp_set(matrix[input$xgb_hyper_rows_selected,"subsample"])
+  #   colsamp_set(matrix[input$xgb_hyper_rows_selected,"colsample_bytree"])
+  #   
+  # })
   
   output$map = renderLeaflet({ 
     leaflet() |> 

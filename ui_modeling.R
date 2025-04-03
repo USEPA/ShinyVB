@@ -133,11 +133,10 @@ ModelingPanel = sidebarLayout(
       tabPanel("LARS: Performance", "LARS Performance"),
       tabPanel("Logistic: Feat. Importance", "Logistic Regression Covariate Importance"),
       tabPanel("Logistic: Performance", "Logistic Regression Performance"),
-      tabPanel("XGB: Hyper Optimize",DT::dataTableOutput('xgb_hyper'),
+      tabPanel("XGB: PSO",DT::dataTableOutput('xgb_pso'),
                 tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
       tabPanel("XGB: Feat. Selection",DT::dataTableOutput('xgb_select'),
-                tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
-      tabPanel("XGB: Performance", "XGB Performance")
+                tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}"))
     )
   )
 )
