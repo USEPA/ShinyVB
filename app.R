@@ -3,6 +3,8 @@ setwd(getwd())
 library(bsicons)
 library(bslib)
 library(bsplus)
+library(caret)
+library(cluster)
 library(colorspace)
 library(corrplot)
 library(DBI)
@@ -29,6 +31,7 @@ library(plotly)
 library(plyr)
 library(png)
 library(promises)
+library(pso)
 library(ragg)
 library(RColorBrewer)
 library(RSQLite)
@@ -41,9 +44,11 @@ library(shinydashboard)
 library(shinydashboardPlus)
 library(shinyjs)
 library(shinythemes)
+library(stats)
 library(tidymodels)
 library(tidyr)
 library(units)
+library(xgboost)
 plan(multicore)
 
 source("renderdata.R")
@@ -57,7 +62,7 @@ source("lars_coeff.R")
 source("lars_perform.R")
 source("xgb_pso.R")
 source("xgb_select.R")
-source("xgb_perform.R")
+source("xgb_HP_and_errors.R")
 source("createAO.R")
 
 #all.functions = list.functions.in.file("app.R", alphabetic = TRUE)
@@ -94,8 +99,8 @@ server= function(input,output,session) {
   subsamp_set = reactiveVal(0.8)
   colsamp_set = reactiveVal(0.8)
   
-  xgb_hyper_result = reactiveVal()
-  xgb_hyper_calculation = NULL
+  # xgb_hyper_result = reactiveVal()
+  # xgb_hyper_calculation = NULL
   
   xgb_select_result = reactiveVal()
   xgb_select_calculation = NULL
@@ -760,60 +765,86 @@ server= function(input,output,session) {
     updateCheckboxGroupInput(session,"coves_to_use",choices=cove_names(),selected=remaining,inline=T)
   })
   
-  observeEvent(input$xgb_perform, {
+  observeEvent(input$xgb_HP_and_errors, {
     
-    showModal(modalDialog(title="XGB Performance", card(
+    showModal(modalDialog(title="HP Tuning and Prediction Errors", card(
       
       fluidRow(
         column(12,selectInput("xgb_hyper_metric", "Evaluation Metric", choices = c("rmse","mae","mape","logloss"), selected = "rmse"))),
       fluidRow(
-        column(6,numericInput("pso_max_iter", "Max Iterations", min=1, max=200, value=10, step = 1)),
-        column(6,numericInput("pso_swarm_size", "Swarm Size", min=1, max=200, value=20, step = 1)))),
-      footer = div(actionButton("run_xgb_perform", "Run"),modalButton('Close'),actionButton("stop_xgb_perform", "Cancel the Calculation"))
+        column(6,numericInput("pso_max_iter", "Max Iterations", min=1, max=1000, value=25, step = 1)),
+        column(6,numericInput("pso_swarm_size", "Swarm Size", min=1, max=200, value=10, step = 1)))),
+      footer = div(actionButton("run_xgb_HP_and_errors", "Run"),modalButton('Close'))#,actionButton("stop_xgb_HP_and_errors", "Cancel the Calculation"#))
       ))
   })
   
-  observeEvent(input$run_xgb_perform, {
+  observeEvent(input$run_xgb_HP_and_errors, {
+    set.seed(input$rnd_seed)
     
-    set.seed(seed)
-    
-    xgb_perform_data = current_data()
+    xgb_HP_data = current_data()
     
     # REMOVE NA'S FROM RESPONSE VARIABLE
-    xgb_perform_data = xgb_perform_data[!is.na(xgb_perform_data[, 1]), ]
+    xgb_HP_data = xgb_HP_data[!is.na(xgb_HP_data[, 1]), ]
     
-    if (xgb_standardize == TRUE) {
-      for (i in 1:nrow(xgb_perform_data)) {
-        for (j in 1:ncol(xgb_perform_data)) {
-          if (is.numeric(xgb_perform_data[i, j]) == TRUE) {
-            xgb_perform_data[i, j] = (xgb_perform_data[i, j] - min(na.omit(xgb_perform_data[, j]))) / (max(na.omit(xgb_perform_data[, j])) - min(na.omit(xgb_perform_data[, j])))
+    if (input$xgb_standardize == TRUE) {
+      for (i in 1:nrow(xgb_HP_data)) {
+        for (j in 1:ncol(xgb_HP_data)) {
+          if (is.numeric(xgb_HP_data[i, j]) == TRUE) {
+            if (max(na.omit(xgb_HP_data[, j])) - min(na.omit(xgb_HP_data[, j])) == 0) {
+              xgb_HP_data[i, j] = 0
+            } else {
+              xgb_HP_data[i, j] = (xgb_HP_data[i, j] - min(na.omit(xgb_HP_data[, j]))) / (max(na.omit(xgb_HP_data[, j])) - min(na.omit(xgb_HP_data[, j])))
+            }
           }
         }
       }
     }
     
     #Randomly shuffle the data
-    xgb_perform_data = xgb_perform_data[sample(nrow(xgb_perform_data)),]
+    xgb_HP_data = xgb_HP_data[sample(nrow(xgb_HP_data)), ]
     
     #Create 5 equally size folds
-    folds = cut(seq(1,nrow(xgb_perform_data)),breaks=5,labels=FALSE)
+    folds = cut(seq(1, nrow(xgb_HP_data)), breaks = 5, labels = FALSE)
     
-    #Perform 5 fold cross validation
-    for(i in 1:5) {
-      
-      testIndexes = which(folds==i,arr.ind=TRUE)
-      testData = xgb_perform_data[testIndexes, ]
-      trainData = xgb_perform_data[-testIndexes, ]
-      
-      pso_result = xgb_perform(trainData,testData,response_var(),input$coves_to_use,input$lc_lowval,input$lc_upval,input$rc_lowval,input$rc_upval,
-              input$MC_runs,input$loggy,input$randomize,input$xgb_standardize,input$xgb_hyper_metric,input$pso_max_iter,input$pso_swarm_size)
-      
+    withProgress(
+      message = 'Calculation in progress',
+      detail = paste0("Folds remaining:", i = 5),
+      value = 0,
+      {
+        #Perform 5 fold cross validation
+        for (i in 1:5) {
+          incProgress(1 / 5, detail = paste("Folds remaining:", i = (5 - i)))
+          
+          testIndexes = which(folds == i, arr.ind = TRUE)
+          testData = xgb_HP_data[testIndexes, ]
+          trainData = xgb_HP_data[-testIndexes, ]
+          
+          pso_result = xgb_HP_and_errors(
+            trainData,
+            testData,
+            response_var(),
+            input$coves_to_use,
+            input$lc_lowval,
+            input$lc_upval,
+            input$rc_lowval,
+            input$rc_upval,
+            input$train_prop,
+            input$MC_runs,
+            input$loggy,
+            input$randomize,
+            input$xgb_standardize,
+            input$xgb_hyper_metric,
+            input$pso_max_iter,
+            input$pso_swarm_size
+          )
+        }
+      })
   })
   
-  observeEvent(input$stop_xgb_perform, {
-    print("Stopping calculation...")
-    stopMulticoreFuture(xgb_perform_calculation)
-  })
+  # observeEvent(input$stop_xgb_HP_and_errors, {
+  #   print("Stopping calculation...")
+  #   stopMulticoreFuture(xgb_perform_calculation)
+  # })
   
   # observeEvent(input$xgb_hyper_rows_selected, ignoreInit = T, {
   #   

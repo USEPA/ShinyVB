@@ -26,7 +26,14 @@ xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upva
     for (i in 1:nrow(cove_data)) {
       for (j in 1:ncol(cove_data)) {
         if (is.numeric(cove_data[i,j])==TRUE) {
-          cove_data[i,j]=(cove_data[i,j] - min(na.omit(cove_data[,j]))) / (max(na.omit(cove_data[,j])) - min(na.omit(cove_data[,j])))
+          
+          range = (max(na.omit(cove_data[,j])) - min(na.omit(cove_data[,j])))
+          
+          if (range == 0) {
+            cove_data[i,j] = 0
+          } else {
+              cove_data[i,j]=(cove_data[i,j] - min(na.omit(cove_data[,j]))) / range
+          }
         }
       }
     }
@@ -102,7 +109,7 @@ xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upva
   
   remaining = ncol(data)-2
   Iteration_results = matrix(0, nrow=remaining, ncol=8)
-  colnames(Iteration_results) = c("Iteration","Worst Gain","Gain","Worst SHAP","SHAP","RMSE_Train","RMSE_Test","RMSE_Weighted")
+  colnames(Iteration_results) = c("Iteration","Lowest Gain","Gain","Lowest SHAP","SHAP","RMSE_Train","RMSE_Test","RMSE_Weighted")
   smp_size = floor(train_prop * nrow(data))
   temp_data = data
   

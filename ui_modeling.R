@@ -108,21 +108,20 @@ ModelingPanel = sidebarLayout(
       bs_append (
         title = "XGBoost", content= card(
           fluidRow(
-            column(12,align="left",actionButton("xgb_hyper_ranges", "Hyperparameter Optimization", style = 'background-color:#eee; width:200px; padding:2px;'))),
+            column(12,checkboxInput("xgb_standardize", "Standardize Features", TRUE))),
           fluidRow(
-            column(12,align="left",actionButton("xgb_params", "Set Hyperparameters", style = 'background-color:#eee; width:150px; padding:2px;'))),
-          fluidRow(
-            column(12,checkboxInput("xgb_standardize", "Min/Max Standardization", TRUE))),
-          fluidRow(
-            column(5,align="left",actionButton("xgb_select", "Feat. Selection", style = 'width:130px; padding:2px;')),
-            column(1),
-            column(4,align="left",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
+            column(12,align="left",actionButton("xgb_params", "Hyperparameters", style = 'background-color:#eee; width:140px; padding:2px;'))),
           fluidRow(
             column(12,numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05))),
           fluidRow(
-            column(5,align="left",actionButton("xgb_uncert", "Performance", style = 'width:130px; padding:2px;')),
-            column(1),
-            column(4,align="left",actionButton("xgb_perform_cancel", "Cancel", style = 'width:90px; padding:2px;')))))),
+            column(6,align="left",actionButton("xgb_select", "Feat. Selection", style = 'width:130px; padding:2px;')),
+            column(6,align="right",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
+          fluidRow(column(12,tags$hr(style = "border-color: darkblue;"))),
+          fluidRow(
+            column(12,align="left",actionButton("xgb_HP_and_errors", "HP Tuning and Prediction Errors", style = 'background-color:#eee; width:220px; padding:2px;'))),
+          fluidRow(column(12,tags$hr(style = "border-color: darkblue;"))),
+          fluidRow(
+            column(12,align="left",actionButton("xgb_final_fitting", "Final Fitting", style = 'background-color:#eee; width:210px; padding:2px;')))))),
   
   mainPanel = mainPanel(
     width = 9,
@@ -133,7 +132,7 @@ ModelingPanel = sidebarLayout(
       tabPanel("LARS: Performance", "LARS Performance"),
       tabPanel("Logistic: Feat. Importance", "Logistic Regression Covariate Importance"),
       tabPanel("Logistic: Performance", "Logistic Regression Performance"),
-      tabPanel("XGB: PSO",DT::dataTableOutput('xgb_pso'),
+      tabPanel("XGB: HP and Errors",DT::dataTableOutput('xgb_pso'),
                 tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
       tabPanel("XGB: Feat. Selection",DT::dataTableOutput('xgb_select'),
                 tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}"))

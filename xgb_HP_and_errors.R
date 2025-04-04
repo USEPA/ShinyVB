@@ -1,11 +1,4 @@
-library(xgboost)
-library(pso)
-library(caret)
-library(dplyr)
-library(ggplot2)
-library(stats)
-
-xgb_perform = function(pso_train_data,
+xgb_HP_and_errors = function(pso_train_data,
                    pso_test_data,
                    resvar,
                    coves_to_use,
@@ -47,7 +40,9 @@ xgb_perform = function(pso_train_data,
     max_iter,
     swarm_size)
   
+  print(pso_result)
+  
   #use the best parameters from pso to make predictions on test data
-  #save the errors for later predictive model
+  #save the errors for final predictive model
   
 }
