@@ -108,6 +108,8 @@ server= function(input,output,session) {
   running = reactiveVal(FALSE)
   
   init_data = data.frame()
+  xgb_saved_predictions = data.frame()
+  HP_matrix = data.frame()
   date_format_string = ""
   init_feat_props = hash()
   feat_props = hash()
@@ -774,11 +776,15 @@ server= function(input,output,session) {
       fluidRow(
         column(6,numericInput("pso_max_iter", "Max Iterations", min=1, max=1000, value=25, step = 1)),
         column(6,numericInput("pso_swarm_size", "Swarm Size", min=1, max=200, value=10, step = 1)))),
+      fluidRow(
+        column(6,numericInput("member_exp", "Membership Weight", min=0.2, max=4, value=0.5, step = 0.1)),
+        column(6,numericInput("ss_exp", "Sum of Squares Weight", min=0.2, max=4, value=1, step = 0.1))),
       footer = div(actionButton("run_xgb_HP_and_errors", "Run"),modalButton('Close'))#,actionButton("stop_xgb_HP_and_errors", "Cancel the Calculation"#))
       ))
   })
   
   observeEvent(input$run_xgb_HP_and_errors, {
+    
     set.seed(input$rnd_seed)
     
     xgb_HP_data = current_data()
@@ -786,6 +792,7 @@ server= function(input,output,session) {
     # REMOVE NA'S FROM RESPONSE VARIABLE
     xgb_HP_data = xgb_HP_data[!is.na(xgb_HP_data[, 1]), ]
     
+    # Min/Max Standardize the features
     if (input$xgb_standardize == TRUE) {
       for (i in 1:nrow(xgb_HP_data)) {
         for (j in 1:ncol(xgb_HP_data)) {
@@ -805,6 +812,12 @@ server= function(input,output,session) {
     
     #Create 5 equally size folds
     folds = cut(seq(1, nrow(xgb_HP_data)), breaks = 5, labels = FALSE)
+    
+    prediction_results = matrix(0,nrow = 0, ncol = length(input$coves_to_use)+2)
+    colnames(prediction_results) = c("Observation","Prediction",input$coves_to_use)
+    
+    hp_matrix = matrix(0, nrow = 0, ncol = 7)
+    colnames(hp_matrix) = c("max_depth", "eta", "subsample", "colsample_bytree", "min_child_weight", "gamma", "nrounds")
     
     withProgress(
       message = 'Calculation in progress',
@@ -835,11 +848,43 @@ server= function(input,output,session) {
             input$xgb_standardize,
             input$xgb_hyper_metric,
             input$pso_max_iter,
-            input$pso_swarm_size
+            input$pso_swarm_size,
+            input$member_exp,
+            input$ss_exp
           )
+          
+          prediction_results = rbind(prediction_results,pso_result[[1]])
+          hp_matrix = rbind(hp_matrix,pso_result[[2]])
         }
+        
       })
+        
+        xgb_saved_predictions <<- prediction_results
+        HP_matrix <<- hp_matrix
+        
+        output$xgb_predictions = DT::renderDataTable(server=T,{
+          data = datatable(xgb_saved_predictions,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
+                           options = list(
+                             autoWidth=F,
+                             paging = TRUE,
+                             pageLength = 25,
+                             scrollX = TRUE,
+                             scrollY = TRUE,
+                             columnDefs = list(list(className = 'dt-center',orderable=T,targets=0)),
+                             initComplete = JS("function(settings, json) {",
+                                               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))
+        
+        })
+        
+        scat_dat = cbind(xgb_HP_data[,id_var()],saved_predictions[,1],saved_predictions[,2])
+        colnames(scat_dat) = c("ID","Observations","Predictions")
+        
+        output$xgb_pred_plot = renderPlotly(scatter(scat_dat,"Observations","Predictions",1))
+        
+        updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+        updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: HP and Errors')
   })
+
   
   # observeEvent(input$stop_xgb_HP_and_errors, {
   #   print("Stopping calculation...")
@@ -862,7 +907,7 @@ server= function(input,output,session) {
   #   
   # })
   
-  output$map = renderLeaflet({ 
+  output$map = renderLeaflet({
     leaflet() |> 
       addTiles() |> 
       setView(270, 40, zoom = 5)

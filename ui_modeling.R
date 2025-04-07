@@ -132,10 +132,15 @@ ModelingPanel = sidebarLayout(
       tabPanel("LARS: Performance", "LARS Performance"),
       tabPanel("Logistic: Feat. Importance", "Logistic Regression Covariate Importance"),
       tabPanel("Logistic: Performance", "Logistic Regression Performance"),
-      tabPanel("XGB: HP and Errors",DT::dataTableOutput('xgb_pso'),
-                tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
       tabPanel("XGB: Feat. Selection",DT::dataTableOutput('xgb_select'),
-                tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}"))
+               tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
+      tabPanel("XGB: HP and Errors",
+               navset_pill_list(widths = c(1,11), well=F,
+                 nav_panel("Data Table",DT::dataTableOutput('xgb_predictions'),
+                           tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
+                 nav_panel("Scatterplot", plotlyOutput("xgb_pred_plot", height="900px",width="70%"))
+                 )
+      )
     )
   )
 )
