@@ -15,7 +15,8 @@ xgb_HP_and_errors = function(pso_train_data,
                    max_iter,
                    swarm_size,
                    member_exp,
-                   ss_exp) {
+                   ss_exp,
+                   fold_num) {
   
   cove_train_data = pso_train_data[, coves_to_use]
   cove_test_data = pso_test_data[, coves_to_use]
@@ -44,7 +45,8 @@ xgb_HP_and_errors = function(pso_train_data,
     max_iter,
     swarm_size,
     member_exp,
-    ss_exp)
+    ss_exp,
+    fold_num)
   
   params = list(
     eta = pso_result[[2]][1],
@@ -59,7 +61,7 @@ xgb_HP_and_errors = function(pso_train_data,
   model = xgboost(data = pso_data[,-1], label=pso_data[,1], params=params, early_stopping_rounds=10, nrounds=round(pso_result[[7]][1],0), verbose=0)
   
   predictions = predict(model, as.matrix(test_data[,-1]))
-  pred_results = cbind(test_data[,1],predictions,test_data[,-1])
+  pred_results = cbind(test_data[,1],predictions)
   
   HP_values = c(
     round(pso_result[[1]][1],0),
@@ -70,5 +72,6 @@ xgb_HP_and_errors = function(pso_train_data,
     pso_result[[6]][1],
     round(pso_result[[7]][1],0)
   )
+  
   return(list(pred_results,HP_values))
 }

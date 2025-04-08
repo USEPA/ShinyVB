@@ -12,19 +12,20 @@ xgb_pso = function(pso_data,
                    max_iter,
                    swarm_size,
                    member_exp,
-                   ss_exp) {
+                   ss_exp,
+                   fold_num) {
   
   pso_results = matrix(NA, nrow = MC_runs, ncol = 7)
 
   withProgress(
     message = 'Calculation in progress',
-    detail = paste0("Runs remaining:", i = MC_runs),
+    detail = paste("Runs remaining:", x = MC_runs, "; Current fold:", y = fold_num),
     value = 0,
     {
 
       for (i in 1:MC_runs) {
 
-        incProgress(1/MC_runs, detail = paste("Runs remaining:", i = (MC_runs - i)))
+        incProgress(1/(MC_runs*5), detail = paste("Runs remaining:", i = (MC_runs - i), "; Current fold:", y = fold_num))
 
         # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
         if (loggy == TRUE) {
@@ -102,7 +103,6 @@ xgb_pso = function(pso_data,
 
           # Return RMSE (for minimization)
           best_score = min(cv_results$evaluation_log$test_rmse_mean)
-          return(best_score)
         }
 
         # Define parameter bounds for PSO
@@ -143,8 +143,8 @@ xgb_pso = function(pso_data,
 
         # Extract best parameters
         best_params = pso_result$par
-        print(best_params)
-        param_names = c(
+        
+        column_names =  c(
           "max_depth",
           "eta",
           "subsample",
@@ -153,7 +153,9 @@ xgb_pso = function(pso_data,
           "gamma",
           "nrounds"
         )
-        colnames(pso_results) = param_names
+        
+        colnames(pso_results) = column_names
+        
         pso_results[i,] = c(round(best_params[1],0),
                             best_params[2],
                             best_params[3],
@@ -161,10 +163,24 @@ xgb_pso = function(pso_data,
                             round(best_params[5],0),
                             best_params[6],
                             round(best_params[7],0))
+        
+        print(pso_results)
       }
     })
   
-  clust_data = data.frame(scale(pso_results))
+
+  pso_results_scale = as.data.frame(pso_results)
+  
+  # Only scale columns with more than 1 unique value
+  for (h in 1:ncol(pso_results_scale)) {
+    if (length(unique(pso_results_scale[,h])) > 1) {
+      pso_results_scale[,h] = scale(pso_results_scale[,h])
+    } else {
+      pso_results_scale[,h] = 0
+    }
+  }
+  
+  clust_data = as.matrix(pso_results_scale)
   clust_results = matrix(NA, nrow = MC_runs - 2, ncol = 4)
   
   km_models = list()
@@ -186,9 +202,8 @@ xgb_pso = function(pso_data,
     }
     
     Dm = which.max(clust_dens)
-    
+
     silhouette_scores = silhouette(km_model$cluster, dist(clust_data))
-    
     mean_silhouette_score = mean(silhouette_scores[,3])
     
     clust_results[j,1] = j+1
@@ -200,13 +215,9 @@ xgb_pso = function(pso_data,
   
   best_sil = which.max(clust_results[,4])
   best_density = clust_results[best_sil,3]
-  
   best_model = km_models[[best_sil]]
-  
   best_list = which(best_model$cluster == clust_results[best_sil,2])
-  
   best_centroid_members = pso_results[c(best_list),]
-  
   best_centroid = colMeans(best_centroid_members)
   
   return(best_centroid)

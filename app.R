@@ -777,112 +777,141 @@ server= function(input,output,session) {
         column(6,numericInput("pso_max_iter", "Max Iterations", min=1, max=1000, value=25, step = 1)),
         column(6,numericInput("pso_swarm_size", "Swarm Size", min=1, max=200, value=10, step = 1)))),
       fluidRow(
-        column(6,numericInput("member_exp", "Membership Weight", min=0.2, max=4, value=0.5, step = 0.1)),
-        column(6,numericInput("ss_exp", "Sum of Squares Weight", min=0.2, max=4, value=1, step = 0.1))),
+        column(6,numericInput("member_exp", "Membership Weight", min=0.25, max=3, value=0.5, step = 0.25)),
+        column(6,numericInput("ss_exp", "Sum of Squares Weight", min=0.25, max=3, value=1, step = 0.25))),
       footer = div(actionButton("run_xgb_HP_and_errors", "Run"),modalButton('Close'))#,actionButton("stop_xgb_HP_and_errors", "Cancel the Calculation"#))
       ))
   })
   
   observeEvent(input$run_xgb_HP_and_errors, {
-    
     set.seed(input$rnd_seed)
     
     xgb_HP_data = current_data()
     
     # REMOVE NA'S FROM RESPONSE VARIABLE
-    xgb_HP_data = xgb_HP_data[!is.na(xgb_HP_data[, 1]), ]
+    xgb_HP_data = xgb_HP_data[!is.na(xgb_HP_data[, response_var()]), ]
+    
+    #Randomly shuffle the data
+    if (input$randomize == TRUE) {
+      xgb_HP_data = xgb_HP_data[sample(nrow(xgb_HP_data)), ]
+    }
+    
+    covar_data = xgb_HP_data[,input$coves_to_use]
+    
+    std_covar_data = covar_data
     
     # Min/Max Standardize the features
     if (input$xgb_standardize == TRUE) {
-      for (i in 1:nrow(xgb_HP_data)) {
-        for (j in 1:ncol(xgb_HP_data)) {
-          if (is.numeric(xgb_HP_data[i, j]) == TRUE) {
-            if (max(na.omit(xgb_HP_data[, j])) - min(na.omit(xgb_HP_data[, j])) == 0) {
-              xgb_HP_data[i, j] = 0
+      for (i in 1:nrow(std_covar_data)) {
+        for (j in 1:ncol(std_covar_data)) {
+          if (is.numeric(std_covar_data[i, j]) == TRUE) {
+            if (max(na.omit(std_covar_data[, j])) - min(na.omit(std_covar_data[, j])) == 0) {
+              std_covar_data[i, j] = 0
             } else {
-              xgb_HP_data[i, j] = (xgb_HP_data[i, j] - min(na.omit(xgb_HP_data[, j]))) / (max(na.omit(xgb_HP_data[, j])) - min(na.omit(xgb_HP_data[, j])))
+              std_covar_data[i, j] = (std_covar_data[i, j] - min(na.omit(std_covar_data[, j]))) / (max(na.omit(std_covar_data[, j])) - min(na.omit(std_covar_data[, j])))
             }
           }
         }
       }
     }
     
-    #Randomly shuffle the data
-    xgb_HP_data = xgb_HP_data[sample(nrow(xgb_HP_data)), ]
+    # Add the standardized covariates back to the data frame for analysis
+    xgb_HP_data = cbind(xgb_HP_data[, id_var()], xgb_HP_data[, response_var()], std_covar_data)
     
     #Create 5 equally size folds
     folds = cut(seq(1, nrow(xgb_HP_data)), breaks = 5, labels = FALSE)
     
-    prediction_results = matrix(0,nrow = 0, ncol = length(input$coves_to_use)+2)
-    colnames(prediction_results) = c("Observation","Prediction",input$coves_to_use)
+    prediction_results = matrix(0, nrow = 0, ncol = length(input$coves_to_use) + 3)
+    colnames(prediction_results) = c("ID","Observation", "Prediction", input$coves_to_use)
     
     hp_matrix = matrix(0, nrow = 0, ncol = 7)
-    colnames(hp_matrix) = c("max_depth", "eta", "subsample", "colsample_bytree", "min_child_weight", "gamma", "nrounds")
+    colnames(hp_matrix) = c(
+      "max_depth",
+      "eta",
+      "subsample",
+      "colsample_bytree",
+      "min_child_weight",
+      "gamma",
+      "nrounds"
+    )
     
-    withProgress(
-      message = 'Calculation in progress',
-      detail = paste0("Folds remaining:", i = 5),
-      value = 0,
-      {
-        #Perform 5 fold cross validation
-        for (i in 1:5) {
-          incProgress(1 / 5, detail = paste("Folds remaining:", i = (5 - i)))
-          
-          testIndexes = which(folds == i, arr.ind = TRUE)
-          testData = xgb_HP_data[testIndexes, ]
-          trainData = xgb_HP_data[-testIndexes, ]
-          
-          pso_result = xgb_HP_and_errors(
-            trainData,
-            testData,
-            response_var(),
-            input$coves_to_use,
-            input$lc_lowval,
-            input$lc_upval,
-            input$rc_lowval,
-            input$rc_upval,
-            input$train_prop,
-            input$MC_runs,
-            input$loggy,
-            input$randomize,
-            input$xgb_standardize,
-            input$xgb_hyper_metric,
-            input$pso_max_iter,
-            input$pso_swarm_size,
-            input$member_exp,
-            input$ss_exp
+    #Perform 5 fold cross validation
+    for (i in 1:5) {
+      fold_num = i
+      
+      testIndexes = which(folds == i, arr.ind = TRUE)
+      testData = xgb_HP_data[testIndexes, ]
+      trainData = xgb_HP_data[-testIndexes, ]
+      
+      pso_result = xgb_HP_and_errors(
+        trainData,
+        testData,
+        response_var(),
+        input$coves_to_use,
+        input$lc_lowval,
+        input$lc_upval,
+        input$rc_lowval,
+        input$rc_upval,
+        input$train_prop,
+        input$MC_runs,
+        input$loggy,
+        input$randomize,
+        input$xgb_standardize,
+        input$xgb_hyper_metric,
+        input$pso_max_iter,
+        input$pso_swarm_size,
+        input$member_exp,
+        input$ss_exp,
+        fold_num
+      )
+      
+      prediction_results1 = cbind(xgb_HP_data[testIndexes,1]pso_result[[1]],covar_data[testIndexes, ])
+      prediction_results = rbind(prediction_results, prediction_results1)
+      hp_matrix = rbind(hp_matrix, pso_result[[2]])
+    }
+    
+    # })
+    
+    xgb_saved_predictions <<- prediction_results
+    HP_matrix <<- hp_matrix
+    
+    output$xgb_predictions = DT::renderDataTable(server = T, {
+      data = datatable(
+        xgb_saved_predictions,
+        rownames = F,
+        selection = list(
+          selected = list(rows = NULL, cols = NULL),
+          target = "row",
+          mode = "single"
+        ),
+        editable = F,
+        options = list(
+          autoWidth = F,
+          paging = TRUE,
+          pageLength = 25,
+          scrollX = TRUE,
+          scrollY = TRUE,
+          columnDefs = list(list(
+            className = 'dt-center',
+            orderable = T,
+            targets = 0
+          )),
+          initComplete = JS(
+            "function(settings, json) {",
+            "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+            "}"
           )
-          
-          prediction_results = rbind(prediction_results,pso_result[[1]])
-          hp_matrix = rbind(hp_matrix,pso_result[[2]])
-        }
-        
-      })
-        
-        xgb_saved_predictions <<- prediction_results
-        HP_matrix <<- hp_matrix
-        
-        output$xgb_predictions = DT::renderDataTable(server=T,{
-          data = datatable(xgb_saved_predictions,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,
-                           options = list(
-                             autoWidth=F,
-                             paging = TRUE,
-                             pageLength = 25,
-                             scrollX = TRUE,
-                             scrollY = TRUE,
-                             columnDefs = list(list(className = 'dt-center',orderable=T,targets=0)),
-                             initComplete = JS("function(settings, json) {",
-                                               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))
-        
-        })
-        
-        scat_dat = cbind(xgb_HP_data[,id_var()],saved_predictions[,1],saved_predictions[,2])
-        colnames(scat_dat) = c("ID","Observations","Predictions")
-        
-        output$xgb_pred_plot = renderPlotly(scatter(scat_dat,"Observations","Predictions",1))
-        
-        updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-        updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: HP and Errors')
+        )
+      )
+      
+    })
+    
+    scat_dat = cbind(xgb_HP_data[, id_var()], xgb_saved_predictions[,1], xgb_saved_predictions[,2])
+    colnames(scat_dat) = c("ID", "Observations", "Predictions")
+    output$xgb_pred_plot = renderPlotly(scatter(scat_dat, "Observations", "Predictions", 1))
+    
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: HP and Errors')
   })
 
   

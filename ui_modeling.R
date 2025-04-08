@@ -114,8 +114,8 @@ ModelingPanel = sidebarLayout(
           fluidRow(
             column(12,numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05))),
           fluidRow(
-            column(6,align="left",actionButton("xgb_select", "Feat. Selection", style = 'width:130px; padding:2px;')),
-            column(6,align="right",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
+            column(7,align="left",actionButton("xgb_select", "Feature Selection", style = 'width:130px; padding:2px;')),
+            column(5,align="right",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(column(12,tags$hr(style = "border-color: darkblue;"))),
           fluidRow(
             column(12,align="left",actionButton("xgb_HP_and_errors", "HP Tuning and Prediction Errors", style = 'background-color:#eee; width:220px; padding:2px;'))),
