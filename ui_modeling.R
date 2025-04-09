@@ -102,26 +102,28 @@ ModelingPanel = sidebarLayout(
                 choices = c("Probability","Binary"))))
             ),
           fluidRow(
-            column(12,actionButton("logist_analysis", "Logistic Analysis", style = 'width:160px; padding:2px;')))
-          )) %>%
+            column(12,actionButton("logist_analysis", "Logistic Analysis", style = 'width:160px; padding:2px;'))))) %>%
       
       bs_append (
         title = "XGBoost", content= card(
+          fluidRow(class="shortrow",
+            column(12,div(style = 'height:15px;',checkboxInput("xgb_standardize", "Standardize Features", TRUE)))),
+          fluidRow(class="shortrow",column(12,div(style="height:15px;",tags$hr(style = "border-color: #2c3e50;")))),
           fluidRow(
-            column(12,checkboxInput("xgb_standardize", "Standardize Features", TRUE))),
-          fluidRow(
-            column(12,align="left",actionButton("xgb_params", "Hyperparameters", style = 'background-color:#eee; width:140px; padding:2px;'))),
-          fluidRow(
-            column(12,numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05))),
+            column(12,div(style = "display: inline-block;",actionButton("xgb_params", "Hyperparameters", style = 'background-color:#eee; width:140px; padding:2px; margin-right:20px; vertical-align: -5px;')),
+                 div(style = "display: inline-block;",numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05)))),
           fluidRow(
             column(7,align="left",actionButton("xgb_select", "Feature Selection", style = 'width:130px; padding:2px;')),
             column(5,align="right",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
-          fluidRow(column(12,tags$hr(style = "border-color: darkblue;"))),
+          fluidRow(class="shortrow",column(12,tags$hr(style = "border-color: #2c3e50;"))),
           fluidRow(
             column(12,align="left",actionButton("xgb_HP_and_errors", "HP Tuning and Prediction Errors", style = 'background-color:#eee; width:220px; padding:2px;'))),
-          fluidRow(column(12,tags$hr(style = "border-color: darkblue;"))),
+          fluidRow(class="shortrow",column(12,div(style="height:15px;", tags$hr(style = "border-color: #2c3e50;")))),
           fluidRow(
-            column(12,align="left",actionButton("xgb_final_fitting", "Final Fitting", style = 'background-color:#eee; width:210px; padding:2px;')))))),
+            column(12,align="left",actionButton("xgb_final_fitting", "Final Fitting", style = 'background-color:#eee; width:130px; padding:2px;')))),
+          tags$head(tags$style(".shortrow{height:15px;}"))) %>%
+      
+      bs_accordion_multi(multi=FALSE,open=c())),
   
   mainPanel = mainPanel(
     width = 9,
@@ -138,8 +140,9 @@ ModelingPanel = sidebarLayout(
                navset_pill_list(widths = c(1,11), well=F,
                  nav_panel("Data Table",DT::dataTableOutput('xgb_predictions'),
                            tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
-                 nav_panel("Scatterplot", plotlyOutput("xgb_pred_plot", height="900px",width="70%"))
-                 )
+                 nav_panel("Prediction Scatterplot", plotlyOutput("xgb_pred_scatplot", height="900px",width="70%")),
+                 nav_panel("Prediction Lineplot", plotlyOutput("xgb_pred_lineplot", height="600px",width="80%")),
+                 nav_panel("Residual Scatterplot", plotlyOutput("xgb_resid_scatplot", height="900px",width="70%")))
       )
     )
   )

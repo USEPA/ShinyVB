@@ -32,6 +32,10 @@ ui = fluidPage(
        border-color: #2c3e50;
        text-align: center;
     }
+    .progress-message, .progress-detail {
+      float: left; 
+      clear: left
+    }
     #MC_runs {
       width: 100px;
     }

@@ -865,15 +865,25 @@ server= function(input,output,session) {
         fold_num
       )
       
-      prediction_results1 = cbind(xgb_HP_data[testIndexes,1]pso_result[[1]],covar_data[testIndexes, ])
+      prediction_results1 = cbind(xgb_HP_data[testIndexes,1],pso_result[[1]],covar_data[testIndexes, ])
       prediction_results = rbind(prediction_results, prediction_results1)
       hp_matrix = rbind(hp_matrix, pso_result[[2]])
     }
     
     # })
     
+    prediction_results[,3] = round(prediction_results[,3],3)
+    prediction_results = as.data.frame(prediction_results)
+    prediction_results = prediction_results[order(prediction_results$ID),]
+    
+    print(prediction_results)
+    
     xgb_saved_predictions <<- prediction_results
+    print(xgb_saved_predictions)
+    
     HP_matrix <<- hp_matrix
+    
+    # xgb_saved_predictions = Book3
     
     output$xgb_predictions = DT::renderDataTable(server = T, {
       data = datatable(
@@ -899,16 +909,26 @@ server= function(input,output,session) {
           initComplete = JS(
             "function(settings, json) {",
             "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
-            "}"
-          )
-        )
-      )
-      
-    })
-    
-    scat_dat = cbind(xgb_HP_data[, id_var()], xgb_saved_predictions[,1], xgb_saved_predictions[,2])
+            "}")))})
+
+    scat_dat = xgb_saved_predictions[,1:3]
     colnames(scat_dat) = c("ID", "Observations", "Predictions")
-    output$xgb_pred_plot = renderPlotly(scatter(scat_dat, "Observations", "Predictions", 1))
+    output$xgb_pred_scatplot = renderPlotly(scatter(scat_dat, "Observations", "Predictions", 1))
+    
+    resid_data = cbind(xgb_saved_predictions[,1:2],xgb_saved_predictions[,2]-xgb_saved_predictions[,3])
+    colnames(resid_data) = c("ID", "Predictions", "Residuals")
+    output$xgb_resid_scatplot = renderPlotly(scatter(resid_data, "Predictions", "Residuals", 1))
+    
+    line_dat = scat_dat
+
+    output$xgb_pred_lineplot = renderPlotly(plot_ly(line_dat, x = ~line_dat[,1], y = ~line_dat[,2], name="Observations", type="scatter", mode = "lines",
+            text = ~paste("<b>ID: </b>",line_dat[,1],"<br><b>Observed Value:</b> ",line_dat[,2],sep=""),
+            hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5)) %>%
+      add_trace(y = ~line_dat[,3], name="Predictions", mode = 'lines',
+                text = ~paste("<b>ID: </b>",line_dat[,1],"<br><b>Predicted Value:</b> ",round(line_dat[,3],3),sep=""),
+                hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+      layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",font=list(size=20)),
+                  range=c(min(0.99*min(line_dat[,2],line_dat[,3]),1.01*min(line_dat[,2],line_dat[,3])),max(0.99*max(line_dat[,2],line_dat[,3]),1.01*max(line_dat[,2],line_dat[,3]))))))
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: HP and Errors')
