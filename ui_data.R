@@ -26,9 +26,16 @@ DataPanel = sidebarLayout(
     fluidRow(
       column(6,inputPanel(selectInput("id",label = "ID Column",selected ="-",choices = c("-")))),
       column(6,inputPanel(selectInput("col_props",label = "Column Properties",selected ="-",choices = c("-"))))),
-    
     fluidRow(
       column(12,actionButton("impute_check", "Impute Features"),actionButton("restore", "Restore Input Data"))),
+    fluidRow(
+      column(12,tags$hr(style = "border-color: #2c3e50;"))),
+    fluidRow(
+      column(6,numericInput("iso_ndim", "ISO Dimensions", value=2, min=1,max=5,step=1)),
+      column(6,numericInput("iso_seed", "ISO Seed", value=1234, min=1,max=1000000,step=1))),
+    fluidRow(
+      column(12,actionButton("run_iso_forest", "ISO Forest Outliers", style='width: 150px; padding:4px;'),
+        actionButton("corr_check", "Feature Correlations", style='width: 150px; padding:4px;'))),
     
     bs_accordion(id="plotting") %>%
       
@@ -72,8 +79,8 @@ DataPanel = sidebarLayout(
                          label = "Line/Time Series Plot",
                          selected =
                            "-",
-                         choices = c("-"))))),
-            fluidRow(column(12,actionButton("corr_check", "Feature Correlations", style='width: 170px; padding:8px;')))))) %>%
+                         choices = c("-")))))
+            ))) %>%
       
       bs_append (title="Wind/Wave/Current Decomposition", content = card(
         
@@ -120,6 +127,8 @@ DataPanel = sidebarLayout(
                         tabsetPanel(id = "data_tabs",
                                     tabPanel("Data Table",DT::dataTableOutput('data'),
                                              tags$style(type = "text/css", "#userdatatable {height: calc(100vh - 70px) !important;}")),
+                                    tabPanel("Outlier Metric",fluidRow(column(12,DT::dataTableOutput('iso_outliers'))),
+                                             tags$style(type = "text/css", "#isotree {height: calc(100vh - 70px) !important;}")),
                                     tabPanel("Correlations",actionButton("save_corrr", "Save Plot", style='width: 100px; padding:2px;'),
                                              plotOutput("corrplot",width="100%",height="1200px")),
                                     tabPanel("Raincloud",actionButton("save_rainn", "Save Plot", style='width: 100px; padding:2px;'),

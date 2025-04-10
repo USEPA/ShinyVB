@@ -23,6 +23,7 @@ library(Hmisc)
 library(hrbrthemes)
 library(htmltools)
 library(ipc)
+library(isotree)
 library(leaflet)
 library(lubridate)
 library(magrittr)
@@ -148,19 +149,19 @@ server= function(input,output,session) {
     updateSelectInput(session,"id",choices=c(col_names()))
     updateSelectInput(session,"rainplot",selected="-")
     updateSelectInput(session,"lineplot",selected="-")
-    updateSelectInput(session,"scatterx",selected="-")
-    updateSelectInput(session,"scattery",selected="-")
     updateSelectInput(session,"speed",selected="-")
     updateSelectInput(session,"direct",selected="-")
     
-
     updateSelectInput(session,"col_props",choices=c("-",col_names()))
     updateSelectInput(session,"rainplot",choices=c("-",col_names()))
     updateSelectInput(session,"lineplot",choices=c("-",col_names()))
-    updateSelectInput(session,"scatterx",choices=c("-",col_names()))
-    updateSelectInput(session,"scattery",choices=c("-",col_names()))
+    updateSelectInput(session,"scatterx",selected="scatterx",choices=c("-",col_names()))
+    updateSelectInput(session,"scattery",selected="scattery",choices=c("-",col_names()))
     
     renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+    
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
     
   })
   
@@ -456,11 +457,11 @@ server= function(input,output,session) {
       footer = div(downloadButton("save_line", "Save Image"),modalButton('Close'))))
   })
 
-  ScatPlot = reactive({
-    list(input$scatterx, input$scattery)
-  })
-  
-  observeEvent(ScatPlot(), ignoreInit = T, {
+  # ScatPlot = reactive({
+  #   list(input$scatterx, input$scattery)
+  # })
+  # 
+  observeEvent(input$scatterx, ignoreInit = T, {
     
     if (input$scatterx != "-" & input$scattery!= "-") {
       
@@ -473,6 +474,22 @@ server= function(input,output,session) {
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
 
+    }
+  })
+  
+  observeEvent(input$scattery, ignoreInit = T, {
+    
+    if (input$scatterx != "-" & input$scattery!= "-") {
+      
+      scatter_data0 = current_data()
+      scatter_data1 = cbind(scatter_data0[,id_var()],scatter_data0[,input$scatterx],scatter_data0[,input$scattery])
+      colnames(scatter_data1) = c("ID",input$scatterx,input$scattery)
+      
+      output$scatplot = renderPlotly(scatter(scatter_data1,input$scatterx,input$scattery,id_var()))
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
+      
     }
   })
   
@@ -565,6 +582,9 @@ server= function(input,output,session) {
   
   observeEvent(input$create, {
     
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Data Table')
+    
     if (input$speed != "-" & input$direct != "-") {
       
       if (!(input$A_name %in% col_names()) & !(input$O_name %in% col_names())) {
@@ -582,8 +602,8 @@ server= function(input,output,session) {
         updateSelectInput(session,"col_props",choices=c("-",col_names()))
         updateSelectInput(session,"rainplot",choices=c("-",col_names()))
         updateSelectInput(session,"lineplot",choices=c("-",col_names()))
-        updateSelectInput(session,"scatterx",choices=c("-",col_names()))
-        updateSelectInput(session,"scattery",choices=c("-",col_names()))
+        updateSelectInput(session,"scatterx",selected=input$scatterx,choices=c("-",col_names()))
+        updateSelectInput(session,"scattery",selected=input$scattery,choices=c("-",col_names()))
 
         renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
         
@@ -1009,6 +1029,105 @@ server= function(input,output,session) {
           column(6,disabled(numericInput("rate_drop", label="Drop Rate", value = rate_drop_set(), min=0,max=1))),
           column(6,disabled(numericInput("skip_drop", label="Skip Prob", value = skip_drop_set(), min=0,max=1))))),
         footer = div(actionButton("xgb_hyper_settings",label='Close'))))
+  })
+  
+  observeEvent(input$run_iso_forest, {
+    
+    iso_data = as.data.frame(current_data()[,-c(id_var(),response_var())])
+    
+    samp_size = min(nrow(iso_data), 10000L)
+    ndim = input$iso_ndim
+    
+    iso_results = matrix(NA, nrow = nrow(iso_data), ncol = 6)
+    colnames(iso_results) = c("ID","Depth_Score","Adj_Depth_Score","Density_Score","Adj_Density_Score","Overall")
+    
+    iso_results[,1] = current_data()[,id_var()]
+    
+    techs = c("depth","adj_depth", "density", "adj_density")
+    
+    if (ndim == 1) {
+      std_data = FALSE
+    } else {
+      std_data = TRUE
+    }
+    
+    for (i in 1:4) {
+      
+      if (ndim == 1 & i != 3 & i != 4) {
+        miss_action = "divide"
+      } else {
+        miss_action = "impute"
+      }
+      
+      if (i == 2) {
+        pen_range = TRUE
+      } else {
+        pen_range = FALSE
+      }
+      
+      if (i == 3 | i == 4) {
+        if (ndim == 1) {
+          pooled_gain = 0.75
+          mingain = 0.25
+        } else {
+          pooled_gain = 1
+          mingain = 0.25
+        }
+      } else {
+        pooled_gain = 0
+        mingain = 0
+      }
+      
+      isoforest = isolation.forest(
+        iso_data,
+        sample_size = samp_size,
+        ntrees = 100,
+        ndim = ndim,
+        max_depth = ceiling(log2(samp_size)),
+        prob_pick_pooled_gain = pooled_gain,
+        min_gain = mingain,
+        missing_action = miss_action,
+        penalize_range = pen_range,
+        standardize_data = std_data,
+        scoring_metric = techs[[i]],
+        output_score = TRUE,
+        seed = input$iso_seed
+      )
+      
+      iso_results[,i+1] = round(isoforest$scores,3)
+    }
+    
+    iso_results[,6] = round((iso_results[,2] * iso_results[,3] * iso_results[,4] * iso_results[,5])^0.25 - 0.7071,3)
+    
+    iso_results = as.data.frame(iso_results)
+    
+    output$iso_outliers = DT::renderDataTable(server = T, {
+      data = datatable(
+        iso_results,
+        rownames = F,
+        selection = list(
+          selected = list(rows = NULL, cols = NULL),
+          target = "row",
+          mode = "single"
+        ),
+        editable = F,
+        options = list(
+          paging = TRUE,
+          pageLength = 25,
+          scrollY = TRUE,
+          columnDefs = list(list(
+            className = 'dt-center',
+            orderable = T,
+            targets = c(0:5)
+          )),
+          initComplete = JS(
+            "function(settings, json) {",
+            "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+            "}")))})
+    
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Outlier Metric')
+    
   })
 
   observeEvent(input$xgb_hyper_settings, ignoreInit = T, {
