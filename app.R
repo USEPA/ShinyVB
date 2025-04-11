@@ -109,15 +109,16 @@ server= function(input,output,session) {
   running = reactiveVal(FALSE)
   
   init_data = data.frame()
+  ignored_rows = c()
   xgb_saved_predictions = data.frame()
   HP_matrix = data.frame()
-  date_format_string = ""
+  date_format_string = "Other"
   init_feat_props = hash()
   feat_props = hash()
   
-  correls = function(current_data,id_var,response_var) {
+  correls = function(data,id_var,response_var) {
     
-    cov_data = current_data[,-c(id_var,response_var)]
+    cov_data = data[,-c(id_var,response_var)]
     
     return(cor(cov_data,use="pairwise.complete.obs"))
   }
@@ -134,19 +135,19 @@ server= function(input,output,session) {
 
     current_data(temp_data)
     
-    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,ignored_rows,output)
   })
   
   observeEvent(input$restore, {
 
     response_var(2)
-    id_var(1)
     cove_names(NULL)
     col_names(colnames(init_data))
     current_data(init_data)
+    ignored_rows <<- c()
     feat_props <<- init_feat_props
 
-    updateSelectInput(session,"id",choices=c(col_names()))
+    #updateSelectInput(session,"id",choices=c(col_names()))
     updateSelectInput(session,"rainplot",selected="-")
     updateSelectInput(session,"lineplot",selected="-")
     updateSelectInput(session,"speed",selected="-")
@@ -158,7 +159,7 @@ server= function(input,output,session) {
     updateSelectInput(session,"scatterx",selected="scatterx",choices=c("-",col_names()))
     updateSelectInput(session,"scattery",selected="scattery",choices=c("-",col_names()))
     
-    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,ignored_rows,output)
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
@@ -167,10 +168,16 @@ server= function(input,output,session) {
   
   observeEvent(input$corr_check, {
     
-    corr_data = correls(current_data(),id_var(),response_var())
+    if (is.null(ignored_rows)) {
+      corr_data = current_data()
+    } else {
+      corr_data = current_data()[-ignored_rows,]
+    }
+    
+    data_corrs = correls(corr_data,id_var(),response_var())
     
     output$corrplot = renderPlot({
-               corrplot(corr_data, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, type="lower",col.lim = c(-1.4, 1.4),
+               corrplot(data_corrs, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, type="lower",col.lim = c(-1.4, 1.4),
                 col = COL2('PRGn'), tl.col="black", tl.srt= 45)},height = 900, width = 900)
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
@@ -179,7 +186,13 @@ server= function(input,output,session) {
   
   observeEvent(input$save_corrr, ignoreInit = T, {
     
-    corr_data = correls(current_data(),id_var(),response_var())
+    if (is.null(ignored_rows)) {
+      corr_data = current_data()
+    } else {
+      corr_data = current_data()[-ignored_rows,]
+    }
+    
+    data_corrs = correls(corr_data,id_var(),response_var())
     
     output$save_corr = downloadHandler(
       filename= "Correlations.png",
@@ -187,10 +200,8 @@ server= function(input,output,session) {
         on.exit(removeModal())
         png(file, width=input$corr_width, height=input$corr_height, units="in", res=input$corr_rez)
         
-        corrplot(corr_data, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, mar=c(0,0,2,0),
+        corrplot(data_corrs, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, mar=c(0,0,2,0),
                       type="lower",col.lim = c(-1.4, 1.4), col = COL2('PRGn'), tl.col="black", tl.srt= 45, title=input$corr_title, cex.main = 2,)
-        
-        
         dev.off()
       })
     
@@ -218,62 +229,79 @@ server= function(input,output,session) {
   
   observeEvent(input$file1, ignoreInit = T, {
     
-    init_data <<- read.csv(input$file1$datapath,header = input$header,sep = input$sep)
-    feat_props_temp = hash()
+    init_data <<- read.csv(input$file1$datapath,header = TRUE,sep = input$sep)
     
-    for (i in 1:ncol(init_data)) {
-      .set(feat_props_temp,keys=colnames(init_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA))
-    }
-    
-    init_feat_props <<- feat_props_temp
-    feat_props <<- feat_props_temp
-    
-    
-    if (date_format() == "YMD") {
-      init_data[,1] = ymd(init_data[,1])
-      date_format_string <<- "toLocaleDateString"
-    } else if (date_format() == "MDY") {
-      init_data[,1] = mdy(init_data[,1])
-      date_format_string <<- "toLocaleDateString"
-    } else if (date_format() == "MDYHM") {
-      init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
-      date_format_string <<- "toLocaleString"
-    } else {
-      date_format_string <<- "-"
-    }
-    
-    current_data(init_data)
-    col_names(colnames(init_data))
-    
-    updateSelectInput(session,"id",choices=c(col_names()))
-    updateSelectInput(session,"col_props",choices=c("-",col_names()))
-    updateSelectInput(session,"rainplot",choices=c("-",col_names()))
-    updateSelectInput(session,"lineplot",choices=c("-",col_names()))
-    updateSelectInput(session,"scatterx",choices=c("-",col_names()))
-    updateSelectInput(session,"scattery",choices=c("-",col_names()))
-    updateSelectInput(session,"speed",choices=c("-",col_names()))
-    updateSelectInput(session,"direct",choices=c("-",col_names()))
-    
-    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-    updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
+    if (any(duplicated(init_data[,1]))) {
+      showModal(modalDialog(
+        paste("The ID column (column 1) is required to have unique values. Please ensure this prior to data importation."),
+        easyClose = F,
+        footer = div(modalButton('Close'))
+      ))
+    } else if (any(is.na(init_data[,1]))) {
     
     showModal(modalDialog(
-      paste0("The second column has been designated as the response variable by default. 
-             To change this, click on the column name at the BOTTOM of the table."),
+      paste("The ID column (column 1) has missing values. Please remedy this prior to data importation."),
       easyClose = F,
       footer = div(modalButton('Close'))
-      ))
+    ))
+    
+    } else {
+      feat_props_temp = hash()
+      
+      for (i in 1:ncol(init_data)) {
+        .set(feat_props_temp,keys=colnames(init_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA))
+      }
+      
+      init_feat_props <<- feat_props_temp
+      feat_props <<- feat_props_temp
+      ignored_rows <<- c()
+      
+      if (date_format() == "YMD") {
+        init_data[,1] = ymd(init_data[,1])
+        date_format_string <<- "toLocaleDateString"
+      } else if (date_format() == "MDY") {
+        init_data[,1] = mdy(init_data[,1])
+        date_format_string <<- "toLocaleDateString"
+      } else if (date_format() == "MDYHM") {
+        init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
+        date_format_string <<- "toLocaleString"
+      } else {
+        date_format_string <<- "Other"
+      }
+      
+      current_data(init_data)
+      col_names(colnames(init_data))
+      
+      #updateSelectInput(session,"id",choices=c(col_names()))
+      updateSelectInput(session,"col_props",choices=c("-",col_names()))
+      updateSelectInput(session,"rainplot",choices=c("-",col_names()))
+      updateSelectInput(session,"lineplot",choices=c("-",col_names()))
+      updateSelectInput(session,"scatterx",choices=c("-",col_names()))
+      updateSelectInput(session,"scattery",choices=c("-",col_names()))
+      updateSelectInput(session,"speed",choices=c("-",col_names()))
+      updateSelectInput(session,"direct",choices=c("-",col_names()))
+      
+      renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,ignored_rows,output)
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
+      
+      # showModal(modalDialog(
+      #   paste0("The second column has been designated as the response variable by default. 
+      #          To change this, click on the column name at the BOTTOM of the table."),
+      #   easyClose = F,
+      #   footer = div(modalButton('Close'))
+      #   ))
+    }
   })
   
-  observeEvent(input$id, ignoreInit = T, {
-    
-    id_num = which(col_names()==input$id)
-    id_var(id_num)
-    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
-      
-    })
+  # observeEvent(input$id, ignoreInit = T, {
+  #   
+  #   id_num = which(col_names()==input$id)
+  #   id_var(id_num)
+  #   renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+  #     
+  #   })
   
   observeEvent(input$col_props, ignoreInit = T,  {
     
@@ -299,7 +327,7 @@ server= function(input,output,session) {
     .set(feat_props,keys=input$col_props,values=c(input$sig_digies,values(feat_props,keys=input$col_props)[2],
                                                   values(feat_props,keys=input$col_props)[3],values(feat_props,keys=input$col_props)[4]))
     
-    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,ignored_rows,output)
     
   })
   
@@ -307,7 +335,7 @@ server= function(input,output,session) {
     
     if ((input$data_columns_selected+1) != response_var()) {
       response_var(input$data_columns_selected + 1)
-      renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+      renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,ignored_rows,output)
     }
     
   })
@@ -316,7 +344,12 @@ server= function(input,output,session) {
     
     if (input$rainplot != "-") {
       
-      rain_data0 = current_data()
+      if (is.null(ignored_rows)) {
+        rain_data0 = current_data()
+      } else {
+        rain_data0 = current_data()[-ignored_rows,]
+      }
+
       rain_data1 = cbind(rain_data0[,id_var()],rain_data0[,input$rainplot])
       colnames(rain_data1) = c("ID",input$rainplot)
       
@@ -329,7 +362,12 @@ server= function(input,output,session) {
   
   observeEvent(input$save_rainn, ignoreInit = T, {
     
-    rain_data = current_data()
+    if (is.null(ignored_rows)) {
+      rain_data = current_data()
+    } else {
+      rain_data = current_data()[-ignored_rows,]
+    }
+    
     rain_data1 = data.frame(cbind(rain_data[,id_var()],rain_data[,input$rainplot]))
     colnames(rain_data1) = c("ID",input$rainplot)
     
@@ -408,7 +446,12 @@ server= function(input,output,session) {
     
     if (input$lineplot != "-") {
       
-      line_data0 = current_data()
+      if (is.null(ignored_rows)) {
+        line_data0 = current_data()
+      } else {
+        line_data0 = current_data()[-ignored_rows,]
+      }
+
       line_data1 = cbind(line_data0[,id_var()],line_data0[,input$lineplot])
       colnames(line_data1) = c("ID",input$lineplot)
       
@@ -421,8 +464,12 @@ server= function(input,output,session) {
   
   observeEvent(input$save_linee, ignoreInit = T, {
     
-    temp_data = current_data()
-
+    if (is.null(ignored_rows)) {
+      temp_data = current_data()
+    } else {
+      temp_data = current_data()[-ignored_rows,]
+    }
+    
     output$save_line = downloadHandler(
       filename= "Lineplot.png",
       content = function(file) {
@@ -460,12 +507,17 @@ server= function(input,output,session) {
   # ScatPlot = reactive({
   #   list(input$scatterx, input$scattery)
   # })
-  # 
+  
   observeEvent(input$scatterx, ignoreInit = T, {
     
     if (input$scatterx != "-" & input$scattery!= "-") {
       
-      scatter_data0 = current_data()
+      if (is.null(ignored_rows)) {
+        scatter_data0 = current_data()
+      } else {
+        scatter_data0 = current_data()[-ignored_rows,]
+      }
+      
       scatter_data1 = cbind(scatter_data0[,id_var()],scatter_data0[,input$scatterx],scatter_data0[,input$scattery])
       colnames(scatter_data1) = c("ID",input$scatterx,input$scattery)
       
@@ -481,7 +533,12 @@ server= function(input,output,session) {
     
     if (input$scatterx != "-" & input$scattery!= "-") {
       
-      scatter_data0 = current_data()
+      if (is.null(ignored_rows)) {
+        scatter_data0 = current_data()
+      } else {
+        scatter_data0 = current_data()[-ignored_rows,]
+      }
+      
       scatter_data1 = cbind(scatter_data0[,id_var()],scatter_data0[,input$scatterx],scatter_data0[,input$scattery])
       colnames(scatter_data1) = c("ID",input$scatterx,input$scattery)
       
@@ -489,13 +546,16 @@ server= function(input,output,session) {
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
-      
     }
   })
   
   observeEvent(input$save_scatt, ignoreInit = T, {
     
-    temp_data = current_data()
+    if (is.null(ignored_rows)) {
+      temp_data = current_data()
+    } else {
+      temp_data = current_data()[-ignored_rows,]
+    }
     
     output$save_scat = downloadHandler(
       filename= "Scatterplot.png",
@@ -527,22 +587,25 @@ server= function(input,output,session) {
   })
   
   observeEvent(input$continue_impute, {
-    
     removeModal()
-    current_data(imputing(current_data(),id_var(),response_var()))
-    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+    current_data(imputing(current_data(),id_var(),response_var(),ignored_rows,input$data_seed))
+    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,ignored_rows,output)
   })
   
   observeEvent(input$end_impute, {
-    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,ignored_rows,output)
     removeModal()
   })
   
   observeEvent(input$impute_check, {
     
-    temp_data = current_data()
+    if (is.null(ignored_rows)) {
+      temp_data = current_data()[,-c(id_var(),response_var())]
+    } else {
+      temp_data = current_data()[-ignored_rows,-c(id_var(),response_var())]
+    }
     
-    crit_n = floor((ncol(temp_data)-2)*0.3)
+    crit_n = floor(ncol(temp_data)*0.3)
     
     n_missing=c()
     
@@ -569,14 +632,13 @@ server= function(input,output,session) {
       
       showModal(modalDialog(
         paste0("WARNING: Row numbers (", listing, "), have quite a few missing values. Imputation results for these rows 
-               will be highly uncertain. Consider deleting these from the dataset."),
+               will be highly uncertain. Consider deleting these from the dataset or disabling them."),
         footer = tagList(actionButton("continue_impute", "Impute Anyways"),actionButton("end_impute", "Exit"))))
       
     } else {
     
-    current_data(imputing(current_data(),id_var(),response_var()))
-    renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
-    
+      current_data(imputing(current_data(),id_var(),response_var(),ignored_rows,input$data_seed))
+      renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,ignored_rows,output)
     }
   })
   
@@ -598,14 +660,14 @@ server= function(input,output,session) {
         current_data(new_data)
         col_names(colnames(current_data()))
 
-        updateSelectInput(session,"id",choices=c(col_names()))
+        # updateSelectInput(session,"id",choices=c(col_names()))
         updateSelectInput(session,"col_props",choices=c("-",col_names()))
         updateSelectInput(session,"rainplot",choices=c("-",col_names()))
         updateSelectInput(session,"lineplot",choices=c("-",col_names()))
         updateSelectInput(session,"scatterx",selected=input$scatterx,choices=c("-",col_names()))
         updateSelectInput(session,"scattery",selected=input$scattery,choices=c("-",col_names()))
 
-        renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,output)
+        renderdata(current_data(),response_var(),id_var(),date_format_string,feat_props,ignored_rows,output)
         
       } else {
         showModal(modalDialog(div("ERROR: BOTH new component columns must have different names 
@@ -620,19 +682,20 @@ server= function(input,output,session) {
   observeEvent(input$shinyVB, {
     
     if (input$shinyVB == "Modeling") {
-  
-      coves = as.data.frame(current_data())
-      cov_list = seq(1,ncol(coves))
+      
+      temp_data = as.data.frame(current_data())
+      
+      cov_list = seq(1,ncol(temp_data))
       
       min_col_removed = min(id_var(),response_var())
       max_col_removed = max(id_var(),response_var())
       
-      removed = c(min_col_removed,max_col_removed)
-      remaining = cov_list[! cov_list %in% removed]
+      removed_cols = c(min_col_removed,max_col_removed)
+      remaining_cols = cov_list[! cov_list %in% removed_cols]
       
-      coves = coves[,remaining]
+      temp_data = temp_data[,remaining_cols]
       
-      covar_names = c(colnames(coves))
+      covar_names = c(colnames(temp_data))
       
       updateCheckboxGroupInput(session,"coves_to_use",choices=covar_names,selected=covar_names,inline=T)
       
@@ -694,7 +757,12 @@ server= function(input,output,session) {
     subsamp = subsamp_set()
     colsamp = colsamp_set()
     
-    xgb_select_data = current_data()
+    if (is.null(ignored_rows)) {
+      xgb_select_data = current_data()
+    } else {
+      xgb_select_data = current_data()[-ignored_rows,]
+    }
+    
     resvar = response_var()
     
     xgb_tree_method = xgb_tree_method_set()
@@ -776,15 +844,15 @@ server= function(input,output,session) {
     
     if (crit_val > 1) {
       
-    covar_drop_list = temp_data[which(as.numeric(temp_data$Iteration) < crit_val),"Worst.SHAP"]
-    remaining = all_covar[-which(all_covar %in% covar_drop_list)]
+      tossed_covar = temp_data[which(as.numeric(temp_data$Iteration) < crit_val),"Lowest.SHAP"]
+      remaining = all_covar[-which(all_covar %in% tossed_covar)]
     
     } else {
-      
       remaining = all_covar
     }
     
     updateCheckboxGroupInput(session,"coves_to_use",choices=cove_names(),selected=remaining,inline=T)
+
   })
   
   observeEvent(input$xgb_HP_and_errors, {
@@ -806,7 +874,11 @@ server= function(input,output,session) {
   observeEvent(input$run_xgb_HP_and_errors, {
     set.seed(input$rnd_seed)
     
-    xgb_HP_data = current_data()
+    if (is.null(ignored_rows)) {
+      xgb_HP_data = current_data()
+    } else {
+      xgb_HP_data = current_data()[-ignored_rows,]
+    }
     
     # REMOVE NA'S FROM RESPONSE VARIABLE
     xgb_HP_data = xgb_HP_data[!is.na(xgb_HP_data[, response_var()]), ]
@@ -896,14 +968,10 @@ server= function(input,output,session) {
     prediction_results = as.data.frame(prediction_results)
     prediction_results = prediction_results[order(prediction_results$ID),]
     
-    print(prediction_results)
-    
     xgb_saved_predictions <<- prediction_results
-    print(xgb_saved_predictions)
+    # print(xgb_saved_predictions)
     
     HP_matrix <<- hp_matrix
-    
-    # xgb_saved_predictions = Book3
     
     output$xgb_predictions = DT::renderDataTable(server = T, {
       data = datatable(
@@ -1033,7 +1101,11 @@ server= function(input,output,session) {
   
   observeEvent(input$run_iso_forest, {
     
-    iso_data = as.data.frame(current_data()[,-c(id_var(),response_var())])
+    if (is.null(ignored_rows)) {
+      iso_data = as.data.frame(current_data()[,-c(id_var(),response_var())])
+    } else {
+      iso_data = as.data.frame(current_data()[-ignored_rows,-c(id_var(),response_var())])
+    }
     
     samp_size = min(nrow(iso_data), 10000L)
     ndim = input$iso_ndim
@@ -1091,7 +1163,7 @@ server= function(input,output,session) {
         standardize_data = std_data,
         scoring_metric = techs[[i]],
         output_score = TRUE,
-        seed = input$iso_seed
+        seed = input$data_seed
       )
       
       iso_results[,i+1] = round(isoforest$scores,3)
@@ -1107,9 +1179,7 @@ server= function(input,output,session) {
         rownames = F,
         selection = list(
           selected = list(rows = NULL, cols = NULL),
-          target = "row",
-          mode = "single"
-        ),
+          target = "row"),
         editable = F,
         options = list(
           paging = TRUE,
@@ -1127,6 +1197,13 @@ server= function(input,output,session) {
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Outlier Metric')
+    
+  })
+  
+  observeEvent(input$iso_outliers_rows_selected, ignoreInit = T, {
+    
+    ignored_rows <<- iso_outliers_rows_selected
+    print(ignored_rows)
     
   })
 

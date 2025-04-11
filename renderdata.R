@@ -1,7 +1,7 @@
 library(DT)
 library(hash)
 
-renderdata = function(current_data,response_var,id_var,date_format_string,feat_props,output){
+renderdata = function(current_data,response_var,id_var,date_format_string,feat_props,ignored_rows,output){
   
   sig_digies = c()
   
@@ -11,7 +11,7 @@ renderdata = function(current_data,response_var,id_var,date_format_string,feat_p
     sig_digies = append(sig_digies,values(feat_props,keys=col_names[i])[1])
   }
   
-  if (date_format_string != "-") {
+  if (date_format_string != "Other") {
     
     col_list = seq(1,ncol(current_data))
     remaining = col_list[-id_var]

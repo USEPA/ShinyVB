@@ -37,7 +37,13 @@ ui = fluidPage(
       clear: left
     }
     #MC_runs {
-      width: 100px;
+      width: 90px;
+    }
+    #iso_ndim {
+    width: 70px;
+    }
+    #data_seed {
+    width: 100px;
     }
     #max_lars_steps {
       width: 100px;

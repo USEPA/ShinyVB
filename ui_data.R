@@ -7,35 +7,20 @@ DataPanel = sidebarLayout(
     tags$style(type = "text/css", "#datasidepanel {height: calc(100vh - 70px) !important; width: 385px !important;}"),
     
     fluidRow(
-      column(12,div(style = "display: inline-block;",inputPanel(selectInput("IDasDate",label = "ID/Date Format",
-            selected ="-",choices = c("-","MDY","YMD","MDYHM")))),
-            div(style = "display: inline-block; margin-left: 1px; margin-right: 1px; vertical-align: -30px;", 
-                checkboxInput("header", label = "Header?", TRUE)))),
-    radioButtons(inline=T,"sep","Separator",
-                               choices = c(Comma = ",",Semicolon = ";",Space = " ",Tab = "\t"),
-                               selected = ","),
-    div(
-      fileInput("file1", "Select your data file", buttonLabel = "Browse",
-                accept = c(
-                  "text/csv",
-                  "text/comma-separated-values,text/plain",
-                  ".csv")
-      ), style="font-size:80%; font-family:Arial; width: 350px;"
-    ),
+      column(6,inputPanel(selectInput("IDasDate",label = "ID/Date Format",
+            selected ="Other",choices = c("Other","MDY","YMD","MDYHM")))),
+      column(6,actionButton("restore", "Restore Inputs", style='width: 120px; padding:8px; vertical-align: -30px;'))),
     
-    fluidRow(
-      column(6,inputPanel(selectInput("id",label = "ID Column",selected ="-",choices = c("-")))),
-      column(6,inputPanel(selectInput("col_props",label = "Column Properties",selected ="-",choices = c("-"))))),
-    fluidRow(
-      column(12,actionButton("impute_check", "Impute Features"),actionButton("restore", "Restore Input Data"))),
-    fluidRow(
-      column(12,tags$hr(style = "border-color: #2c3e50;"))),
-    fluidRow(
-      column(6,numericInput("iso_ndim", "ISO Dimensions", value=2, min=1,max=5,step=1)),
-      column(6,numericInput("iso_seed", "ISO Seed", value=1234, min=1,max=1000000,step=1))),
-    fluidRow(
-      column(12,actionButton("run_iso_forest", "ISO Forest Outliers", style='width: 150px; padding:4px;'),
-        actionButton("corr_check", "Feature Correlations", style='width: 150px; padding:4px;'))),
+    radioButtons(inline=T,"sep","Separator",choices = c(Comma = ",",Semicolon = ";",Space = " ",Tab = "\t"),selected = ","),
+    
+    div(fileInput("file1", "Select your data file", buttonLabel = "Browse",accept = c("text/csv",
+                  "text/comma-separated-values,text/plain",".csv")), style="font-size:80%; font-family:Arial; width: 350px;"),
+    
+    fluidRow(column(6,inputPanel(selectInput("col_props",label = "Column Properties",selected ="-",choices = c("-")))),
+             column(6,numericInput("data_seed", "Seed", value=1234, min=1,max=1000000,step=1))),
+    fluidRow(column(12,actionButton("impute_check", "Impute Features"),actionButton("corr_check", "Feature Correlations", style='width: 175px;'))),
+    fluidRow(column(6,actionButton("run_iso_forest","IsoForest Outliers", style='width: 175px; align: left; vertical-align: -38px;')),
+             column(6,numericInput("iso_ndim", "IsoForest Dims", value=2, min=1,max=5,step=1))),
     
     bs_accordion(id="plotting") %>%
       
