@@ -16,37 +16,50 @@ imputing = function(current_data,id_var,response_var,ignored_rows,seed) {
   remaining_cols = col_list[! col_list %in% removed_cols]
   remaining_rows = row_list[! row_list %in% removed_rows]
   
+  impute_data0 = temp_data[,-removed_cols]
+  
   if (is.null(removed_rows)) {
-    impute_data1 = temp_data[,-removed_cols]
+    impute_data1 = impute_data0
   } else {
-    impute_data1 = temp_data[-removed_rows,-removed_cols]
+    impute_data1 = impute_data0[-removed_rows,]
   }
   
   set.seed(seed)
   
   impute_data2=missForest(impute_data1)
   impute_data3=impute_data2$ximp
+  impute_data4=data.frame(impute_data3)
     
-  impute_data_final=matrix(data= 0.0,nrow=nrow(temp_data),ncol=ncol(temp_data))
+  imputed_data0=matrix(0,nrow=nrow(impute_data0),ncol=ncol(impute_data0))
+  imputed_data0=data.frame(imputed_data0)
+  
+  row_counter=1
+  
+  for (i in 1:nrow(imputed_data0)) {
     
-  colnames(impute_data_final) = colnames(temp_data)
-    
-  k=1
-  l=1
-    
-  for (i in remaining_rows) {
-    for (j in remaining_cols) {
-      impute_data_final[i,j] = impute_data3[k,l]
-    l = l + 1
+    if (i %in% removed_rows) {
+      imputed_data0[i,] = impute_data0[i,]
+    } else {
+      imputed_data0[i,] = impute_data4[row_counter,]
+      row_counter = row_counter + 1
     }
-    k = k + 1
   }
   
-  for (i in removed_rows) {
-    for (j in removed_cols) {
-      impute_data_final[i,j] = temp_data[i,j]
+  imputed_data_final=matrix(0,nrow=nrow(temp_data),ncol=ncol(temp_data))
+  imputed_data_final=data.frame(imputed_data_final)
+  
+  col_counter=1
+  
+  for (j in 1:ncol(temp_data)) {
+    
+    if (j %in% removed_cols) {
+      imputed_data_final[,j] = temp_data[,j]
+    } else {
+      imputed_data_final[,j] = imputed_data0[,col_counter]
+      col_counter = col_counter + 1
     }
   }
-    
-  impute_data_final
+
+  colnames(imputed_data_final) = colnames(temp_data)
+  imputed_data_final
 }

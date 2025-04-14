@@ -24,6 +24,8 @@ xgb_pso = function(pso_data,
     {
 
       for (i in 1:MC_runs) {
+        
+        incProgress(1/(MC_runs*5), detail = paste("MC runs remaining:",MC_runs-i,"; Current fold:",fold_num))
 
         # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
         if (loggy == TRUE) {
@@ -163,8 +165,6 @@ xgb_pso = function(pso_data,
                             round(best_params[7],0))
         
         print(pso_results)
-        
-        incProgress(1/(MC_runs*5), detail = paste("MC runs remaining:",MC_runs,"; Current fold:",fold_num))
       }
     })
   
@@ -222,8 +222,9 @@ xgb_pso = function(pso_data,
     best_density = clust_results[best_sil,3]
     best_model = km_models[[best_sil]]
     best_list = which(best_model$cluster == clust_results[best_sil,2])
-    best_centroid_members = pso_results[c(best_list),]
+    best_centroid_members = pso_results[best_list,]
     best_centroid = colMeans(best_centroid_members)
+    print(best_centroid)
   }
   
   return(best_centroid)

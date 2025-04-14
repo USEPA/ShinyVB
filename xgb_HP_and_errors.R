@@ -58,7 +58,7 @@ xgb_HP_and_errors = function(pso_train_data,
   )
   
   #use the best parameters from pso to make predictions on test data
-  model = xgboost(data = pso_data[,-1], label=pso_data[,1], params=params, early_stopping_rounds=10, nrounds=round(pso_result[[7]][1],0), verbose=0)
+  model = xgboost(data = as.matrix(pso_data[,-1]),label=pso_data[,1], params=params, early_stopping_rounds=10, nrounds=round(pso_result[[7]][1],0), verbose=0)
   
   predictions = predict(model, as.matrix(test_data[,-1]))
   pred_results = cbind(test_data[,1],predictions)

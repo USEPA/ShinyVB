@@ -44,6 +44,7 @@ ui = fluidPage(
     }
     #data_seed {
     width: 100px;
+    height: 35px;
     }
     #max_lars_steps {
       width: 100px;
