@@ -7,6 +7,7 @@ MapPanel = sidebarLayout(
                               fluidRow(
                                 column(4,tags$h4("Beach Orientation:")),
                                 column(8,div(style="width:60px;",verbatimTextOutput("beach_orient",placeholder = TRUE)))),
+                              fluidRow(img(src="logo.png",width=350)),
                               tags$head(tags$style(HTML("#beach_orient {title:borient;width: 70px;height: 45px; position:left;}")))),
   
   mainPanel = mainPanel(id="mapmainpanel",width=9,

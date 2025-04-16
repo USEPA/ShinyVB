@@ -25,9 +25,13 @@ library(htmltools)
 library(ipc)
 library(isotree)
 library(leaflet)
+library(lime)
 library(lubridate)
 library(magrittr)
+library(Metrics)
 library(Nmisc)
+library(permimp)
+library(pdp)
 library(plotly)
 library(plyr)
 library(png)
@@ -39,6 +43,8 @@ library(RSQLite)
 library(reshape2)
 library(reactable)
 library(readxl)
+library(rsample)
+library(SHAPforxgboost)
 library(shiny)
 library(shinybusy)
 library(shinydashboard)
@@ -63,8 +69,10 @@ source("impute.R")
 source("lars_coeff.R")
 source("lars_perform.R")
 source("xgb_pso.R")
-source("xgb_select.R")
+source("xgb_feature_selection.R")
+source("xgb_call_HP.R")
 source("xgb_HP_and_errors.R")
+source("xgb_final.R")
 source("createAO.R")
 
 #all.functions = list.functions.in.file("app.R", alphabetic = TRUE)
@@ -115,16 +123,32 @@ server= function(input,output,session) {
   ignored_rows = NULL
   xgb_saved_predictions = data.frame()
   HP_matrix = data.frame()
+  Optimal_HP = data.frame()
+  xgb_final_model = NULL
+  EN_model = NULL
   date_format_string = "Other"
   init_feat_props = hash()
   feat_props = hash()
   
-  correls = function(data,id_var,response_var) {
+  observeEvent(input$corr_check, {
     
-    cov_data = data[,-c(id_var,response_var)]
+    if (is.null(ignored_rows)) {
+      corr_data = current_data()
+    } else {
+      corr_data = current_data()[-ignored_rows,]
+    }
     
-    return(cor(cov_data,use="pairwise.complete.obs"))
-  }
+    cov_data = corr_data[,-c(id_var,response_var())]
+    
+    data_corrs = cor(cov_data,use="pairwise.complete.obs")
+    
+    output$corrplot = renderPlot({
+      corrplot(data_corrs, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, type="lower",col.lim = c(-1.4, 1.4),
+               col = COL2('PRGn'), tl.col="black", tl.srt= 45)},height = 900, width = 900)
+    
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = "Correlations")
+  })
   
   observeEvent(input$data_cell_edit, ignoreInit = T,ignoreNULL = T, {
     
@@ -170,23 +194,7 @@ server= function(input,output,session) {
     
   })
   
-  observeEvent(input$corr_check, {
-    
-    if (is.null(ignored_rows)) {
-      corr_data = current_data()
-    } else {
-      corr_data = current_data()[-ignored_rows,]
-    }
-    
-    data_corrs = correls(corr_data,id_var,response_var())
-    
-    output$corrplot = renderPlot({
-               corrplot(data_corrs, addCoef.col = 'black', method="circle", cl.pos = 'n', is.corr = FALSE, type="lower",col.lim = c(-1.4, 1.4),
-                col = COL2('PRGn'), tl.col="black", tl.srt= 45)},height = 900, width = 900)
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-    updateTabsetPanel(session, inputId = 'data_tabs', selected = "Correlations")
-  })
+
   
   observeEvent(input$save_corrr, ignoreInit = T, {
     
@@ -196,7 +204,9 @@ server= function(input,output,session) {
       corr_data = current_data()[-ignored_rows,]
     }
     
-    data_corrs = correls(corr_data,id_var,response_var())
+    cov_data = corr_data[,-c(id_var,response_var())]
+    
+    data_corrs = cor(cov_data,use="pairwise.complete.obs")
     
     output$save_corr = downloadHandler(
       filename= "Correlations.png",
@@ -710,43 +720,7 @@ server= function(input,output,session) {
     }
   })
   
-  observeEvent(input$lars_coeff, {
-    
-    lars_coeffs = lars_coeff(current_data(),response_var(),input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
-                              input$loggy,input$randomize,input$lars_tech,input$standardize,input$max_steps)
-    
-    print(lars_coeffs)
-    
-  })
-  
-  observeEvent(input$lars_uncert, {
-    
-    lars_uncert = lars_uncert(current_data(),response_var(),id_var,input$samp_prop,input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,
-                              input$MC_runs,input$loggy,input$randomize,input$lars_tech,input$standardize,input$max_steps)
-    
-    lars_fits = lars_uncert[,1]
-    lars_predicts = lars_uncert[,2]
-    
-    print(lars_fits)
-    print(lars_predicts)
-    
-  })
-  
-  # observeEvent(input$xgb_perform, {
-  #   
-  #   xgb_perform = xgb_perform(current_data(),response_var(),id_var(),input$rnd_seed,input$coves_to_use,input$nd_val,input$tntc_val,input$tntc_multy,input$MC_runs,
-  #                           input$loggy,input$randomize,input$xgb_tech,input$rate_drop,input$eta,input$gamma,input$max_depth,input$min_child_weight,input$subsample,
-  #                           input$colsample_bytree,input$samp_prop,input$nrounds,input$early_stopping_rounds) 
-  #   
-  #   xgb_fits = xgb_perform[,1]
-  #   xgb_predicts = xgb_perform[,2]
-  #   
-  #   print(xgb_fits)
-  #   print(xgb_predicts)
-  #   
-  # })
-  
-  observeEvent(input$xgb_select, {
+  observeEvent(input$run_xgb_select, {
     
     if(running())
       return(NULL)
@@ -788,25 +762,25 @@ server= function(input,output,session) {
     loggy = input$loggy
     randomize = input$randomize
     test_weight = input$test_weight
-    seed = input$rnd_seed
+    seed = input$model_seed
     
     xgb_select_result(NULL)
-    
+
     xgb_select_calculation <<- future({
-      
-      xgb_select(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_boost,
+
+      xgb_selection(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_boost,
                  dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db)
-      
+
     }, seed=TRUE)
-    
+
     prom = xgb_select_calculation %...>% xgb_select_result
-    
+
     prom = catch(xgb_select_calculation,
                   function(e){
                     xgb_select_result(NULL)
                     showModal(modalDialog(paste0("XGB covariate filtering cancelled. No results generated."),footer = modalButton("Close")))
                   })
-    
+
     prom = finally(prom, function(){
       running(FALSE)
     })
@@ -828,11 +802,10 @@ server= function(input,output,session) {
     })
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Feat. Selection')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Feature Selection')
     
     #Return something other than the future so we don't block the UI
     NULL
-    
   })
   
   observeEvent(input$xgb_select_cancel, {
@@ -878,105 +851,41 @@ server= function(input,output,session) {
   })
   
   observeEvent(input$run_xgb_HP_and_errors, {
-    set.seed(input$rnd_seed)
     
-    if (is.null(ignored_rows)) {
-      xgb_HP_data = current_data()
-    } else {
-      xgb_HP_data = current_data()[-ignored_rows,]
-    }
+    xgb_HP_results = xgb_call_HP(current_data(),
+                            response_var(),
+                            id_var,
+                            input$model_seed,
+                            ignored_rows,
+                            input$coves_to_use,
+                            input$lc_lowval,
+                            input$lc_upval,
+                            input$rc_lowval,
+                            input$rc_upval,
+                            input$train_prop,
+                            input$MC_runs,
+                            input$loggy,
+                            input$randomize,
+                            input$xgb_standardize,
+                            input$xgb_hyper_metric,
+                            input$pso_max_iter,
+                            input$pso_swarm_size,
+                            input$member_exp,
+                            input$ss_exp)
     
-    # REMOVE NA'S FROM RESPONSE VARIABLE
-    xgb_HP_data = xgb_HP_data[!is.na(xgb_HP_data[, response_var()]), ]
+    best_centroid = xgb_HP_results$best_centroid
+    xgb_saved_predictions <<- xgb_HP_results$xgb_predictions
     
-    #Randomly shuffle the data
-    if (input$randomize == TRUE) {
-      xgb_HP_data = xgb_HP_data[sample(nrow(xgb_HP_data)), ]
-    }
     
-    covar_data = xgb_HP_data[,input$coves_to_use]
-    
-    std_covar_data = covar_data
-    
-    # Min/Max Standardize the features
-    if (input$xgb_standardize == TRUE) {
-      for (i in 1:nrow(std_covar_data)) {
-        for (j in 1:ncol(std_covar_data)) {
-          if (is.numeric(std_covar_data[i, j]) == TRUE) {
-            if (max(na.omit(std_covar_data[, j])) - min(na.omit(std_covar_data[, j])) == 0) {
-              std_covar_data[i, j] = 0
-            } else {
-              std_covar_data[i, j] = (std_covar_data[i, j] - min(na.omit(std_covar_data[, j]))) / (max(na.omit(std_covar_data[, j])) - min(na.omit(std_covar_data[, j])))
-            }
-          }
-        }
-      }
-    }
-    
-    # Add the standardized features back into the data frame for analysis
-    xgb_HP_data = cbind(xgb_HP_data[, id_var], xgb_HP_data[, response_var()], std_covar_data)
-    
-    #Create 5 equally size folds
-    folds = cut(seq(1, nrow(xgb_HP_data)), breaks = 5, labels = FALSE)
-    
-    prediction_results = matrix(0, nrow = 0, ncol = length(input$coves_to_use) + 3)
-    colnames(prediction_results) = c("ID","Observation", "Prediction", input$coves_to_use)
-    
-    hp_matrix = matrix(0, nrow = 0, ncol = 7)
-    colnames(hp_matrix) = c(
-      "max_depth",
-      "eta",
-      "subsample",
-      "colsample_bytree",
-      "min_child_weight",
-      "gamma",
-      "nrounds"
+    Optimal_HP <<- data.frame(
+      max_depth = best_centroid[1],
+      eta = best_centroid[2],
+      subsample = best_centroid[3],
+      colsample_bytree = best_centroid[4],
+      min_child_weight = best_centroid[5],
+      gamma = best_centroid[6],
+      nrounds = best_centroid[7]
     )
-    
-    #Perform 5 fold cross validation
-    for (i in 1:5) {
-      fold_num = i
-      
-      testIndexes = which(folds == i, arr.ind = TRUE)
-      testData = xgb_HP_data[testIndexes, ]
-      trainData = xgb_HP_data[-testIndexes, ]
-      
-      pso_result = xgb_HP_and_errors(
-        trainData,
-        testData,
-        response_var(),
-        input$coves_to_use,
-        input$lc_lowval,
-        input$lc_upval,
-        input$rc_lowval,
-        input$rc_upval,
-        input$train_prop,
-        input$MC_runs,
-        input$loggy,
-        input$randomize,
-        input$xgb_standardize,
-        input$xgb_hyper_metric,
-        input$pso_max_iter,
-        input$pso_swarm_size,
-        input$member_exp,
-        input$ss_exp,
-        fold_num
-      )
-      
-      prediction_results1 = cbind(xgb_HP_data[testIndexes,1],pso_result[[1]],covar_data[testIndexes,])
-      prediction_results = rbind(prediction_results, prediction_results1)
-      hp_matrix = rbind(hp_matrix, pso_result[[2]])
-    }
-    
-    # })
-    
-    prediction_results[,3] = round(prediction_results[,3],3)
-    prediction_results = prediction_results[order(prediction_results[,1]),]
-    
-    xgb_saved_predictions <<- as.data.frame(prediction_results)
-    # print(xgb_saved_predictions)
-    
-    HP_matrix <<- hp_matrix
     
     output$xgb_predictions = DT::renderDataTable(server = T, {
       data = datatable(
@@ -1027,7 +936,6 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: HP and Errors')
   })
 
-  
   # observeEvent(input$stop_xgb_HP_and_errors, {
   #   print("Stopping calculation...")
   #   stopMulticoreFuture(xgb_perform_calculation)
@@ -1048,6 +956,136 @@ server= function(input,output,session) {
   #   colsamp_set(matrix[input$xgb_hyper_rows_selected,"colsample_bytree"])
   #   
   # })
+  
+  observeEvent(input$xgb_final_fitting, {
+    
+    xgb_final_model <<- xgb_final(current_data(),ignored_rows,input$model_seed,response_var(),input$coves_to_use,input$lc_lowval,input$lc_upval,
+                  input$rc_lowval,input$rc_upval,input$loggy,input$randomize,input$xgb_standardize,input$xgb_tree_method,input$xgb_booster,
+                  input$dart_normalize_type,input$dart_sample_type,input$rate_drop,input$skip_drop,Optimal_HP$eta,Optimal_HP$gamma,
+                  Optimal_HP$max_depth,Optimal_HP$min_child_weight,Optimal_HP$subsample,Optimal_HP$colsamp_bytree,Optimal_HP$nrounds)
+    
+    
+    
+  })
+  
+  observeEvent(input$elastic, {
+    
+    set.seed(input$model_seed)
+    
+    if (is.null(ignored_rows)) {
+      EN_data0 = current_data()
+    } else {
+      EN_data0 = current_data()[-ignored_rows,]
+    }
+    
+    if (any(is.na(EN_data0[,input$coves_to_use]))) {
+      
+      showModal(modalDialog(paste("Elastic Net cannot be run - it does not tolerate missing feature values. You can either Impute these (on the Data tab) or Disable rows/columns with missing values."),footer = modalButton("Close")))
+      
+    } else {
+      
+      # REMOVE NA'S FROM RESPONSE VARIABLE
+      EN_data0 = EN_data0[!is.na(EN_data0[,response_var()]),]
+      
+      EN_data = cbind(EN_data0[,response_var()],EN_data0[,input$coves_to_use])
+      colnames(EN_data) = c("Response",input$coves_to_use)
+      
+      train_control = trainControl(method = "repeatedcv",
+                                   number = 5,
+                                   repeats = 5,
+                                   search = "random",
+                                   verboseIter = F)
+      
+      # Train the model
+      EN_model <<- train(Response ~ .,data = EN_data,method = "glmnet",preProcess = c("center", "scale"),tuneLength = 25,trControl = train_control)
+      
+      EN_HP = c(alpha=EN_model$bestTune[[1]],lambda=EN_model$bestTune[[2]])
+      
+      EN_coeffs = as.matrix(coef(EN_model$finalModel,EN_model$finalModel$lambdaOpt))
+      EN_coeffs = as.data.frame(EN_coeffs)
+      names = c("(Intercept)",input$coves_to_use)
+      EN_coeffs = cbind(names,round(EN_coeffs,3))
+      colnames(EN_coeffs) = c("Feature","Coefficient")
+      
+      EN_fits = predict(EN_model, EN_data[,-1])
+      EN_results = cbind(EN_data0[,1],EN_data[,1],round(EN_fits,3),EN_data[,-1])
+      colnames(EN_results) = c("ID","Observed","Fitted_Values",input$coves_to_use)
+      rsq_EN = cor(EN_results[,2], EN_fits)^2
+      
+      output$EN_fits = DT::renderDataTable(server = T, {
+        data = datatable(
+          EN_results,
+          rownames = F,
+          selection = list(
+            selected = list(rows = NULL, cols = NULL),
+            target = "row",
+            mode = "single"
+          ),
+          editable = F,
+          options = list(
+            autoWidth = F,
+            paging = T,
+            pageLength = 25,
+            scrollX = T,
+            scrollY = T,
+            columnDefs = list(list(
+              className = 'dt-center',
+              orderable = T,
+              targets = 0
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "}")))})
+      
+      output$EN_coeffs = DT::renderDataTable(server = T, {
+        data = datatable(
+          EN_coeffs,
+          rownames = F,
+          selection = list(
+            selected = list(rows = NULL, cols = NULL),
+            target = "row",
+            mode = "single"
+          ),
+          editable = F,
+          options = list(
+            autoWidth = F,
+            paging = F,
+            scrollX = F,
+            scrollY = F,
+            columnDefs = list(list(
+              className = 'dt-center',
+              orderable = T,
+              targets = 0
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "}")))})
+      
+      scat_dat = EN_results[,1:3]
+      colnames(scat_dat) = c("ID", "Observations", "Fitted_Values")
+      output$EN_scatplot = renderPlotly(scatter(scat_dat, "Observations", "Fitted_Values", 1))
+      
+      resid_data = cbind(EN_results[,1:2],EN_results[,2]-EN_results[,3])
+      colnames(resid_data) = c("ID", "Fitted_Values", "Residuals")
+      output$EN_resid_scatplot = renderPlotly(scatter(resid_data, "Fitted_Values", "Residuals", 1))
+      
+      line_dat = scat_dat
+      
+      output$EN_lineplot = renderPlotly(plot_ly(line_dat, x = ~line_dat[,1], y = ~line_dat[,2], name="Observations", type="scatter", mode = "lines",
+                                                text = ~paste("<b>ID: </b>",line_dat[,1],"<br><b>Observed Value:</b> ",line_dat[,2],sep=""),
+                                                hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5)) %>%
+                                          add_trace(y = ~line_dat[,3], name="Predictions", mode = 'lines',
+                                                    text = ~paste("<b>ID: </b>",line_dat[,1],"<br><b>Fitted Value:</b> ",round(line_dat[,3],3),sep=""),
+                                                    hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+                                          layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fitted Values",font=list(size=20)),
+                                                                                                                       range=c(min(0.99*min(line_dat[,2],line_dat[,3]),1.01*min(line_dat[,2],line_dat[,3])),max(0.99*max(line_dat[,2],line_dat[,3]),1.01*max(line_dat[,2],line_dat[,3]))))))
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'Elastic Net')
+    }
+  })
   
   output$map = renderLeaflet({
     leaflet() |> 
@@ -1218,11 +1256,19 @@ server= function(input,output,session) {
   observeEvent(input$ignore_rows, ignoreInit = T, {
     
     if (input$data_tabs == "Data Table") {
-      ignored_rows <<- unique(append(ignored_rows,input$data_rows_selected[-1]))
+      
+      add_in = input$data_rows_selected[-1]
     }
     if (input$data_tabs == "Outlier Metric") {
-      ignored_rows <<- unique(append(ignored_rows,input$iso_outliers_rows_selected))
+      add_in = input$iso_outliers_rows_selected
     }
+    
+    if(identical(unique(append(ignored_rows,add_in)),integer(0))) {
+      ignored_rows <<- NULL
+    } else {
+      ignored_rows <<- unique(append(ignored_rows,add_in))
+    }
+    
     renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
   })
   
@@ -1235,7 +1281,12 @@ server= function(input,output,session) {
       add_back = input$iso_outliers_rows_selected
     }
     
-    ignored_rows <<- ignored_rows[!ignored_rows %in% add_back]
+    if(identical(ignored_rows[!ignored_rows %in% add_back],integer(0))) {
+      ignored_rows <<- NULL
+    } else {
+      ignored_rows <<- ignored_rows[!ignored_rows %in% add_back]
+    }
+    
     renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
   })
 

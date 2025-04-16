@@ -5,7 +5,6 @@ xgb_pso = function(pso_data,
                    lc_upval,
                    rc_lowval,
                    rc_upval,
-                   train_prop,
                    MC_runs,
                    loggy,
                    xgb_hyper_metric,
@@ -13,6 +12,7 @@ xgb_pso = function(pso_data,
                    swarm_size,
                    member_exp,
                    ss_exp,
+                   tot_folds,
                    fold_num) {
   
   pso_results = matrix(NA, nrow = MC_runs, ncol = 7)
@@ -20,12 +20,12 @@ xgb_pso = function(pso_data,
   withProgress(
     message = 'HP Tuning/Error Estimation Progress',
     detail = paste("MC runs remaining:", x = MC_runs, "; Current fold:", y = fold_num),
-    value = 0.8 - 0.2*(5-fold_num),
+    value = (1-1/tot_folds) - (1/tot_folds)*(tot_folds-fold_num),
     {
 
       for (i in 1:MC_runs) {
         
-        incProgress(1/(MC_runs*5), detail = paste("MC runs remaining:",MC_runs-i,"; Current fold:",fold_num))
+        incProgress(1/(MC_runs*tot_folds), detail = paste("MC runs remaining:",MC_runs-i+1,"; Current fold:",fold_num))
 
         # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
         if (loggy == TRUE) {
@@ -51,33 +51,33 @@ xgb_pso = function(pso_data,
         }
 
         # Split data
-        train_idx = createDataPartition(pso_data[, 1], p = train_prop, list = FALSE)
-        train_data = pso_data[train_idx, ]
-        test_data = pso_data[-train_idx, ]
+        # train_idx = createDataPartition(pso_data[,1], p = train_prop, list = FALSE)
+        # train_data = pso_data[train_idx, ]
+        # test_data = pso_data[-train_idx, ]
 
         # Prepare data matrices for XGBoost
-        X_train = as.matrix(train_data[, -1])
-        y_train = train_data[, 1]
-        X_test = as.matrix(test_data[, -1])
-        y_test = test_data[, 1]
+        X_train = as.matrix(pso_data[,-1])
+        y_train = pso_data[,1]
+        # X_test = as.matrix(test_data[,-1])
+        # y_test = test_data[,1]
 
-        dtrain = xgb.DMatrix(data = X_train, label = y_train)
-        dtest = xgb.DMatrix(data = X_test, label = y_test)
+        data = xgb.DMatrix(data = X_train, label = y_train)
+        # dtest = xgb.DMatrix(data = X_test, label = y_test)
 
-        num_cols = ncol(train_data)
-        num_rows = nrow(train_data)
+        num_cols = ncol(pso_data)-1
+        num_rows = nrow(pso_data)
 
         # Cross-validation function to evaluate XGBoost performance with given parameters
         xgb_cv_score = function(params) {
-
+          
           # Extract parameters
-          max_depth = as.integer(round(params[1],0))
+          max_depth = round(params[1],0)
           eta = params[2]
           subsample = params[3]
           colsample_bytree = params[4]
-          min_child_weight = as.integer(round(params[5],0))
+          min_child_weight = round(params[5],0)
           gamma = params[6]
-          nrounds = as.integer(round(params[7],0))
+          nrounds = round(params[7],0)
 
           # Set up XGBoost parameters
           xgb_params = list(
@@ -91,11 +91,11 @@ xgb_pso = function(pso_data,
             gamma = gamma
           )
 
-          # Run 5-fold cross-validation
+          # Run cross-validation
           cv_results = xgb.cv(
             params = xgb_params,
-            data = dtrain,
-            nfold = 2,
+            data = data,
+            nfold = 5,
             nrounds = nrounds,
             early_stopping_rounds = 10,
             verbose = 0
@@ -107,38 +107,37 @@ xgb_pso = function(pso_data,
 
         # Define parameter bounds for PSO
         param_bounds = matrix(
-          c(as.integer(2), #lower max_depth
-            as.integer(floor(0.33*num_cols)), #upper max_depth
+          c(2L, #lower max_depth
+            floor(0.33*num_cols), #upper max_depth
             0.1, #lower eta
             0.3, #upper eta
             0.5, #lower subsample proportion
             0.9, #upper subsample proportion
             0.5, #lower colsamp_bytree
             0.9, #upper colsamp_bytree
-            as.integer(2), #lower min_child_weight
-            as.integer(floor(0.33*num_rows)), #upper min_child_weight
+            2L, #lower min_child_weight
+            floor(0.33*num_rows), #upper min_child_weight
             0, #Lower gamma
             5, #upper hamma
-            as.integer(50), #lower nrounds
-            as.integer(1000)), #upper nrounds
+            50L, #lower nrounds
+            1000L), #upper nrounds
           ncol = 2,
           byrow = TRUE
         )
 
         # Run PSO to find optimal parameters
         pso_result = psoptim(
-          rep(NA, nrow(param_bounds)),# Initial values (NA for random)
+          rep(NA, 7),# Initial parameter values (NA for random)
           xgb_cv_score,# Function to minimize
-          lower = param_bounds[,1],
-          upper = param_bounds[,2],
+          lower = c(param_bounds[1,1],param_bounds[2,1],param_bounds[3,1],param_bounds[4,1],param_bounds[5,1],param_bounds[6,1],param_bounds[7,1]),
+          upper = c(param_bounds[1,2],param_bounds[2,2],param_bounds[3,2],param_bounds[4,2],param_bounds[5,2],param_bounds[6,2],param_bounds[7,2]),
           control = list(
             maxit = max_iter,
             s = swarm_size,
             trace = 1,
             vectorize=T,
             maxit.stagnate = 10,
-            trace.stats = TRUE
-          )
+            trace.stats = TRUE)
         )
 
         # Extract best parameters
@@ -192,11 +191,11 @@ xgb_pso = function(pso_data,
     
     for (j in 1:(MC_runs - 2)) {
       
-      km_model = kmeans(clust_data, centers = j+1, nstart = 10)
+      km_model = kmeans(clust_data, centers = j, nstart = 10)
       
-      clust_dens = rep(0,j+1)
+      clust_dens = rep(0,j)
       
-      for (z in 1:j+1) {
+      for (z in 1:j) {
         
         if (km_model$withinss[z] > 0) {
           Dens = (km_model$size[z]^member_exp)/(km_model$withinss[z]^ss_exp)
@@ -208,10 +207,14 @@ xgb_pso = function(pso_data,
       
       Dm = which.max(clust_dens)
       
-      silhouette_scores = silhouette(km_model$cluster, dist(clust_data))
-      mean_silhouette_score = mean(silhouette_scores[,3])
+      if (j>1) {
+        silhouette_scores = silhouette(km_model$cluster, dist(clust_data))
+        mean_silhouette_score = mean(silhouette_scores[,3])
+      } else {
+        mean_silhouette_score = 0
+      }
       
-      clust_results[j,1] = j+1
+      clust_results[j,1] = j
       clust_results[j,2] = Dm
       clust_results[j,3] = clust_dens[Dm]
       clust_results[j,4] = mean_silhouette_score
@@ -224,7 +227,6 @@ xgb_pso = function(pso_data,
     best_list = which(best_model$cluster == clust_results[best_sil,2])
     best_centroid_members = pso_results[best_list,]
     best_centroid = colMeans(best_centroid_members)
-    print(best_centroid)
   }
   
   return(best_centroid)

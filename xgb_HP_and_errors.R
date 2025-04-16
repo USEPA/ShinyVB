@@ -1,5 +1,5 @@
-xgb_HP_and_errors = function(pso_train_data,
-                   pso_test_data,
+xgb_HP_and_errors = function(train_data,
+                   test_data,
                    resvar,
                    coves_to_use,
                    lc_lowval,
@@ -9,26 +9,21 @@ xgb_HP_and_errors = function(pso_train_data,
                    train_prop,
                    MC_runs,
                    loggy,
-                   randomize,
-                   xgb_standardize,
                    xgb_hyper_metric,
                    max_iter,
                    swarm_size,
                    member_exp,
                    ss_exp,
+                   tot_folds,
                    fold_num) {
   
-  cove_train_data = pso_train_data[, coves_to_use]
-  cove_test_data = pso_test_data[, coves_to_use]
+  cove_train_data = train_data[,coves_to_use]
+  cove_test_data = test_data[,coves_to_use]
   
-  num_rows = nrow(cove_train_data)
-  num_cols = ncol(cove_train_data)
-  
-  ncoves = ncol(cove_train_data)
   cove_names = colnames(cove_train_data)
-  pso_data = cbind(pso_train_data[, resvar], cove_train_data)
+  pso_data = as.data.frame(cbind(train_data[,resvar],cove_train_data))
   
-  test_data = cbind(pso_test_data[, resvar], cove_test_data)
+  test_data = as.data.frame(cbind(test_data[,resvar],cove_test_data))
   
   pso_result = xgb_pso(
     pso_data,
@@ -38,7 +33,6 @@ xgb_HP_and_errors = function(pso_train_data,
     lc_upval,
     rc_lowval,
     rc_upval,
-    train_prop,
     MC_runs,
     loggy,
     xgb_hyper_metric,
@@ -46,6 +40,7 @@ xgb_HP_and_errors = function(pso_train_data,
     swarm_size,
     member_exp,
     ss_exp,
+    tot_folds,
     fold_num)
   
   params = list(

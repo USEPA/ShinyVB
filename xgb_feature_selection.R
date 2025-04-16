@@ -1,16 +1,6 @@
-library(rsample)
-library(xgboost)
-library(dplyr)
-library(SHAPforxgboost)
-library(permimp)
-library(Metrics)
-library(lime)
-library(pdp)
-library(DBI)
-library(RSQLite)
-
-xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_booster,dart_normalize_type,
-                      dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db) {
+xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
+                      xgb_standardize,xgb_tree_method,xgb_booster,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,
+                      max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db) {
   
   set.seed(seed)
   
@@ -45,31 +35,6 @@ xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upva
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data=data[!is.na(data[,1]),]
   
-  # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
-  if (loggy==TRUE) {
-    
-    for (j in 1:nrow(data)){
-      if (data[j,1]=="TNTC") {
-        data[j,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
-      }
-      
-      if (data[j,1]=="ND") {
-        data[j,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
-      }
-    }
-  } else {
-    
-    for (j in 1:nrow(data)){
-      if (data[j,1]=="TNTC") {
-        data[j,1]=(runif(1, min = rc_lowval, max = rc_upval))
-      }
-      
-      if (data[j,1]=="ND") {
-        data[j,1]=(runif(1, min = lc_lowval, max = lc_upval))
-      }
-    }
-  }
-  
   # RANDOMIZE DATA
   if (randomize==TRUE) {
     random_index = sample(1:nrow(data), nrow(data))
@@ -94,6 +59,7 @@ xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upva
       subsample = subsamp,
       colsample_bytree = colsamp
     )
+    
   } else {
     params = list(
       booster = xgb_booster,
@@ -128,6 +94,32 @@ xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upva
         shap_train = matrix(0,nrow=ncol(temp_data)-1,ncol=MC_runs+1)
         
         for (j in 1:MC_runs) {
+          
+          # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
+          if (loggy==TRUE) {
+            
+            for (z in 1:nrow(temp_data)){
+              if (temp_data[z,1]=="TNTC") {
+                temp_data[z,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
+              }
+              
+              if (temp_data[z,1]=="ND") {
+                temp_data[z,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
+              }
+            }
+          } else {
+            
+            for (z in 1:nrow(temp_data)){
+              if (temp_data[z,1]=="TNTC") {
+                temp_data[z,1]=(runif(1, min = rc_lowval, max = rc_upval))
+              }
+              
+              if (temp_data[z,1]=="ND") {
+                temp_data[z,1]=(runif(1, min = lc_lowval, max = lc_upval))
+              }
+            }
+          }
+          
           train_ind = sample(seq_len(nrow(temp_data)), size = smp_size)
           train = temp_data[train_ind, ]
           test = temp_data[-train_ind, ]
@@ -172,8 +164,6 @@ xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upva
             current_cove = shap_train[c,1]
             shap_train[c,j+1] = shap_temp[shap_temp[,1] == current_cove,2]
           }
-          
-          # cat("vars remaining=", ncol(train_coves), "iteration=", j,"\n")
           
           incProgress(1/(remaining*MC_runs),detail = paste0("Covariates remaining:",ncol(train)-1,"; Current iteration:",j,"/",MC_runs))
           
@@ -231,7 +221,7 @@ xgb_select = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upva
           
           temp_data = temp_data[ , -which(colnames(temp_data) %in% loser_shap_name)]
         }
-      } #END the Iteration Loop
+      } #END the Feature Iteration Loop
     })
   
   dbWriteTable(temp_db, "xgb_select_results", data.frame(Iteration_results), overwrite = TRUE)

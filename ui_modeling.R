@@ -42,34 +42,13 @@ ModelingPanel = sidebarLayout(
           fluidRow(align="left",
             column(12, checkboxInput("randomize", "Randomize Data", FALSE))),
           fluidRow(align="left",
-                   column(12, numericInput("rnd_seed",  label="Seed", value = 1234, min=1,step=1))))) %>%
+                   column(12, numericInput("model_seed",  label="Seed", value = 1234, min=1,step=1))))) %>%
       
       bs_append (
-        title = "LARS",
+        title = "Elastic Net",
         content = card(
-          
           fluidRow(
-            column(12,checkboxInput("normalize", "Normalize Features", TRUE))
-          ),
-          fluidRow(
-            column(6, inputPanel(
-              selectInput(
-                "lars_tech",
-                label = "Fitting Technique",
-                selected ="lasso",
-                choices = c("lasso","lar","forward.stagewise","stepwise"))))
-          ),
-          fluidRow(
-            column(12, numericInput("max_lars_steps",  label="Maximum Steps", value = 250, min=1,step=1))
-          ),
-          fluidRow(
-            column(5,actionButton("lars_coeff", "Feat. Importance", style = 'width:130px; padding:2px;')),
-            column(1),
-            column(4,actionButton("lars_coeff_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
-          fluidRow(
-            column(5,actionButton("lars_perform", "Performance", style = 'width:130px; padding:2px;')),
-            column(1),
-            column(4,actionButton("lars_perform_cancel", "Cancel", style = 'width:90px; padding:2px;'))))) %>%
+            column(12,actionButton("elastic", "Elastic Net", style = 'width:130px; padding:4px;'))))) %>%
       
       bs_append (
         title = "Logistic Regression",
@@ -113,7 +92,7 @@ ModelingPanel = sidebarLayout(
             column(12,div(style = "display: inline-block;",actionButton("xgb_params", "Hyperparameters", style = 'background-color:#eee; width:140px; padding:2px; margin-right:20px; vertical-align: -5px;')),
                  div(style = "display: inline-block;",numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05)))),
           fluidRow(
-            column(7,align="left",actionButton("xgb_select", "Feature Selection", style = 'width:130px; padding:2px;')),
+            column(7,align="left",actionButton("run_xgb_select", "Feature Selection", style = 'width:130px; padding:2px;')),
             column(5,align="right",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(class="shortrow",column(12,tags$hr(style = "border-color: #2c3e50;"))),
           fluidRow(
@@ -129,20 +108,34 @@ ModelingPanel = sidebarLayout(
     width = 9,
     id = "modeling_output",
     tabsetPanel(id = "modeling_tabs",
-      tabPanel("LARS: Feat. Importance", DT::dataTableOutput('lars_coeffs'),
-                tags$style(type = "text/css", "#larscoeffstable {height: calc(100vh - 70px) !important;}")),
-      tabPanel("LARS: Performance", "LARS Performance"),
+      tabPanel("Elastic Net",
+               navset_pill_list(widths = c(1,11), well=F,
+                                nav_panel("Data Table",DT::dataTableOutput('EN_fits'),
+                                          tags$style(type = "text/css", "#ENpreds {height: calc(100vh - 70px) !important;}")),
+                                nav_panel("Coefficients",fluidRow(column(4,DT::dataTableOutput('EN_coeffs'))),
+                                          tags$style(type = "text/css", "#ENcoeffs {height: calc(100vh - 70px) !important;}")),
+                                nav_panel("EN Scatterplot", plotlyOutput("EN_scatplot", height="900px",width="70%")),
+                                nav_panel("EN Lineplot", plotlyOutput("EN_lineplot", height="600px",width="80%")),
+                                nav_panel("EN Residual Scatterplot", plotlyOutput("EN_resid_scatplot", height="900px",width="70%")))),
       tabPanel("Logistic: Feat. Importance", "Logistic Regression Covariate Importance"),
       tabPanel("Logistic: Performance", "Logistic Regression Performance"),
-      tabPanel("XGB: Feat. Selection",DT::dataTableOutput('xgb_select'),
+      tabPanel("XGB: Feature Selection",DT::dataTableOutput('xgb_select'),
                tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
       tabPanel("XGB: HP and Errors",
                navset_pill_list(widths = c(1,11), well=F,
                  nav_panel("Data Table",DT::dataTableOutput('xgb_predictions'),
-                           tags$style(type = "text/css", "#xgbhypertable {height: calc(100vh - 70px) !important;}")),
+                           tags$style(type = "text/css", "#xgb_preds {height: calc(100vh - 70px) !important;}")),
                  nav_panel("Prediction Scatterplot", plotlyOutput("xgb_pred_scatplot", height="900px",width="70%")),
                  nav_panel("Prediction Lineplot", plotlyOutput("xgb_pred_lineplot", height="600px",width="80%")),
                  nav_panel("Residual Scatterplot", plotlyOutput("xgb_resid_scatplot", height="900px",width="70%")))
+      ),
+      tabPanel("XGB: Final Fitting",
+               navset_pill_list(widths = c(1,11), well=F,
+                                nav_panel("Data Table",DT::dataTableOutput('xgb_final'),
+                                          tags$style(type = "text/css", "#xgb_final {height: calc(100vh - 70px) !important;}")),
+                                nav_panel("Fitting Scatterplot", plotlyOutput("xgb_final_scatplot", height="900px",width="70%")),
+                                nav_panel("Fitting Lineplot", plotlyOutput("xgb_final_lineplot", height="600px",width="80%")),
+                                nav_panel("Fitting Residuals", plotlyOutput("xgb_final_scatplot", height="900px",width="70%")))
       )
     )
   )
