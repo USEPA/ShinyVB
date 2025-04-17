@@ -30,7 +30,10 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
   }
   
   ncoves = ncol(cove_data)
-  data = cbind(xgb_select_data[,resvar],cove_data)
+  
+  data = merge(xgb_select_data[,resvar],cove_data)
+  
+  print(data)
   
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data=data[!is.na(data[,1]),]
@@ -77,7 +80,7 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
   Iteration_results = matrix(0, nrow=remaining, ncol=8)
   colnames(Iteration_results) = c("Iteration","Lowest Gain","Gain","Lowest SHAP","SHAP","RMSE_Train","RMSE_Test","RMSE_Weighted")
   smp_size = floor(train_prop * nrow(data))
-  temp_data = data
+  temp_data = as.data.frame(data)
   
   withProgress(
     message = 'Calculation in progress',
@@ -124,12 +127,14 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
           train = temp_data[train_ind, ]
           test = temp_data[-train_ind, ]
           
-          temp_model = xgboost(data = as.matrix(train[,-1]), label=as.matrix(train[,1]), params=params, early_stopping_rounds=early_stop, nrounds=nrounds, verbose=0)
+          temp_model = xgboost(data = as.matrix(train[,-1]), label=train[,1], params=params, early_stopping_rounds=early_stop, nrounds=nrounds, verbose=0)
           
-          fit_values = predict(temp_model,as.matrix(train[,-1]))
+          fit_values = as.numeric(predict(temp_model,as.matrix(train[,-1])))
+          print(fit_value)
           RMSE_temp_train[j,1]=rmse(fit_values, train[,1])
           
-          predictions = predict(temp_model, as.matrix(test[,-1]))
+          predictions = as.numeric(predict(temp_model, as.matrix(test[,-1])))
+          print(predictions)
           RMSE_temp_test[j,1]=rmse(predictions, test[,1])
           
           # Recording Gain
@@ -224,7 +229,7 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
       } #END the Feature Iteration Loop
     })
   
-  dbWriteTable(temp_db, "xgb_select_results", data.frame(Iteration_results), overwrite = TRUE)
+  dbWriteTable(temp_db, "xgb_selection_results", data.frame(Iteration_results), overwrite = TRUE)
 
   Iteration_results = Iteration_results[,c(1,4:8)]
   Iteration_results

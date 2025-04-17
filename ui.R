@@ -39,6 +39,9 @@ ui = fluidPage(
     #MC_runs {
       width: 90px;
     }
+    .tab-pane {
+      height: calc(100vh - 120px) !important;
+    }
     #iso_ndim {
     width: 70px;
     }
@@ -95,6 +98,18 @@ ui = fluidPage(
     title = "Virtual Beach",
     id="shinyVB",
     theme = shinytheme("flatly"),
+    
+    tabPanel(title = "Landing",style = "background-color: #acbdb0;",
+             p( 
+               h6(".", align = "center"),
+               h2("", align = "center"),
+               h2("", align = "center"),
+               h2("", align = "center"),
+               h2("Welcome to ShinyVB!", align = "center"),
+               h3("The latest form in the evolutionary line of the Virtual Beach software toolkit.", align = "center"),
+               h3("Email cyterski.mike@epa.gov with comments and questions.", align = "center")
+             )
+             ,div(align="center",img(src="logo.png",width=450))),
 
     tabPanel(title = "Map",MapPanel),
     

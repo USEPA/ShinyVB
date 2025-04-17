@@ -91,7 +91,6 @@ server= function(input,output,session) {
   col_names = reactiveVal()
   cove_names = reactiveVal()
   coves_being_used = reactiveVal()
-  date_format = reactiveVal()
   progress_list = reactiveVal()
   
   xgb_tree_method_set = reactiveVal("hist")
@@ -237,10 +236,6 @@ server= function(input,output,session) {
 
   output$beach_orient = renderText({bo()})
   
-  observeEvent(input$IDasDate, {
-    date_format(input$IDasDate)
-  })
-  
   observeEvent(input$file1, ignoreInit = T, {
     
     init_data <<- read.csv(input$file1$datapath,header = TRUE,sep = input$sep)
@@ -270,13 +265,13 @@ server= function(input,output,session) {
       feat_props <<- feat_props_temp
       ignored_rows <<- NULL
       
-      if (date_format() == "YMD") {
+      if (input$IDasDate == "YMD") {
         init_data[,1] = ymd(init_data[,1])
         date_format_string <<- "toLocaleDateString"
-      } else if (date_format() == "MDY") {
+      } else if (input$IDasDate == "MDY") {
         init_data[,1] = mdy(init_data[,1])
         date_format_string <<- "toLocaleDateString"
-      } else if (date_format() == "MDYHM") {
+      } else if (input$IDasDate == "MDYHM") {
         init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
         date_format_string <<- "toLocaleString"
       } else {
@@ -465,9 +460,9 @@ server= function(input,output,session) {
       } else {
         line_data0 = current_data()[-ignored_rows,]
       }
-
-      line_data1 = cbind(line_data0[,id_var],line_data0[,input$lineplot])
-      colnames(line_data1) = c("ID",input$lineplot)
+      
+      var_list = c(1,which(colnames(line_data0) == input$lineplot))
+      line_data1 = line_data0[,var_list]
       
       output$lineplott = renderPlotly({lineplot(line_data1,input$lineplot)})
       
@@ -532,10 +527,10 @@ server= function(input,output,session) {
         scatter_data0 = current_data()[-ignored_rows,]
       }
       
-      scatter_data1 = cbind(scatter_data0[,id_var],scatter_data0[,input$scatterx],scatter_data0[,input$scattery])
-      colnames(scatter_data1) = c("ID",input$scatterx,input$scattery)
+      var_list = c(1,which(colnames(scatter_data0) == input$scatterx),which(colnames(scatter_data0) == input$scattery))
+      scatter_data1 = scatter_data0[,var_list]
       
-      output$scatplot = renderPlotly(scatter(scatter_data1,input$scatterx,input$scattery,id_var))
+      output$scatplot = renderPlotly(scatter(scatter_data1))
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
@@ -553,10 +548,10 @@ server= function(input,output,session) {
         scatter_data0 = current_data()[-ignored_rows,]
       }
       
-      scatter_data1 = cbind(scatter_data0[,id_var],scatter_data0[,input$scatterx],scatter_data0[,input$scattery])
-      colnames(scatter_data1) = c("ID",input$scatterx,input$scattery)
+      var_list = c(1,which(colnames(scatter_data0) == input$scatterx),which(colnames(scatter_data0) == input$scattery))
+      scatter_data1 = scatter_data0[,var_list]
       
-      output$scatplot = renderPlotly(scatter(scatter_data1,input$scatterx,input$scattery,id_var))
+      output$scatplot = renderPlotly(scatter(scatter_data1))
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
@@ -741,6 +736,8 @@ server= function(input,output,session) {
       xgb_select_data = current_data()[-ignored_rows,]
     }
     
+    xgb_select_data = xgb_select_data[,-1]
+    
     resvar = response_var()
     
     xgb_tree_method = xgb_tree_method_set()
@@ -795,10 +792,8 @@ server= function(input,output,session) {
                   scrollY = TRUE,
                   columnDefs = list(list(className = 'dt-center',orderable=T,targets=0)),
                   initComplete = JS("function(settings, json) {",
-                                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
-                  formatRound(columns=c(1,3:6), digits=c(0,5,5,5,5))
-      data$x$data[[1]] = as.numeric(data$x$data[[1]])
-      data
+                                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) #%>%
+                  formatRound(data,columns=c(1,3:6), digits=c(0,5,5,5,5))
     })
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
@@ -817,7 +812,7 @@ server= function(input,output,session) {
     
     all_covar = coves_being_used()
     
-    temp_data = dbReadTable(temp_db, "xgb_select_results")
+    temp_data = dbReadTable(temp_db, "xgb_selection_results")
     
     crit_val = as.numeric(input$xgb_select_rows_selected[1])
     
@@ -873,8 +868,11 @@ server= function(input,output,session) {
                             input$member_exp,
                             input$ss_exp)
     
-    best_centroid = xgb_HP_results$best_centroid
-    xgb_saved_predictions <<- xgb_HP_results$xgb_predictions
+    best_centroid = xgb_HP_results[[2]]
+    xgb_saved_predictions <<- xgb_HP_results[[1]]
+    
+    print(xgb_saved_predictions)
+    print(best_centroid)
     
     
     Optimal_HP <<- data.frame(
@@ -887,39 +885,72 @@ server= function(input,output,session) {
       nrounds = best_centroid[7]
     )
     
-    output$xgb_predictions = DT::renderDataTable(server = T, {
-      data = datatable(
-        xgb_saved_predictions,
-        rownames = F,
-        selection = list(
-          selected = list(rows = NULL, cols = NULL),
-          target = "row",
-          mode = "single"
-        ),
-        editable = F,
-        options = list(
-          autoWidth = F,
-          paging = TRUE,
-          pageLength = 25,
-          scrollX = TRUE,
-          scrollY = TRUE,
-          columnDefs = list(list(
-            className = 'dt-center',
-            orderable = T,
-            targets = 0
-          )),
-          initComplete = JS(
-            "function(settings, json) {",
-            "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
-            "}")))})
-
-    scat_dat = xgb_saved_predictions[,1:3]
-    colnames(scat_dat) = c("ID", "Observations", "Predictions")
-    output$xgb_pred_scatplot = renderPlotly(scatter(scat_dat, "Observations", "Predictions", 1))
+    if (data_format_string == "Other") {
+      
+      output$xgb_predictions = DT::renderDataTable(server = T, {
+        data = datatable(
+          xgb_saved_predictions,
+          rownames = F,
+          selection = list(
+            selected = list(rows = NULL, cols = NULL),
+            target = "row",
+            mode = "single"
+          ),
+          editable = F,
+          options = list(
+            autoWidth = F,
+            paging = TRUE,
+            pageLength = 25,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            columnDefs = list(list(
+              className = 'dt-center',
+              orderable = T,
+              targets = 0
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "}")))})
+    } else {
+      
+      output$xgb_predictions = DT::renderDataTable(server = T, {
+        data = datatable(
+          xgb_saved_predictions,
+          rownames = F,
+          selection = list(
+            selected = list(rows = NULL, cols = NULL),
+            target = "row",
+            mode = "single"
+          ),
+          editable = F,
+          options = list(
+            autoWidth = F,
+            paging = TRUE,
+            pageLength = 25,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            columnDefs = list(list(
+              className = 'dt-center',
+              orderable = T,
+              targets = 0
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "}"))) %>%
+          formatDate(1, date_format_string)})
+    }
     
-    resid_data = cbind(xgb_saved_predictions[,1:2],xgb_saved_predictions[,2]-xgb_saved_predictions[,3])
-    colnames(resid_data) = c("ID", "Predictions", "Residuals")
-    output$xgb_resid_scatplot = renderPlotly(scatter(resid_data, "Predictions", "Residuals", 1))
+    scat_dat = xgb_saved_predictions[,1:3]
+    output$xgb_pred_scatplot = renderPlotly(scatter(scat_dat))
+    
+    resid_data = xgb_saved_predictions[,c(1,3)]
+    
+    resid_data = resid_data %>%
+      mutate(Residuals = round(xgb_saved_predictions[,2]-xgb_saved_predictions[,3],3))
+    
+    output$xgb_resid_scatplot = renderPlotly(scatter(resid_data))
     
     line_dat = scat_dat
 
@@ -987,7 +1018,9 @@ server= function(input,output,session) {
       # REMOVE NA'S FROM RESPONSE VARIABLE
       EN_data0 = EN_data0[!is.na(EN_data0[,response_var()]),]
       
-      EN_data = cbind(EN_data0[,response_var()],EN_data0[,input$coves_to_use])
+      var_list = c(response_var(),which(colnames(EN_data0) %in% input$coves_to_use))
+      EN_data = EN_data0[,var_list]
+      
       colnames(EN_data) = c("Response",input$coves_to_use)
       
       train_control = trainControl(method = "repeatedcv",
@@ -1008,9 +1041,15 @@ server= function(input,output,session) {
       colnames(EN_coeffs) = c("Feature","Coefficient")
       
       EN_fits = predict(EN_model, EN_data[,-1])
-      EN_results = cbind(EN_data0[,1],EN_data[,1],round(EN_fits,3),EN_data[,-1])
-      colnames(EN_results) = c("ID","Observed","Fitted_Values",input$coves_to_use)
-      rsq_EN = cor(EN_results[,2], EN_fits)^2
+      
+      EN_results0 = data.frame(EN_data0[,1]) %>%
+        mutate(Observed=EN_data[,1],Fitted_Values=round(EN_fits,3))
+      
+      EN_results = merge(EN_results0,EN_data[,-1])
+      
+      colnames(EN_results)[[1]] = colnames(EN_data0)[[1]]
+      
+      rsq_EN = cor(EN_results[,2], EN_results[,3])^2
       
       output$EN_fits = DT::renderDataTable(server = T, {
         data = datatable(
@@ -1063,13 +1102,15 @@ server= function(input,output,session) {
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
               "}")))})
       
-      scat_dat = EN_results[,1:3]
-      colnames(scat_dat) = c("ID", "Observations", "Fitted_Values")
-      output$EN_scatplot = renderPlotly(scatter(scat_dat, "Observations", "Fitted_Values", 1))
+      scat_dat = EN_results0[,1:3]
+      output$EN_scatplot = renderPlotly(scatter(scat_dat))
       
-      resid_data = cbind(EN_results[,1:2],EN_results[,2]-EN_results[,3])
-      colnames(resid_data) = c("ID", "Fitted_Values", "Residuals")
-      output$EN_resid_scatplot = renderPlotly(scatter(resid_data, "Fitted_Values", "Residuals", 1))
+      resid_data = EN_results0[,c(1,3)]
+      
+      resid_data = resid_data %>%
+        mutate(Residuals = round(EN_results0[,2]-EN_results0[,3],3))
+      
+      output$EN_resid_scatplot = renderPlotly(scatter(resid_data))
       
       line_dat = scat_dat
       
@@ -1152,16 +1193,16 @@ server= function(input,output,session) {
     #   iso_data = iso_data0[,-c(id_var,response_var())]
     # }
     
-    iso_data0 = current_data()
-    iso_data = iso_data0[,-c(id_var,response_var())]
+    iso_data = current_data()[,-c(id_var,response_var())]
     
     samp_size = min(nrow(iso_data), 10000L)
     ndim = input$iso_ndim
     
     iso_results = matrix(NA, nrow = nrow(iso_data), ncol = 6)
+    iso_results = data.frame(iso_results)
     colnames(iso_results) = c("ID","Depth_Score","Adj_Depth_Score","Density_Score","Adj_Density_Score","Overall")
     
-    iso_results[,1] = iso_data0[,id_var]
+    iso_results[,1] = current_data()[,1]
     
     techs = c("depth","adj_depth", "density", "adj_density")
     
@@ -1219,31 +1260,55 @@ server= function(input,output,session) {
     
     iso_results[,6] = round((iso_results[,2] * iso_results[,3] * iso_results[,4] * iso_results[,5])^0.25 - 0.7071,3)
     
-    iso_results = as.data.frame(iso_results)
-    
-    output$iso_outliers = DT::renderDataTable(server = T, {
-      data = datatable(
-        iso_results,
-        rownames = F,
-        selection = list(
-          selection = "multiple",
-          selected = list(rows = NULL),
-          target = "row"),
-        editable = F,
-        options = list(
-          paging = TRUE,
-          pageLength = 25,
-          scrollY = TRUE,
-          columnDefs = list(list(
-            className = 'dt-center',
-            orderable = T,
-            targets = c(0:5)
-          )),
-          initComplete = JS(
-            "function(settings, json) {",
-            "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
-            "}")))})
-    
+    if (date_format_string != "Other") {
+      output$iso_outliers = DT::renderDataTable(server = T, {
+        data = datatable(
+          iso_results,
+          rownames = F,
+          selection = list(
+            selection = "multiple",
+            selected = list(rows = NULL),
+            target = "row"),
+          editable = F,
+          options = list(
+            paging = TRUE,
+            pageLength = 25,
+            scrollY = TRUE,
+            columnDefs = list(list(
+              className = 'dt-center',
+              orderable = T,
+              targets = c(0:5)
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "}"))) %>%
+          formatDate(id_var, date_format_string)})
+    } else {
+      output$iso_outliers = DT::renderDataTable(server = T, {
+        data = datatable(
+          iso_results,
+          rownames = F,
+          selection = list(
+            selection = "multiple",
+            selected = list(rows = NULL),
+            target = "row"),
+          editable = F,
+          options = list(
+            paging = TRUE,
+            pageLength = 25,
+            scrollY = TRUE,
+            columnDefs = list(list(
+              className = 'dt-center',
+              orderable = T,
+              targets = c(0:5)
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "}")))})
+    }
+
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Outlier Metric')
     
