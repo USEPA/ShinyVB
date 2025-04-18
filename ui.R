@@ -63,7 +63,7 @@ ui = fluidPage(
     }
     .shiny-notification {
        position: fixed;
-       top: 25%;
+       top: 1%;
        left: 25%;
     }
     .btn-default:hover {

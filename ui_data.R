@@ -13,21 +13,21 @@ DataPanel = sidebarLayout(
                   "text/comma-separated-values,text/plain",".csv")), style="font-size:80%; font-family:Arial; width: 350px;"),
     
     fluidRow(
-      column(5,actionButton("restore", "Restore Inputs", style='width: 120px; padding:8px; vertical-align: -30px;')),
-      column(7,inputPanel(selectInput("col_props",label = "Column Properties",selected ="-",choices = c("-"))))),
+      column(5,disabled(actionButton("restore", "Restore Inputs", style='width: 120px; padding:8px; vertical-align: -30px;'))),
+      column(7,disabled(inputPanel(selectInput("col_props",label = "Column Properties",selected ="-",choices = c("-")))))),
     fluidRow(
       column(6,numericInput("data_seed", "Random Seed", value=1234, min=1,max=1000000,step=1)),
       column(6,radioButtons(inline=T,"select_choice","Table Selection",choices = c(Features="Features",Rows="Rows"),selected = "Features"))),
     fluidRow(
-      column(6,actionButton("ignore_rows", "Disable Selected Rows", style='padding: 6px;')),
-      column(6,actionButton("enable_rows", "Enable Selected Rows", style='padding: 6px;'))),
+      column(6,disabled(actionButton("ignore_rows", "Disable Selected Rows", style='padding: 6px;'))),
+      column(6,disabled(actionButton("enable_rows", "Enable Selected Rows", style='padding: 6px;')))),
     fluidRow(column(12,tags$hr(style = "border-color: #2c3e50;"))),
     fluidRow(
-      column(5,actionButton("impute_check", "Impute Features")),
+      column(5,disabled(actionButton("impute_check", "Impute Features"))),
       column(1),
-      column(7,actionButton("corr_check", "Feature Correlations", style='width: 175px;'))),
+      column(7,disabled(actionButton("corr_check", "Feature Correlations", style='width: 175px;')))),
     fluidRow(
-      column(6,actionButton("run_iso_forest","Outliers: IsoForest", style='width: 150px; align: left; vertical-align: -38px;')),
+      column(6,disabled(actionButton("run_iso_forest","Outliers: IsoForest", style='width: 150px; align: left; vertical-align: -38px;'))),
       column(6,numericInput("iso_ndim", "IsoForest Dims", value=2, min=1,max=5,step=1))),
     
     bs_accordion(id="plotting") %>%

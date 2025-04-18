@@ -281,6 +281,12 @@ server= function(input,output,session) {
       current_data(init_data)
       col_names(colnames(init_data))
       
+      enable("restore")
+      enable("col_props")
+      enable("impute_check")
+      enable("corr_check")
+      enable("run_iso_forest")
+      
       #updateSelectInput(session,"id",choices=c(col_names()))
       updateSelectInput(session,"col_props",choices=c("-",col_names()))
       updateSelectInput(session,"rainplot",choices=c("-",col_names()))
@@ -885,7 +891,7 @@ server= function(input,output,session) {
       nrounds = best_centroid[7]
     )
     
-    if (data_format_string == "Other") {
+    if (date_format_string == "Other") {
       
       output$xgb_predictions = DT::renderDataTable(server = T, {
         data = datatable(
@@ -1315,6 +1321,17 @@ server= function(input,output,session) {
   })
   
   observeEvent(input$select_choice, ignoreInit = T, {
+    
+    if (input$select_choice == "Rows") {
+      enable("ignore_rows")
+      enable("enable_rows")
+    } else if (input$select_choice == "Features") {
+      disable("ignore_rows")
+      disable("enable_rows")
+    }
+    
+    
+    
     renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
   })
   

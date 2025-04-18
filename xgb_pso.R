@@ -19,13 +19,13 @@ xgb_pso = function(pso_data,
 
   withProgress(
     message = 'HP Tuning/Error Estimation Progress',
-    detail = paste("MC runs remaining:", x = MC_runs, "; Current fold:", y = fold_num),
+    detail = paste("MC runs:", x = MC_runs,"; Fold:",y = fold_num),
     value = (1-1/tot_folds) - (1/tot_folds)*(tot_folds-fold_num),
     {
 
       for (i in 1:MC_runs) {
         
-        incProgress(1/(MC_runs*tot_folds), detail = paste("MC runs remaining:",MC_runs-i+1,"; Current fold:",fold_num))
+        incProgress(1/(MC_runs*tot_folds), detail = paste("MC run:",i,"/",MC_runs,"; Fold:",fold_num,"/",tot_folds))
 
         # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
         if (loggy == TRUE) {

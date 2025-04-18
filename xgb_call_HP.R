@@ -55,13 +55,13 @@ xgb_call_HP = function(current_data,
   }
   
   # Add the standardized features back into the data frame for analysis
-  data = cbind(data[,id_var],data[,resvar],std_covar_data)
-  colnames(data)[1] = colnames(current_data)[id_var]
-  colnames(data)[2] = colnames(current_data)[resvar]
+  dataset = cbind(data[,id_var],data[,resvar],std_covar_data)
+  colnames(dataset)[1] = colnames(current_data)[id_var]
+  colnames(dataset)[2] = colnames(current_data)[resvar]
   
   #Create n folds
   tot_folds = 5
-  folds = cut(seq(1, nrow(data)), breaks = tot_folds, labels = FALSE)
+  folds = cut(seq(1, nrow(dataset)), breaks = tot_folds, labels = FALSE)
   
   prediction_results = matrix(0, nrow = 0, ncol = length(coves_to_use) + 3)
   prediction_results = as.data.frame(prediction_results)
@@ -82,9 +82,9 @@ xgb_call_HP = function(current_data,
   for (i in 1:tot_folds) {
     fold_num = i
     
-    testIndexes = which(folds == i, arr.ind = TRUE)
-    testData = data[testIndexes, ]
-    trainData = data[-testIndexes, ]
+    testIndices = which(folds == i, arr.ind = TRUE)
+    testData = dataset[testIndices, ]
+    trainData = dataset[-testIndices, ]
     
     pso_result = xgb_HP_and_errors(
       trainData,
@@ -107,7 +107,7 @@ xgb_call_HP = function(current_data,
       fold_num
     )
     
-    prediction_results1 = cbind(data[testIndexes,],pso_result[[1]],covar_data[testIndexes,])
+    prediction_results1 = cbind(dataset[testIndices,1],pso_result[[1]],covar_data[testIndices,])
     prediction_results = rbind(prediction_results, prediction_results1)
     hp_matrix = rbind(hp_matrix, pso_result[[2]])
   }
@@ -116,8 +116,6 @@ xgb_call_HP = function(current_data,
   prediction_results = prediction_results[order(prediction_results[,1]),]
   colnames(prediction_results) = c(colnames(current_data)[1],"Observation", "Prediction", coves_to_use)
   xgb_predictions = data.frame(prediction_results)
-  
-  print(xgb_predictions)
   
   # Cluster the HP matrix to find a single HP solution
   scaled_hp_matrix = as.data.frame(hp_matrix)
@@ -174,8 +172,6 @@ xgb_call_HP = function(current_data,
   best_list = which(best_model$cluster == clust_results[best_sil,2])
   best_centroid_members = hp_matrix[best_list,]
   best_centroid = colMeans(best_centroid_members)
-  
-  print(best_centroid)
   
   return(list(xgb_predictions,best_centroid))
 }
