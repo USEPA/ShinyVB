@@ -37,19 +37,7 @@ DataPanel = sidebarLayout(
       bs_append (title="Plotting", content = card(
         
         div(style = "height: 425px",
-            
-            # fluidRow(
-            #   column(6,h5("Plot Output Tab"))
-            # ),
-            # fluidRow(
-            #   column(6, selectInput(
-            #   "send_plot",
-            #   label = NULL,
-            #   selected =
-            #     "Plot1",
-            #   choices = c("Plot1", "Plot2", "Plot3","Plot4"))),
-            #   column(6, actionButton("plot_save", "Save Plot", style='width: 75px; padding:2px;'))),
-            
+
             fluidRow(
               column(5,selectInput("scatterx",label = "Scatter X",selected ="-",choices = c("-"))),
               column(7,selectInput("scattery",label = "Scatter Y",selected ="-",choices = c("-")))),
@@ -123,12 +111,12 @@ DataPanel = sidebarLayout(
                                     tabPanel("Outlier Metric",DT::dataTableOutput('iso_outliers'),
                                              tags$style(type = "text/css", "#iso_outliers {height: calc(100vh - 70px) !important;}")),
                                     tabPanel("Correlations",actionButton("save_corrr", "Save Plot", style='width: 100px; padding:2px;'),
-                                             plotOutput("corrplot",width="100%",height="1200px")),
+                                             plotOutput("corrplot",width="100%",height="700px")),
                                     tabPanel("Raincloud",actionButton("save_rainn", "Save Plot", style='width: 100px; padding:2px;'),
-                                             plotOutput("rainplot", height = "800px", width="100%")),
-                                    tabPanel("Line Plot",actionButton("save_linee", "Save Plot", style='width: 100px; padding:2px;'),
-                                             plotlyOutput("lineplott", height="750px",width="100%")),
-                                    tabPanel("Scatterplot",actionButton("save_scatt", "Save Plot", style='width: 100px; padding:2px;'),
-                                             plotlyOutput("scatplot", height="900px",width="70%")))
+                                             plotOutput("rainplot", height = "700px", width="100%")),
+                                    tabPanel("Line Plot",#actionButton("save_linee", "Save Plot", style='width: 100px; padding:2px;'),
+                                             plotlyOutput("lineplott", height="700px",width="100%")),
+                                    tabPanel("Scatterplot",#actionButton("save_scatt", "Save Plot", style='width: 100px; padding:2px;'),
+                                             plotlyOutput("scatplot", height="700px",width="100%")))
   )
 )

@@ -2,7 +2,7 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
                       xgb_standardize,xgb_tree_method,xgb_booster,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,
                       max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db) {
   
-  set.seed(seed)
+  set.seed(as.integer(seed))
   
   selector = "SHAP"
   cove_data=xgb_select_data[,coves_to_use]
@@ -29,11 +29,8 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
     }
   }
   
-  ncoves = ncol(cove_data)
-  
-  data = merge(xgb_select_data[,resvar],cove_data)
-  
-  print(data)
+  data = data.frame(cbind(xgb_select_data[,resvar],cove_data))
+  colnames(data) = c(colnames(xgb_select_data)[resvar],coves_to_use)
   
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data=data[!is.na(data[,1]),]
@@ -130,12 +127,10 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
           temp_model = xgboost(data = as.matrix(train[,-1]), label=train[,1], params=params, early_stopping_rounds=early_stop, nrounds=nrounds, verbose=0)
           
           fit_values = as.numeric(predict(temp_model,as.matrix(train[,-1])))
-          print(fit_value)
-          RMSE_temp_train[j,1]=rmse(fit_values, train[,1])
-          
+          RMSE_temp_train[j,1]= sqrt(mean((train[,1] - fit_values)^2))
+
           predictions = as.numeric(predict(temp_model, as.matrix(test[,-1])))
-          print(predictions)
-          RMSE_temp_test[j,1]=rmse(predictions, test[,1])
+          RMSE_temp_test[j,1]= sqrt(mean((test[,1] - predictions)^2))
           
           # Recording Gain
           

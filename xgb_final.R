@@ -1,18 +1,10 @@
-xgb_select = function(xgb_data,ignored_rows,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,loggy,randomize,xgb_standardize,xgb_tree_method,xgb_booster,dart_normalize_type,
-                      dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,min_child_weight,subsamp,colsamp,nrounds) {
+xgb_final = function(xgb_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,loggy,randomize,xgb_standardize,
+                     xgb_tree_method,xgb_booster,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
+                     min_child_weight,subsamp,colsamp,nrounds) {
   
   set.seed(seed)
   
-  if (is.null(ignored_rows)) {
-    data = xgb_data
-  } else {
-    data = xgb_data[-ignored_rows,]
-  }
-  
-  # REMOVE NA'S FROM RESPONSE VARIABLE
-  data = data[!is.na(data[,resvar]), ]
-  
-  data = data[,c(resvar,coves_to_use)]
+  data = cbind(xgb_data[,resvar],xgb_data[,coves_to_use])
   
   if(xgb_booster == "-") {
     xgb_booster = "gbtree"
@@ -90,6 +82,6 @@ xgb_select = function(xgb_data,ignored_rows,seed,resvar,coves_to_use,lc_lowval,l
     )
   }
   
-  xgb_final_model = xgboost(data = as.matrix(data[,-1]),label=data[,1], params=params, early_stopping_rounds=20, nrounds=nrounds, verbose=0)
+  xgb_final_model = xgboost(data = as.matrix(data[,-1]),label=data[,1], params=params, early_stopping_rounds=25, nrounds=nrounds, verbose=0)
   
 }

@@ -42,7 +42,7 @@ raincloud = function(rain_data) {
       parse=T,
       fontface = "bold",
       size = 6,
-      vjust = -23
+      vjust = -17
     ) +
     
     stat_summary(
@@ -52,7 +52,7 @@ raincloud = function(rain_data) {
       aes(label=paste0(round(after_stat(y), 1))),
       fontface = "bold",
       size = 6,
-      vjust = -14,
+      vjust = -10,
       hjust = -0.1
     ) +
       
@@ -64,7 +64,7 @@ raincloud = function(rain_data) {
       fontface = "bold",
       size = 6,
       hjust = 1,
-      vjust = -57,
+      vjust = -40,
     ) +
       
     labs(x = NULL,y = colnames(rain_data)[2]) +
@@ -83,5 +83,3 @@ raincloud = function(rain_data) {
   
   return(rain)
 }
-
-#ggsave(file="raincloud_F.png", FPlus, width = 11, height = 8, units = "in", dpi=300)

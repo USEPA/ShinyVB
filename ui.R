@@ -39,6 +39,12 @@ ui = fluidPage(
     #MC_runs {
       width: 90px;
     }
+    #EN_reg_stand {
+      width: 120px;
+        }
+    #EN_dec_crit {
+      width: 120px;
+    }
     .tab-pane {
       height: calc(100vh - 120px) !important;
     }
@@ -63,8 +69,8 @@ ui = fluidPage(
     }
     .shiny-notification {
        position: fixed;
-       top: 1%;
-       left: 25%;
+       top: 45%;
+       left: 45%;
     }
     .btn-default:hover {
        background-color: #2c3e50;
