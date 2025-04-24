@@ -50,19 +50,11 @@ xgb_pso = function(pso_data,
           }
         }
 
-        # Split data
-        # train_idx = createDataPartition(pso_data[,1], p = train_prop, list = FALSE)
-        # train_data = pso_data[train_idx, ]
-        # test_data = pso_data[-train_idx, ]
-
         # Prepare data matrices for XGBoost
         X_train = as.matrix(pso_data[,-1])
         y_train = pso_data[,1]
-        # X_test = as.matrix(test_data[,-1])
-        # y_test = test_data[,1]
 
         data = xgb.DMatrix(data = X_train, label = y_train)
-        # dtest = xgb.DMatrix(data = X_test, label = y_test)
 
         num_cols = ncol(pso_data)-1
         num_rows = nrow(pso_data)

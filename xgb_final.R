@@ -1,14 +1,8 @@
-xgb_final = function(xgb_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,loggy,randomize,xgb_standardize,
-                     xgb_tree_method,xgb_booster,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
+xgb_final = function(data,seed,lc_lowval,lc_upval,rc_lowval,rc_upval,loggy,randomize,xgb_standardize,
+                     xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
                      min_child_weight,subsamp,colsamp,nrounds) {
   
   set.seed(seed)
-  
-  data = cbind(xgb_data[,resvar],xgb_data[,coves_to_use])
-  
-  if(xgb_booster == "-") {
-    xgb_booster = "gbtree"
-  }
   
   if (xgb_standardize==TRUE) {
     
@@ -57,10 +51,10 @@ xgb_final = function(xgb_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_low
     
     params = list(
       booster = xgb_booster,
-      rate_drop = drop_rate,
+      rate_drop = rate_drop,
       skip_drop = skip_drop,
-      dart_sample_type = dart_sample_type,
-      dart_normalize_type = dart_normalize_type,
+      sample_type = sample_type,
+      normalize_type = normalize_type,
       tree_method = xgb_tree_method,
       eta = eta,
       gamma = gamma,
@@ -83,5 +77,17 @@ xgb_final = function(xgb_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_low
   }
   
   xgb_final_model = xgboost(data = as.matrix(data[,-1]),label=data[,1], params=params, early_stopping_rounds=25, nrounds=nrounds, verbose=0)
+  xgb_fits = data.frame(predict(xgb_final_model, newdata=as.matrix(data[,-1])))
+  colnames(xgb_fits) = "Fitted_Values"
   
+  if (ncol(data) > 2) {
+    shap_values = shap.values(xgb_model = xgb_final_model, X_train = as.matrix(data[,-1]))
+    mean_shaps = round(shap_values$mean_shap_score,4)
+    shap_names = names(mean_shaps)
+    shap = cbind(shap_names,mean_shaps)
+  } else {
+    shap = data.frame("Feature" = colnames(data)[[2]], "Mean_SHAP" = 0)
+  }
+  
+  return(list(xgb_final_model,xgb_fits,shap))
 }

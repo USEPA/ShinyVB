@@ -17,7 +17,7 @@ scatter_confuse = function(scat_dat,reg_stand,dec_crit) {
     geom_smooth(method="lm", se=FALSE, color="black", aes(group=1)) +
     geom_vline(xintercept = reg_stand, color = "blue") + 
     geom_hline(yintercept = dec_crit, linetype = "dashed", color = "darkgreen") +
-    geom_text(aes(label = lab), parse=T, x = 1.3*min(scat_dat[,2]), y = 0.92*max(scat_dat[,3])) +
+    geom_text(aes(label = lab), parse=T, x = 0.77*mean(scat_dat[,2]), y = 0.97*max(scat_dat[,3])) +
     labs(x =x_name, y = y_name) +
     theme_bw() +
     theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1))

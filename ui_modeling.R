@@ -97,22 +97,22 @@ ModelingPanel = sidebarLayout(
         title = "Elastic Net",
         content = card(
           fluidRow(
-            column(12,actionButton("elastic", "Run EN", style = 'width:100px; padding:4px;'))))) %>%
+            column(12,actionButton("elastic_pred", "Predictions with EN", style = 'width:180px; padding:4px;'))),
+          fluidRow(
+            column(12,actionButton("elastic_fit", "Fit Data with EN", style = 'width:180px; padding:4px;'))))) %>%
       
       bs_append (
         title = "XGBoost", content= card(
           fluidRow(class="shortrow",
-            column(12,div(style = 'height:15px;',checkboxInput("xgb_standardize", "Standardize Features", TRUE)))),
+            column(6,div(style = 'height:15px;',checkboxInput("xgb_standardize", "Stnrdz Features", FALSE))),
+            column(6,actionButton("xgb_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px; vertical-align: -12px;'))),
           fluidRow(class="shortrow",column(12,div(style="height:15px;",tags$hr(style = "border-color: #2c3e50;")))),
           fluidRow(
-            column(12,div(style = "display: inline-block;",actionButton("xgb_params", "Hyperparameters", style = 'background-color:#eee; width:140px; padding:2px; margin-right:20px; vertical-align: -5px;')),
-                 div(style = "display: inline-block;",numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05)))),
-          fluidRow(
-            column(7,align="left",actionButton("run_xgb_select", "Feature Selection", style = 'width:130px; padding:2px;')),
-            column(5,align="right",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
-          fluidRow(class="shortrow",column(12,tags$hr(style = "border-color: #2c3e50;"))),
-          fluidRow(
-            column(12,align="left",actionButton("xgb_HP_and_errors", "HP Tuning and Prediction Errors", style = 'background-color:#eee; width:220px; padding:2px;'))),
+            column(6,align="left",actionButton("run_xgb_select", "Feature Selection", style = 'width:130px; padding:2px; vertical-align: -40px')),
+            column(6, div(style = "display: inline-block;",numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05)))),
+          # fluidRow(column(12,align="right",actionButton("xgb_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
+          fluidRow(class="shortrow",column(12,div(style="height:15px;",tags$hr(style = "border-color: #2c3e50;")))),
+          fluidRow(column(12,align="left",actionButton("xgb_HP_and_errors", "HP Tuning and Prediction Errors", style = 'background-color:#eee; width:220px; padding:2px;'))),
           fluidRow(class="shortrow",column(12,div(style="height:15px;", tags$hr(style = "border-color: #2c3e50;")))),
           fluidRow(
             column(12,align="left",actionButton("xgb_final_fitting", "Final Fitting", style = 'background-color:#eee; width:130px; padding:2px;')))),
@@ -124,7 +124,22 @@ ModelingPanel = sidebarLayout(
     width = 9,
     id = "modeling_output",
     tabsetPanel(id = "modeling_tabs",
-      tabPanel("Elastic Net",
+      tabPanel("Logistic: Feat. Importance", "Logistic Regression Covariate Importance"),
+      tabPanel("Logistic: Performance", "Logistic Regression Performance"),
+      tabPanel("Elastic Net: Prediction",
+                         navset_pill_list(widths = c(2,10), well=F,
+                                          nav_panel("Results Table",DT::dataTableOutput('EN_preds'),
+                                                    tags$style(type = "text/css", "#ENpreds {height: calc(100vh - 70px) !important;}")),
+                                          nav_panel("Coefficients",fluidRow(column(4,DT::dataTableOutput('EN_pred_coeffs'))),
+                                                    tags$style(type = "text/css", "#ENpredcoeffs {height: calc(100vh - 70px) !important;}")),
+                                          nav_panel("Scatterplot", fluidRow(column(2,numericInput("EN_pred_stand", label = "Standard", value = 3, min = 0, max=5, step=0.01)),
+                                                                            column(2,numericInput("EN_pred_dc", label = "Decision Criterion", value = 3, min = 0, max=5, step=0.01))),
+                                                    plotlyOutput("EN_pred_scatplot", height="700px",width="100%"),
+                                                    fluidRow(column(7,DT::dataTableOutput('EN_pred_confuse'))),
+                                                    uiOutput("EN_pred_confuse_text")),
+                                          nav_panel("Lineplot", plotlyOutput("EN_pred_lineplot", height="700px",width="100%")),
+                                          nav_panel("Residual Scatter", plotlyOutput("EN_pred_resid_scatter", height="800px",width="100%")))),
+      tabPanel("Elastic Net: Fitting",
                navset_pill_list(widths = c(2,10), well=F,
                     nav_panel("Results Table",DT::dataTableOutput('EN_fits'),
                               tags$style(type = "text/css", "#ENfits {height: calc(100vh - 70px) !important;}")),
@@ -136,30 +151,33 @@ ModelingPanel = sidebarLayout(
                               fluidRow(column(7,DT::dataTableOutput('EN_confuse'))),
                               uiOutput("EN_confuse_text")),
                     nav_panel("Lineplot", plotlyOutput("EN_lineplot", height="700px",width="100%")),
-                    nav_panel("Residual Scatterplot", plotlyOutput("EN_resid_scatplot", height="800px",width="100%")))),
-      tabPanel("Logistic: Feat. Importance", "Logistic Regression Covariate Importance"),
-      tabPanel("Logistic: Performance", "Logistic Regression Performance"),
+                    nav_panel("Residual Scatter", plotlyOutput("EN_resid_scatplot", height="800px",width="100%")))),
       tabPanel("XGB: Feature Selection",fluidRow(column(9,DT::dataTableOutput('xgb_select'))),
                tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
       tabPanel("XGB: HP and Errors",
                navset_pill_list(widths = c(2,10), well=F,
                     nav_panel("Results Table",DT::dataTableOutput('xgb_predictions'),
                               tags$style(type = "text/css", "#xgb_preds {height: calc(100vh - 70px) !important;}")),
-                    nav_panel("Scatterplot", plotlyOutput("xgb_pred_scatplot", height="800px",width="100%")),
+                    nav_panel("Scatterplot", fluidRow(column(2,numericInput("xgb_pred_stand", label = "Standard", value = 3, min = 0, max=5, step=0.01)),
+                                      column(2,numericInput("xgb_pred_dc", label = "Decision Criterion", value = 3, min = 0, max=5, step=0.01))),
+                              plotlyOutput("xgb_pred_scatplot", height="800px",width="80%"),
+                              fluidRow(column(7,DT::dataTableOutput('xgb_pred_confuse'))),
+                              uiOutput("xgb_pred_confuse_text")),
                     nav_panel("Lineplot", plotlyOutput("xgb_pred_lineplot", height="700px",width="100%")),
-                    nav_panel("Residual Scatterplot", plotlyOutput("xgb_pred_resid_scatplot", height="800px",width="100%")))
+                    nav_panel("Residual Scatter", plotlyOutput("xgb_pred_resid_scatplot", height="800px",width="100%")))
       ),
       tabPanel("XGB: Final Fitting",
                navset_pill_list(widths = c(2,10), well=F,
                     nav_panel("Results Table",DT::dataTableOutput('xgb_fits'),
-                            tags$style(type = "text/css", "#xgbfits {height: calc(100vh - 70px) !important;}")),
+                        tags$style(type = "text/css", "#xgb_preds {height: calc(100vh - 70px) !important;}")),
+                    nav_panel("SHAP Values", fluidRow(column(4,DT::dataTableOutput('xgb_shapes')))),
                     nav_panel("Scatterplot", fluidRow(column(2,numericInput("xgb_stand", label = "Standard", value = 3, min = 0, max=5, step=0.01)),
                                                       column(2,numericInput("xgb_dec_crit", label = "Decision Criterion", value = 3, min = 0, max=5, step=0.01))),
                               plotlyOutput("xgb_scatplot", height="800px",width="100%"),
                               fluidRow(column(7,DT::dataTableOutput('xgb_confuse'))),
                               uiOutput("xgb_confuse_text")),
                     nav_panel("Lineplot", plotlyOutput("xgb_lineplot", height="700px",width="100%")),
-                    nav_panel("Residual Scatterplot", plotlyOutput("xgb_resid_scatplot", height="800px",width="100%")))),
+                    nav_panel("Residual Scatter", plotlyOutput("xgb_resid_scatplot", height="800px",width="100%")))),
     )
   )
 )

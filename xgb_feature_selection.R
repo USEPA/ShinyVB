@@ -1,5 +1,5 @@
 xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
-                      xgb_standardize,xgb_tree_method,xgb_booster,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,
+                      xgb_standardize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
                       max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db) {
   
   set.seed(as.integer(seed))
@@ -47,10 +47,10 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
     
     params = list(
       booster = xgb_booster,
-      rate_drop = drop_rate,
+      rate_drop = rate_drop,
       skip_drop = skip_drop,
-      dart_sample_type = dart_sample_type,
-      dart_normalize_type = dart_normalize_type,
+      sample_type = sample_type,
+      normalize_type = normalize_type,
       tree_method = xgb_tree_method,
       eta = eta,
       gamma = gamma,

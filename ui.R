@@ -39,10 +39,16 @@ ui = fluidPage(
     #MC_runs {
       width: 90px;
     }
-    #EN_reg_stand {
+    #EN_stand {
       width: 120px;
         }
     #EN_dec_crit {
+      width: 120px;
+    }
+    #xgb_stand {
+      width: 120px;
+        }
+    #xgb_dec_crit {
       width: 120px;
     }
     .tab-pane {
