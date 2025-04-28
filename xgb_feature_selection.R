@@ -202,14 +202,14 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
         
         # fill out sub-iteration results
         
-        Iteration_results[i,1] = i
+        Iteration_results[i,1] = as.numeric(i)
         Iteration_results[i,2] = loser_gain_name
-        Iteration_results[i,3] = lowest_gain
+        Iteration_results[i,3] = round(lowest_gain,5)
         Iteration_results[i,4] = loser_shap_name
-        Iteration_results[i,5] = lowest_shap
-        Iteration_results[i,6] = RMSE_mean_train
-        Iteration_results[i,7] = RMSE_mean_test
-        Iteration_results[i,8] =test_weight*RMSE_mean_test+(1-test_weight)*RMSE_mean_train
+        Iteration_results[i,5] = round(lowest_shap,5)
+        Iteration_results[i,6] = round(RMSE_mean_train,4)
+        Iteration_results[i,7] = round(RMSE_mean_test,4)
+        Iteration_results[i,8] = round(test_weight*RMSE_mean_test+(1-test_weight)*RMSE_mean_train,4)
         
         # Drop lowest SHAP or Gain
         

@@ -15,9 +15,10 @@ ui = fluidPage(
     #send_plot+ div>.selectize-input{width: 100px !important;padding: 3px;}
     #scatterx+ div>.selectize-dropdown{width: 175px !important;}
     #scatterx+ div>.selectize-input{width: 130px !important;padding: 3px;}
+    #xgb_hyper_metric+ div>.select-dropdown{width: 100px !important;}
+    #xgb_hyper_metric+ div>.select-dropdown-content{height: 200px !important;}
     #scattery+ div>.selectize-dropdown{width: 175px !important;}
-    #scattery+ div>.selectize-input{width: 130px !important;padding: 3px;}
-                            '))),
+    #scattery+ div>.selectize-input{width: 130px !important;padding: 3px;}'))),
   
   tags$style(HTML("
   
@@ -58,6 +59,10 @@ ui = fluidPage(
     width: 70px;
     }
     #data_seed {
+    width: 100px;
+    height: 35px;
+    }
+    #model_seed {
     width: 100px;
     height: 35px;
     }

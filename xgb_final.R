@@ -1,6 +1,23 @@
-xgb_final = function(data,seed,lc_lowval,lc_upval,rc_lowval,rc_upval,loggy,randomize,xgb_standardize,
-                     xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
-                     min_child_weight,subsamp,colsamp,nrounds) {
+xgb_final = function(data,seed,
+                     lc_lowval,
+                     lc_upval,
+                     rc_lowval,
+                     rc_upval,
+                     loggy,
+                     randomize,
+                     xgb_standardize,
+                     xgb_tree_method,
+                     xgb_booster,
+                     normalize_type,
+                     sample_type,rate_drop,
+                     skip_drop,
+                     eta,
+                     gamma,
+                     max_depth,
+                     min_child_weight,
+                     subsamp,
+                     colsamp,
+                     nrounds) {
   
   set.seed(seed)
   

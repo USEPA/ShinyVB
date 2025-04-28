@@ -11,21 +11,19 @@ xgb_pso = function(pso_data,
                    max_iter,
                    swarm_size,
                    member_exp,
-                   ss_exp,
-                   tot_folds,
-                   fold_num) {
+                   ss_exp) {
   
   pso_results = matrix(NA, nrow = MC_runs, ncol = 7)
 
   withProgress(
-    message = 'HP Tuning/Error Estimation Progress',
-    detail = paste("MC runs:", x = MC_runs,"; Fold:",y = fold_num),
-    value = (1-1/tot_folds) - (1/tot_folds)*(tot_folds-fold_num),
+    message = 'HP Tuning Progress',
+    detail = paste("MC runs:", x = MC_runs),
+    value = 0,
     {
 
       for (i in 1:MC_runs) {
         
-        incProgress(1/(MC_runs*tot_folds), detail = paste("MC run:",i,"/",MC_runs,"; Fold:",fold_num,"/",tot_folds))
+        incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
 
         # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
         if (loggy == TRUE) {
@@ -99,20 +97,20 @@ xgb_pso = function(pso_data,
 
         # Define parameter bounds for PSO
         param_bounds = matrix(
-          c(2L, #lower max_depth
-            floor(0.33*num_cols), #upper max_depth
-            0.1, #lower eta
+          c(1, #lower max_depth
+            5, #upper max_depth
+            0.01, #lower eta
             0.3, #upper eta
             0.5, #lower subsample proportion
             0.9, #upper subsample proportion
             0.5, #lower colsamp_bytree
             0.9, #upper colsamp_bytree
-            2L, #lower min_child_weight
-            floor(0.33*num_rows), #upper min_child_weight
-            0, #Lower gamma
-            5, #upper hamma
-            50L, #lower nrounds
-            1000L), #upper nrounds
+            3, #lower min_child_weight
+            10, #upper min_child_weight
+            1, #Lower gamma
+            10, #upper gamma
+            floor(0.33*num_rows), #lower nrounds
+            3*num_rows), #upper nrounds
           ncol = 2,
           byrow = TRUE
         )
