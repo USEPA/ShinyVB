@@ -46,6 +46,9 @@ ui = fluidPage(
     #EN_dec_crit {
       width: 120px;
     }
+    #LG_pred_dc {
+      width: 120px;
+    }
     #xgb_stand {
       width: 120px;
         }

@@ -16,6 +16,8 @@ library(gghalves)
 library(ggplot2)
 library(ggpmisc)
 library(ggtext)
+library(glmnet)
+library(glmnetUtils)
 library(grid)
 library(gridExtra)
 library(hash)
@@ -30,6 +32,7 @@ library(lubridate)
 library(magrittr)
 library(Metrics)
 library(Nmisc)
+library(openxlsx)
 library(permimp)
 library(pdp)
 library(plotly)
@@ -123,6 +126,8 @@ server= function(input,output,session) {
   running = reactiveVal(FALSE)
   
   init_data = data.frame()
+  LG_scat_dat = data.frame()
+  LG_pred_scat_dat = data.frame()
   EN_scat_dat = data.frame()
   EN_pred_scat_dat = data.frame()
   xgb_scat_dat = data.frame()
@@ -133,6 +138,7 @@ server= function(input,output,session) {
   Optimal_HP = data.frame(max_depth = 2,eta = 0.05,subsample = 0.8,colsample_bytree = 0.8,min_child_weight = 3,gamma = 1,nrounds = 100)
   xgb_final_model = NULL
   EN_model = NULL
+  LG_model = NULL
   date_format_string = "Other"
   init_feat_props = hash()
   feat_props = hash()
@@ -207,7 +213,13 @@ server= function(input,output,session) {
   
   observeEvent(input$file1, ignoreInit = T, {
     
-    init_data <<- read.csv(input$file1$datapath,header = TRUE,sep = input$sep)
+    ext = tools::file_ext(input$file1$name)
+    
+    if (ext == "xlsx") {
+      init_data <<- read.xlsx(input$file1$datapath)
+    } else {
+      init_data <<- read.csv(input$file1$datapath,header = TRUE,sep = input$sep)
+    }
     
     if (any(duplicated(init_data[,1]))) {
       showModal(modalDialog(paste("The ID column (column 1) is required to have unique values. Please ensure this prior to data importation."),
@@ -497,11 +509,297 @@ server= function(input,output,session) {
       
       updateCheckboxGroupInput(session,"coves_to_use",choices=covar_names,selected=covar_names,inline=T)
       
+      updateNumericInput(session, "binarize_crit_value",value = round(mean(current_data()[,response_var()]),2),)
+      
       cove_names(covar_names)
       
     } else {
       return()
     }
+  })
+  
+  observeEvent(input$LG_pred_dc, {
+    
+    if (nrow(LG_pred_scat_dat) != 0) {
+      
+      output$LG_pred_scatplot = renderPlot(ggplot(LG_pred_scat_dat, aes(x=LG_pred_scat_dat[,3], fill=as.factor(LG_pred_scat_dat[,2]))) +
+                    geom_density(alpha = 0.6, color = "black", size = 0.5) +
+                    scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                    geom_vline(xintercept = input$LG_pred_dc, linetype = "dashed", color = "darkgreen") +
+                    labs(x = "Predicted Probability", y = "Density", fill="OBS") +
+                    theme_bw() +
+                    theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                    theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                    theme(legend.position = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+      
+      confuse_results = confuse(LG_pred_scat_dat[,2:3],0.5,input$LG_pred_dc)
+      confuse_table = matrix(0,nrow=1,ncol=4)
+      
+      confuse_table[1,1] = confuse_results$TP
+      confuse_table[1,2] = confuse_results$TN
+      confuse_table[1,3] = confuse_results$FP
+      confuse_table[1,4] = confuse_results$FN
+      
+      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
+      
+      output$LG_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
+                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
+                      options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                      columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) 
+                      {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      output$LG_pred_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
+                      round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
+      
+    }
+  })
+  
+  observeEvent(input$run_pred_lg, {
+    
+    set.seed(input$model_seed)
+    
+    data0 = current_data()
+    rv=response_var()
+    
+    crit_value = input$binarize_crit_value
+    
+    if (input$binarize) {
+      new_Y = ifelse(test = data0[,rv] >= crit_value, yes = 1, no = 0)
+      data0[,rv] = new_Y
+    }
+    
+    if (is.null(ignored_rows)) {
+      data1 = data0
+    } else {
+      data1 = data0[-ignored_rows,]
+    }
+    
+    # REMOVE NA'S FROM RESPONSE VARIABLE
+    data1 = data1[!is.na(data1[,rv]),]
+    
+    var_list = c(1,rv,which(colnames(data1) %in% input$coves_to_use))
+    data2 = data1[,var_list]
+    colnames(data2) = c(colnames(data0)[1],"Response",input$coves_to_use)
+    
+    # RANDOMIZE DATA
+    if (input$randomize==TRUE) {
+      random_index = sample(1:nrow(data2), nrow(data2))
+      data2 = data2[random_index, ]
+    }
+    
+    data = data2[,-1]
+    
+    # if (any(is.na(data[,-1]))) {
+    # 
+    #   showModal(modalDialog(paste("Logistic Regression does not tolerate missing feature values. You can either Impute these
+    #             (on the Data tab) or Disable rows/columns with missing values."),footer = modalButton("Close")))
+    # 
+    # } else {
+      
+      #Create n folds
+      tot_folds = 5
+      folds = cut(seq(1, nrow(data)), breaks = tot_folds, labels = FALSE)
+      
+      fold_predictions = matrix(0, nrow = 0, ncol = 2)
+      fold_predictions = as.data.frame(fold_predictions)
+      
+      coeff_folds = matrix(0, nrow = ncol(data), ncol = tot_folds+1)
+      coeff_folds = as.data.frame(coeff_folds)
+      coeff_folds[,1] = c("(Intercept)",input$coves_to_use)
+      
+      #Perform cross validation
+      for (f in 1:tot_folds) {
+        
+        testIndices = which(folds == f, arr.ind = TRUE)
+        testData = data[testIndices, ]
+        trainData = data[-testIndices, ]
+        
+        temp_preds = matrix(0, nrow = nrow(testData), ncol = 2*input$MC_runs)
+        temp_preds = data.frame(temp_preds)
+        
+        temp_coeffs = matrix(0, nrow = ncol(data), ncol = input$MC_runs+1)
+        temp_coeffs = data.frame(temp_coeffs)
+        temp_coeffs[,1] = c("(Intercept)",input$coves_to_use)
+        
+        withProgress(
+          message = 'Logistic Estimation Progress',
+          detail = paste("MC runs:", x = input$MC_runs,"; Fold:",y = f),
+          value = (1-1/tot_folds) - (1/tot_folds)*(tot_folds-f),
+          {
+            
+            for (i in 1:input$MC_runs) {
+              
+              incProgress(1/(input$MC_runs*tot_folds), detail = paste("MC run:",i,"/",input$MC_runs,"; Fold:",f,"/",tot_folds))
+              
+              # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS in test data and train data
+              if (input$loggy == TRUE) {
+                
+                for (j in 1:nrow(trainData)) {
+                  if (trainData[j, 1] == "TNTC") {
+                    trainData[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
+                    ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                  
+                  if (trainData[j, 1] == "ND") {
+                    trainData[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
+                    ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                }
+                
+                for (j in 1:nrow(testData)) {
+                  if (testData[j, 1] == "TNTC") {
+                    testData[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
+                    ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                  
+                  if (testData[j, 1] == "ND") {
+                    testData[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
+                    ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                }
+              } else {
+                for (j in 1:nrow(trainData)) {
+                  if (trainData[j, 1] == "TNTC") {
+                    trainData[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
+                    ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                  
+                  if (trainData[j, 1] == "ND") {
+                    trainData[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
+                    ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                }
+                for (j in 1:nrow(testData)) {
+                  
+                  if (testData[j, 1] == "TNTC") {
+                    testData[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
+                    ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                  
+                  if (testData[j, 1] == "ND") {
+                    testData[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
+                    ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                }
+              }
+              
+              temp_preds[,2*i-1] = testData[,1]
+              
+              # Train the model
+              fit_mod = cva.glmnet(x=as.matrix(trainData[,-1]),y=trainData[,1],nfolds=8,family="binomial",na.action="na.omit",standardize=input$LG_standard,intercept=TRUE)
+              
+              get_model_params <- function(fit) {
+                alpha <- fit$alpha
+                lambdaMin <- sapply(fit$modlist, `[[`, "lambda.min")
+                lambdaSE <- sapply(fit$modlist, `[[`, "lambda.1se")
+                error <- sapply(fit$modlist, function(mod) {min(mod$cvm)})
+                best <- which.min(error)
+                data.frame(alpha = alpha[best], lambdaMin = lambdaMin[best],
+                           lambdaSE = lambdaSE[best], eror = error[best])
+              }
+              
+              alpha = get_model_params(fit_mod)$alpha
+              lambda = get_model_params(fit_mod)$lambdaMin
+              
+              model = glmnet(x=as.matrix(trainData[,-1]),trainData[,1],lambda=lambda, alpha=alpha, na.action="na.omit", family="binomial",
+                             standardize=input$LG_standard,intercept=TRUE)
+              
+              preds = predict(model, newx = as.matrix(testData[,-1]), type = "response")
+              
+              tmp_coeffs = coef(model, s = lambda, exact = TRUE)
+              coeffs = data.frame(name = tmp_coeffs@Dimnames[[1]][tmp_coeffs@i + 1], coefficient = round(tmp_coeffs@x,4))
+              
+              for (h in 1:nrow(coeffs)) {
+                if(temp_coeffs[h,1] %in% coeffs[,1]) {
+                  temp_coeffs[h,i+1] = coeffs[which(coeffs[,1] == temp_coeffs[h,1]),2]
+                } else {
+                  temp_coeffs[h,i+1] = 0
+                }
+              }
+              
+              temp_preds[,2*i] = round(preds,3)
+              
+            } #End the MC Runs
+            
+            coeff_folds[,f+1] = round(rowMeans(temp_coeffs[,-1]),5)
+            
+            even_columns = temp_preds[,seq(2, ncol(temp_preds), by = 2)]
+            odd_columns = temp_preds[,seq(1, ncol(temp_preds), by = 2)]
+            
+            obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
+            pred_mean_values = round(rowMeans(even_columns),3)
+            fold_preds = cbind(obs_mean_values,pred_mean_values)
+            
+            fold_predictions = rbind(fold_predictions,fold_preds)
+          })
+        
+      } #End the Fold runs
+      
+      prediction_results = data.frame(cbind(data2[,1],fold_predictions[,1],fold_predictions[,2],data[,-1]))
+      colnames(prediction_results) = c(colnames(data2)[1],colnames(data0)[rv],"Predictions",input$coves_to_use)
+      
+      prediction_results = prediction_results[order(prediction_results[,1]),]
+      
+      final_coeffs = data.frame(cbind(coeff_folds[,1],round(rowMeans(coeff_folds[,-1]),4)))
+      colnames(final_coeffs) = c("Feature","Coefficient")
+      
+      output$LG_preds = DT::renderDataTable(server = T, {data = datatable(prediction_results,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
+                  target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
+                  pageLength = 17,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                  JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      output$LG_pred_coeffs = DT::renderDataTable(server = T, {data = datatable(final_coeffs,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
+                       target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                       paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                       initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      LG_pred_scat_dat <<- prediction_results[,1:3]
+      
+      x_name = colnames(LG_pred_scat_dat)[[2]]
+      y_name = colnames(LG_pred_scat_dat)[[3]]
+      
+      output$LG_pred_scatplot = renderPlot(ggplot(LG_pred_scat_dat, aes(x=LG_pred_scat_dat[,3], fill=as.factor(LG_pred_scat_dat[,2]))) +
+        geom_density(alpha = 0.6, color = "black", size = 0.5) +
+        scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+        geom_vline(xintercept = input$LG_pred_dc, linetype = "dashed", color = "darkgreen") +
+        labs(x = "Predicted Probability", y = "Density", fill="OBS") +
+        theme_bw() +
+        theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+        theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+        theme(legend.position = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+      
+      # fig = ggplot(LG_pred_scat_dat, aes(x=LG_pred_scat_dat[,2], y=LG_pred_scat_dat[,3],text=paste("<b>ID:</b> ",LG_pred_scat_dat[,1],"<br><b>",y_name,":</b> ",
+      #   LG_pred_scat_dat[,3],"<br><b>",x_name,":</b> ",LG_pred_scat_dat[,2],sep=""))) +
+      #   geom_point(size=3, shape=21, color="black", fill="cadetblue", aes(group=1)) +
+      #   geom_hline(yintercept = input$LG_pred_dc, linetype = "dashed", color = "darkgreen") +
+      #   labs(x =x_name, y = y_name) +
+      #   theme_bw() +
+      #   theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1))
+      
+      # output$LG_pred_scatplot = renderPlotly(ggplotly(fig, tooltip = "text") %>%
+      #   layout(hoverlabel = list(bgcolor = "#eeeeee", font = list(size = 12, color = "black"))))
+      
+      confuse_results = confuse(LG_pred_scat_dat[,2:3],0.5,input$LG_pred_dc)
+      confuse_table = matrix(0,nrow=1,ncol=4)
+      
+      confuse_table[1,1] = confuse_results$TP
+      confuse_table[1,2] = confuse_results$TN
+      confuse_table[1,3] = confuse_results$FP
+      confuse_table[1,4] = confuse_results$FN
+      
+      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
+      
+      output$LG_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
+                  list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
+                  options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                  columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                  {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      output$LG_pred_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
+                        round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'LG: Predict')
   })
   
   observeEvent(input$run_xgb_select, {

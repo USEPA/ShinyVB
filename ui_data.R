@@ -10,8 +10,7 @@ DataPanel = sidebarLayout(
     fluidRow(column(12,radioButtons(inline=T,"sep","Separator",choices = c(Comma = ",",Semicolon = ";",Space = " ",Tab = "\t"),selected = ","))),
     
     div(fileInput("file1", "Select your data file", buttonLabel = "Browse",accept = c("text/csv",
-                  "text/comma-separated-values,text/plain",".csv")), style="font-size:80%; font-family:Arial; width: 350px;"),
-    
+                  "text/comma-separated-values,text/plain",".csv",".xlsx")), style="font-size:80%; font-family:Arial; width: 350px;"),
     fluidRow(
       column(5,disabled(actionButton("restore", "Restore Inputs", style='width: 120px; padding:8px; vertical-align: -30px;'))),
       column(7,disabled(inputPanel(selectInput("col_props",label = "Column Properties",selected ="-",choices = c("-")))))),
