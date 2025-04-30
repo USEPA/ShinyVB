@@ -124,7 +124,7 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
           train = temp_data[train_ind, ]
           test = temp_data[-train_ind, ]
           
-          temp_model = xgboost(data = as.matrix(train[,-1]), label=train[,1], params=params, early_stopping_rounds=early_stop, nrounds=nrounds, verbose=0)
+          temp_model = xgboost(data = as.matrix(train[,-1]), label=train[,1], params=params, early_stopping_rounds=20, nrounds=nrounds, verbose=0)
           
           fit_values = as.numeric(predict(temp_model,as.matrix(train[,-1])))
           RMSE_temp_train[j,1]= sqrt(mean((train[,1] - fit_values)^2))

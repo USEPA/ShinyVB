@@ -27,7 +27,7 @@ DataPanel = sidebarLayout(
       column(7,disabled(actionButton("corr_check", "Feature Correlations", style='width: 175px;')))),
     fluidRow(
       column(6,disabled(actionButton("run_iso_forest","Outliers: IsoForest", style='width: 150px; align: left; vertical-align: -38px;'))),
-      column(6,numericInput("iso_ndim", "IsoForest Dims", value=2, min=1,max=5,step=1))),
+      column(6,numericInput("iso_ndim", "IF Dimensions", value=2, min=1,max=5,step=1))),
     
     bs_accordion(id="plotting") %>%
       

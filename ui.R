@@ -38,45 +38,77 @@ ui = fluidPage(
       clear: left
     }
     #MC_runs {
-      width: 90px;
+      width: 100px;
+      height: 35px;
+    }
+    #num_folds {
+      width: 80px;
+      height: 35px;
+    }
+    #train_pct {
+      width: 80px;
+      height: 35px;
+    }
+    #data_seed {
+      width: 100px;
+      height: 35px;
+    }
+    #model_seed {
+      width: 100px;
+      height: 35px;
     }
     #EN_stand {
       width: 120px;
+      height: 35px;
         }
     #EN_dec_crit {
       width: 120px;
+      height: 35px;
     }
     #LG_pred_dc {
       width: 120px;
+      height: 35px;
+    }
+    #LG_fit_dc {
+      width: 120px;
+      height: 35px;
     }
     #xgb_stand {
       width: 120px;
+      height: 35px;
         }
     #xgb_dec_crit {
       width: 120px;
+      height: 35px;
     }
     .tab-pane {
       height: calc(100vh - 120px) !important;
     }
     #iso_ndim {
-    width: 70px;
+      width: 70px;
     }
-    #data_seed {
-    width: 100px;
-    height: 35px;
+    #lc_lowval {
+      height: 35px;
     }
-    #model_seed {
-    width: 100px;
-    height: 35px;
+    #lc_upval {
+      height: 35px;
     }
-    #max_lars_steps {
-      width: 100px;
+    #rc_lowval {
+      height: 35px;
+    }
+    #rc_upval {
+      height: 35px;
+    }
+    #lc_lowval {
+      height: 35px;
     }
     #test_weight {
       width: 100px;
+      height: 35px;
     }
     #logist_train_pct {
       width: 100px;
+      height: 35px;
     }
     .bslib-card .card-body {
        overflow:hidden;
@@ -94,7 +126,6 @@ ui = fluidPage(
       background-color: #cccccc;
       color: #18bc9c;
     }
-    
     .panel-body {
       background-color: #ecf0f1;
     }

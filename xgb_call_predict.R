@@ -10,6 +10,7 @@ xgb_call_predict = function(current_data,
                        rc_upval,
                        train_prop,
                        MC_runs,
+                       nfolds,
                        loggy,
                        randomize,
                        standardize,
@@ -63,7 +64,7 @@ xgb_call_predict = function(current_data,
   colnames(dataset)[2] = colnames(current_data)[resvar]
   
   #Create n folds
-  tot_folds = 5
+  tot_folds = nfolds
   folds = cut(seq(1, nrow(dataset)), breaks = tot_folds, labels = FALSE)
   
   prediction_results = matrix(0, nrow = 0, ncol = length(coves_to_use) + 3)

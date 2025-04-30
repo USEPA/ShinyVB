@@ -93,7 +93,7 @@ xgb_final = function(data,seed,
     )
   }
   
-  xgb_final_model = xgboost(data = as.matrix(data[,-1]),label=data[,1], params=params, early_stopping_rounds=25, nrounds=nrounds, verbose=0)
+  xgb_final_model = xgboost(data = as.matrix(data[,-1]),label=data[,1], params=params, early_stopping_rounds=20, nrounds=nrounds, verbose=0)
   xgb_fits = data.frame(predict(xgb_final_model, newdata=as.matrix(data[,-1])))
   colnames(xgb_fits) = "Fitted_Values"
   
