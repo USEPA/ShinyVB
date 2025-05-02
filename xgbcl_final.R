@@ -4,7 +4,6 @@ xgb_final = function(data,
                      lc_upval,
                      rc_lowval,
                      rc_upval,
-                     MC_runs,
                      loggy,
                      randomize,
                      xgb_standardize,
@@ -20,15 +19,16 @@ xgb_final = function(data,
                      min_child_weight,
                      subsamp,
                      colsamp,
-                     nrounds) {
+                     nrounds,
+                     crit_value) {
   
   set.seed(seed)
   
-  if (xgb_standardize==TRUE) {
+  if (xgb_standardize) {
     
     for (i in 1:nrow(data)) {
       for (j in 2:ncol(data)) {
-        if (is.numeric(data[i,j])==TRUE) {
+        if (is.numeric(data[i,j])) {
           
           range = (max(na.omit(data[,j])) - min(na.omit(data[,j])))
           
@@ -42,19 +42,18 @@ xgb_final = function(data,
     }
   }
   
-  
-  
-  
   # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
-  if (loggy==TRUE) {
+  if (loggy) {
     
     for (j in 1:nrow(data)){
       if (data[j,1]=="TNTC") {
         data[j,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
+        ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
       }
       
       if (data[j,1]=="ND") {
         data[j,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
+        ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
       }
     }
   } else {
@@ -62,10 +61,12 @@ xgb_final = function(data,
     for (j in 1:nrow(data)){
       if (data[j,1]=="TNTC") {
         data[j,1]=(runif(1, min = rc_lowval, max = rc_upval))
+        ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
       }
       
       if (data[j,1]=="ND") {
         data[j,1]=(runif(1, min = lc_lowval, max = lc_upval))
+        ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
       }
     }
   }
@@ -73,6 +74,7 @@ xgb_final = function(data,
   if (xgb_booster == "dart") {
     
     params = list(
+      objective = "binary:logistic",
       booster = xgb_booster,
       rate_drop = rate_drop,
       skip_drop = skip_drop,
@@ -88,6 +90,7 @@ xgb_final = function(data,
     )
   } else {
     params = list(
+      objective = "binary:logistic",
       booster = xgb_booster,
       tree_method = xgb_tree_method,
       eta = eta,
@@ -99,8 +102,8 @@ xgb_final = function(data,
     )
   }
   
-  xgb_final_model = xgboost(data = as.matrix(data[,-1]),label=data[,1], params=params, early_stopping_rounds=20, nrounds=nrounds, verbose=0)
-  xgb_fits = data.frame(predict(xgb_final_model, newdata=as.matrix(data[,-1])))
+  xgbcl_final_model = xgboost(data = as.matrix(data[,-1]),label=data[,1], params=params, early_stopping_rounds=20, nrounds=nrounds, verbose=0)
+  xgbcl_fits = data.frame(predict(xgb_final_model, newdata=as.matrix(data[,-1])))
   colnames(xgb_fits) = "Fitted_Values"
   
   if (ncol(data) > 2) {

@@ -73,11 +73,19 @@ ui = fluidPage(
       width: 120px;
       height: 35px;
     }
-    #xgb_stand {
+    #XGB_stand {
       width: 120px;
       height: 35px;
         }
-    #xgb_dec_crit {
+    #XGB_dec_crit {
+      width: 120px;
+      height: 35px;
+    }
+    #XGBCL_pred_dc {
+      width: 120px;
+      height: 35px;
+    }
+    #XGBCL_dec_crit{
       width: 120px;
       height: 35px;
     }

@@ -1,4 +1,4 @@
-xgb_call_predict = function(current_data,
+xgbcl_call_predict = function(current_data,
                        resvar,
                        id_var,
                        seed,
@@ -14,22 +14,37 @@ xgb_call_predict = function(current_data,
                        loggy,
                        randomize,
                        standardize,
+                       xgbcl_tree_method,
+                       xgbcl_booster,
+                       dartcl_normalize_type,
+                       dartcl_sample_type,
+                       ratecl_drop,
+                       skipcl_drop,
                        eta,
                        gamma,
                        max_depth,
                        min_child_weight,
                        subsamp,
                        colsamp,
-                       nrounds) {
+                       nrounds,
+                       binarize,
+                       crit_value) {
   
   set.seed(seed)
   
+  data = current_data
+  
   if (is.null(ignored_rows)) {
-    data = current_data
+    data = data
   } else {
-    data = current_data[-ignored_rows,]
+    data = data[-ignored_rows,]
   }
   
+  if (binarize) {
+    new_Y = ifelse(test = data[,resvar] >= crit_value, yes = 1, no = 0)
+    data[,resvar] = new_Y
+  }
+
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data = data[!is.na(data[, resvar]), ]
   
@@ -81,7 +96,7 @@ xgb_call_predict = function(current_data,
     testData = dataset[testIndices, ]
     trainData = dataset[-testIndices, ]
     
-    prediction_fold_result = xgb_pred_fold_errors(
+    prediction_fold_result = xgbcl_pred_fold_errors(
       trainData,
       testData,
       resvar,
@@ -95,13 +110,21 @@ xgb_call_predict = function(current_data,
       loggy,
       tot_folds,
       fold_num,
+      xgbcl_tree_method,
+      xgbcl_booster,
+      dartcl_normalize_type,
+      dartcl_sample_type,
+      ratecl_drop,
+      skipcl_drop,
       eta,
       gamma,
       max_depth,
       min_child_weight,
       subsamp,
       colsamp,
-      nrounds
+      nrounds,
+      binarize,
+      crit_value
     )
     
     prediction_results1 = cbind(testData[,1],prediction_fold_result[[1]],testData[,3:ncol(testData)])
@@ -112,7 +135,7 @@ xgb_call_predict = function(current_data,
   
   prediction_results[,3] = round(prediction_results[,3],3)
   prediction_results = prediction_results[order(prediction_results[,1]),]
-  colnames(prediction_results) = c(colnames(current_data)[1],colnames(current_data)[resvar], "Prediction", coves_to_use)
+  colnames(prediction_results) = c(colnames(current_data)[1],colnames(current_data)[resvar], "Predictive_Prob", coves_to_use)
   xgb_predictions = data.frame(prediction_results)
   
   pred_shapes = data.frame(cbind(pred_shapes[,1],format(round(rowMeans(pred_shapes[,-1]),4),scientific=F)))

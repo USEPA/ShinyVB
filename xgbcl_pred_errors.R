@@ -1,4 +1,4 @@
-xgb_pred_fold_errors = function(train_data,
+xgbcl_pred_fold_errors = function(train_data,
                                 test_data,
                                 resvar,
                                 coves_to_use,
@@ -11,13 +11,21 @@ xgb_pred_fold_errors = function(train_data,
                                 loggy,
                                 tot_folds,
                                 fold_num,
+                                xgbcl_tree_method,
+                                xgbcl_booster,
+                                dartcl_normalize_type,
+                                dartcl_sample_type,
+                                ratecl_drop,
+                                skipcl_drop,
                                 eta,
                                 gamma,
                                 max_depth,
                                 min_child_weight,
                                 subsamp,
                                 colsamp,
-                                nrounds) {
+                                nrounds,
+                                binarize,
+                                crit_value) {
   
   withProgress(
     message = 'HP Prediction Progress',
@@ -34,45 +42,55 @@ xgb_pred_fold_errors = function(train_data,
       
       
       for (i in 1:MC_runs) {
-
-        # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
+        
+        incProgress(1/(MC_runs*tot_folds), detail = paste("MC run: ",i,"/",MC_runs,"; Fold: ",fold_num,"/",tot_folds))
+        
+        # SUBSTITUTE random value FOR RESPONSE VARIABLE non-values and then binarize
         if (loggy == TRUE) {
           for (j in 1:nrow(train_data)) {
             if (train_data[j, 2] == "TNTC") {
               train_data[j, 2] = log10(runif(1, min = rc_lowval, max = rc_upval))
+              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
             
             if (train_data[j, 2] == "ND") {
               train_data[j, 2] = log10(runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
           }
           
           for (j in 1:nrow(test_data)) {
             if (test_data[j, 2] == "TNTC") {
               test_data[j, 2] = log10(runif(1, min = rc_lowval, max = rc_upval))
+              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
             
             if (test_data[j, 2] == "ND") {
               test_data[j, 2] = log10(runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
           }
         } else {
           for (j in 1:nrow(train_data)) {
             if (train_data[j, 2] == "TNTC") {
               train_data[j, 2] = (runif(1, min = rc_lowval, max = rc_upval))
+              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
             
             if (train_data[j, 2] == "ND") {
               train_data[j, 2] = (runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
           }
           for (j in 1:nrow(test_data)) {
             if (test_data[j, 2] == "TNTC") {
               test_data[j, 2] = (runif(1, min = rc_lowval, max = rc_upval))
+              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
             
             if (test_data[j, 2] == "ND") {
               test_data[j, 2] = (runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
           }
         }
@@ -88,17 +106,41 @@ xgb_pred_fold_errors = function(train_data,
         X_test = as.matrix(X_test0[,-1])
         y_test = test_data[,2]
         
-        params = list(
-          eta = eta,
-          gamma = gamma,
-          max_depth = max_depth,
-          min_child_weight = min_child_weight,
-          subsample = subsamp,
-          colsample_bytree = colsamp
-        )
+        # Set up XGBoost parameters
+        
+        if (xgbcl_booster == "dart") {
+          
+          params = list(
+            objective = "binary:logistic",
+            booster = xgbcl_booster,
+            rate_drop = ratecl_drop,
+            skip_drop = skipcl_drop,
+            sample_type = dartcl_sample_type,
+            normalize_type = dartcl_normalize_type,
+            tree_method = xgbcl_tree_method,
+            eta = eta,
+            gamma = gamma,
+            max_depth = max_depth,
+            min_child_weight = min_child_weight,
+            subsample = subsamp,
+            colsample_bytree = colsamp
+          )
+        } else {
+          params = list(
+            objective = "binary:logistic",
+            booster = xgbcl_booster,
+            tree_method = xgbcl_tree_method,
+            eta = eta,
+            gamma = gamma,
+            max_depth = max_depth,
+            min_child_weight = min_child_weight,
+            subsample = subsamp,
+            colsample_bytree = colsamp
+          )
+        }
         
         #train a model
-        model = xgboost(data = X_train,label=y_train, params=params, early_stopping_rounds=10, nrounds=nrounds, verbose=0)
+        model = xgboost(data = X_train,label=y_train, params=params, early_stopping_rounds=15, nrounds=nrounds, verbose=0)
         
         preds = predict(model, X_test)
         temp_preds[,2*i] = round(preds,3)
@@ -113,16 +155,13 @@ xgb_pred_fold_errors = function(train_data,
           temp_shapes[c,i+1] = as.numeric(shap_temp[shap_temp[,1] == current_cove,2])
         }
         
-        incProgress(1/(MC_runs*tot_folds), detail = paste("MC run: ",i,"/",MC_runs,"; Fold: ",fold_num,"/",tot_folds))
-        
       } #End the MC runs
-      
     })
   
   even_columns = temp_preds[,seq(2, ncol(temp_preds), by = 2)]
   odd_columns = temp_preds[,seq(1, ncol(temp_preds), by = 2)]
   
-  obs_mean_values = rowMeans(odd_columns)
+  obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
   pred_mean_values = rowMeans(even_columns)
   fold_preds = cbind(obs_mean_values,pred_mean_values)
   
