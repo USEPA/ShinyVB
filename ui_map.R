@@ -1,9 +1,9 @@
 MapPanel = sidebarLayout(
   sidebarPanel = sidebarPanel(id="mapsidepanel",width=3,tags$style(type = "text/css"), #, "#mapsidepanel {width: 350px !important;}"),
                               tags$h4("Beach Orientation Calculator"),
-                              tags$hr(style = "border-color: darkblue; width:300px !important;"),
+                              tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
                               htmlOutput("bo_text"),
-                              tags$hr(style = "border-color: darkblue;"),
+                              tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
                               fluidRow(
                                 column(4,tags$h4("Beach Orientation:")),
                                 column(8,div(style="width:60px;",verbatimTextOutput("beach_orient",placeholder = TRUE)))),

@@ -15,16 +15,19 @@ DataPanel = sidebarLayout(
       column(5,disabled(actionButton("restore", "Restore Inputs", style='width: 120px; padding:8px; vertical-align: -30px;'))),
       column(7,disabled(inputPanel(selectInput("col_props",label = "Column Properties",selected ="-",choices = c("-")))))),
     fluidRow(
-      column(6,numericInput("data_seed", "Random Seed", value=1234, min=1,max=1000000,step=1)),
-      column(6,radioButtons(inline=T,"select_choice","Table Selection",choices = c(Features="Features",Rows="Rows"),selected = "Features"))),
+      column(6,class="align-center", numericInput("data_seed", "Random Seed", value=1234, min=1,max=1000000,step=1)),
+      column(6,class="align-center", radioButtons(inline=T,"select_choice","Table Selection",choices = c(Features="Features",Rows="Rows"),selected = "Features"))),
     fluidRow(
       column(6,disabled(actionButton("ignore_rows", "Disable Selected Rows", style='padding: 6px;'))),
       column(6,disabled(actionButton("enable_rows", "Enable Selected Rows", style='padding: 6px;')))),
-    fluidRow(column(12,tags$hr(style = "border-color: #2c3e50;"))),
+    tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
+    fluidRow(h5(HTML("<i>Feature Processing</i>"),style="text-align:center")),
     fluidRow(
-      column(5,disabled(actionButton("impute_check", "Impute Features"))),
-      column(1),
-      column(7,disabled(actionButton("corr_check", "Feature Correlations", style='width: 175px;')))),
+      column(6,disabled(actionButton("corr_check", "Correlations", style='width: 110px;'))),
+      column(6,disabled(actionButton("impute_check", "Imputation", style='width: 110px;')))),
+      fluidRow(
+        column(6,disabled(actionButton("pca_check", "PCA", style='width: 110px; vertical-align: -38px;'))),
+        column(6,class="align-center", numericInput("num_axes", "# PCA Axes", value=2, min=1,max=20,step=1))),
     fluidRow(
       column(6,disabled(actionButton("run_iso_forest","Outliers: IsoForest", style='width: 150px; align: left; vertical-align: -38px;'))),
       column(6,numericInput("iso_ndim", "IF Dimensions", value=2, min=1,max=5,step=1))),
@@ -107,6 +110,10 @@ DataPanel = sidebarLayout(
                         tabsetPanel(id = "data_tabs",
                                     tabPanel("Data Table",DT::dataTableOutput('data'),
                                              tags$style(type = "text/css", "#userdatatable {height: calc(100vh - 70px) !important;}")),
+                                    tabPanel("PCA Results",
+                                             fluidRow(column(12,DT::dataTableOutput('PCA_coeffs')),
+                                                      column(12,DT::dataTableOutput('PCA_summary')))),
+                                    tabPanel("PCA Data Table",DT::dataTableOutput('PCAdata'),tags$style(type = "text/css", "#pcatables {height: calc(100vh - 70px) !important;}")),
                                     tabPanel("Outlier Metric",DT::dataTableOutput('iso_outliers'),
                                              tags$style(type = "text/css", "#iso_outliers {height: calc(100vh - 70px) !important;}")),
                                     tabPanel("Correlations",#actionButton("save_corrr", "Save Plot", style='width: 100px; padding:2px;'),

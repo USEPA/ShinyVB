@@ -11,7 +11,12 @@ ModelingPanel = sidebarLayout(
       inline = TRUE
     ),
     
-    tags$hr(style = "border-color: #2c3e50;"),
+    tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
+    
+    fluidRow(HTML('<div style="position: relative; top: 20px;">'),column(6, checkboxInput("pca_dat", "Use PCA Data", FALSE)),HTML("</div>"),
+             column(6, numericInput("num_axes_using", label = "# Axes to Use", value = 2, min = 1, max=20, step=1))),
+
+    tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
     
     bs_accordion(id = "Modeling") %>%
       
@@ -37,7 +42,7 @@ ModelingPanel = sidebarLayout(
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
-    tags$hr(style = "border-color: #2c3e50;"),
+    tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
     h5(HTML("<i>Binary Response Techniques</i>"),style="text-align:center"),
     
     bs_accordion(id = "Discreet_Techniques") %>%
@@ -50,8 +55,8 @@ ModelingPanel = sidebarLayout(
             fluidRow(column(12,checkboxInput("LG_standard", "Standardize Features", FALSE))),
             fluidRow(column(12,checkboxInput("LG_binarize", "Create Binary Response", TRUE))),
             fluidRow(column(5, numericInput("LG_binarize_crit_value", label = "Threshold", value = 2,step=0.25))),
-            fluidRow(column(12,actionButton("run_pred_LG", "Predictions", style = 'width:100px; padding:2px;'))),
-            fluidRow(column(12,actionButton("run_fitted_LG", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
+            fluidRow(column(6,actionButton("run_pred_LG", "Predictions", style = 'width:100px; padding:2px;')),
+                     column(6,actionButton("run_fitted_LG", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
       
       bs_append (
         title = "XGB Classifier",
@@ -62,24 +67,30 @@ ModelingPanel = sidebarLayout(
           fluidRow(column(12,actionButton("XGBCL_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px; vertical-align: -12px;'))),
           fluidRow(class="shortrow",column(12,div(style="height:15px;",tags$hr(style = "border-color: #2c3e50;")))),
           fluidRow(column(12,actionButton("XGBCL_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
-          fluidRow(column(12,actionButton("run_pred_XGBCL", "Predictions", style = 'width:100px; padding:2px;'))),
-          fluidRow(column(12,actionButton("run_fit_XGBCL", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
+          fluidRow(column(6,actionButton("run_pred_XGBCL", "Predictions", style = 'width:100px; padding:2px;')),
+                  column(6,actionButton("run_fit_XGBCL", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
-    tags$hr(style = "border-color: #2c3e50;"),
+    tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
     h5(HTML("<i>Continuous Response Techniques</i>"),style="text-align:center"),
     
     bs_accordion(id = "Continuous_Techniques") %>%
       
       bs_set_opts(panel_type = "primary") %>%
       
+      # bs_append (
+      #   title = "PCR", content= card(
+      #     fluidRow(column(12, div(style = "display: inline-block;",numericInput("pcr_prop", label = "Variance Threshold", value = 0.8, min = 0, max=1, step=0.025)))),
+      #     fluidRow(column(12,actionButton("run_PCR_predict", "Predictions", style = 'width:100px; padding:2px;'))),
+      #     fluidRow(column(12,align="left",actionButton("PCR_final_fitting", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
+      
       bs_append (
         title = "Elastic Net",
         content = card(
           fluidRow(column(12,checkboxInput("EN_standard", "Standardize Features", FALSE))),
-          fluidRow(column(12,actionButton("EN_pred", "Predictions", style = 'width:100px; padding:4px;'))),
-          fluidRow(column(12,actionButton("EN_fit", "Fitting", style = 'width:100px; padding:4px;'))))) %>%
+          fluidRow(column(6,actionButton("EN_pred", "Predictions", style = 'width:100px; padding:4px;')),
+                  column(6,actionButton("EN_fit", "Fitting", style = 'width:100px; padding:4px;'))))) %>%
       
       bs_append (
         title = "XGBoost", content= card(
@@ -92,8 +103,8 @@ ModelingPanel = sidebarLayout(
           # fluidRow(column(12,align="right",actionButton("XGB_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(class="shortrow",column(12,div(style="height:15px;",tags$hr(style = "border-color: #2c3e50;")))),
           fluidRow(column(12,actionButton("XGB_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
-          fluidRow(column(12,actionButton("run_XGB_predict", "Predictions", style = 'width:100px; padding:2px;'))),
-          fluidRow(column(12,align="left",actionButton("XGB_final_fitting", "Fitting", style = 'width:100px; padding:2px;')))),
+          fluidRow(column(6,actionButton("run_XGB_predict", "Predictions", style = 'width:100px; padding:2px;')),
+                  column(6,align="left",actionButton("XGB_final_fitting", "Fitting", style = 'width:100px; padding:2px;')))),
         tags$head(tags$style(".shortrow{height:15px;}"))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c())),
@@ -148,6 +159,36 @@ ModelingPanel = sidebarLayout(
                                                     fluidRow(column(2,numericInput("XGBCL_dec_crit", label = "Decision Criterion", value = 0.5, min = 0, max=1, step=0.01))),
                                                     fluidRow(column(7,DT::dataTableOutput('XGBCL_confuse'))),
                                                     uiOutput("XGBCL_confuse_text")))),
+                # tabPanel("PCR: Predict",
+                #          navset_pill_list(widths = c(2,10), well=F,
+                #                           nav_panel("Results Table",DT::dataTableOutput('PCR_predictions'),
+                #                                     tags$style(type = "text/css", "#pcrpreds {height: calc(100vh - 70px) !important;}")),
+                #                           nav_panel("PCA Summary",
+                #                                     fluidRow(column(12,DT::dataTableOutput('PCA_coeffs'))),
+                #                                     fluidRow(column(12,DT::dataTableOutput('PCA_summary'))),
+                #                                     tags$style(type = "text/css", "#pcrsumm {height: calc(100vh - 70px) !important;}")),
+                #                           nav_panel("Scatterplot",plotlyOutput("PCR_pred_scatplot", height="800px",width="100%"),
+                #                                     fluidRow(column(2,numericInput("PCR_pred_stand", label = "Standard", value = 3, min = 0, max=5, step=0.01)),
+                #                                              column(2,numericInput("PCR_pred_dc", label = "Decision Criterion", value = 3, min = 0, max=5, step=0.01))),
+                #                                     fluidRow(column(7,DT::dataTableOutput('PCR_pred_confuse'))),
+                #                                     uiOutput("PCR_pred_confuse_text")),
+                #                           nav_panel("Lineplot", plotlyOutput("PCR_pred_lineplot", height="700px",width="100%")),
+                #                           nav_panel("Residual Scatter", plotlyOutput("PCR_pred_resid_scatplot", height="800px",width="100%")))),
+                # tabPanel("PCR: Fitting",
+                #          navset_pill_list(widths = c(2,10), well=F,
+                #                           nav_panel("Results Table",DT::dataTableOutput('PCR_fits'),
+                #                                     tags$style(type = "text/css", "#pcrfits {height: calc(100vh - 70px) !important;}")),
+                #                           nav_panel("PCA Summary",
+                #                                     fluidRow(column(12,DT::dataTableOutput('PCA_fcoeffs'))),
+                #                                     fluidRow(column(12,DT::dataTableOutput('PCA_fsummary'))),
+                #                                     tags$style(type = "text/css", "#pcrsumm {height: calc(100vh - 70px) !important;}")),
+                #                           nav_panel("Scatterplot",plotlyOutput("PCR_scatplot", height="800px",width="100%"),
+                #                                     fluidRow(column(2,numericInput("PCR_stand", label = "Standard", value = 3, min = 0, max=5, step=0.01)),
+                #                                              column(2,numericInput("PCR_dec_crit", label = "Decision Criterion", value = 3, min = 0, max=5, step=0.01))),
+                #                                     fluidRow(column(7,DT::dataTableOutput('PCR_confuse'))),
+                #                                     uiOutput("PCR_confuse_text")),
+                #                           nav_panel("Lineplot", plotlyOutput("PCR_lineplot", height="700px",width="100%")),
+                #                           nav_panel("Residual Scatter", plotlyOutput("PCR_resid_scatplot", height="800px",width="100%")))),
                 tabPanel("EN: Predict",
                          navset_pill_list(widths = c(2,10), well=F,
                                           nav_panel("Results Table",DT::dataTableOutput('EN_preds'),

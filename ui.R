@@ -33,6 +33,10 @@ ui = fluidPage(
        border-color: #2c3e50;
        text-align: center;
     }
+    .align-center {
+      display: flex;
+      align-items: center;
+    }
     .progress-message, .progress-detail {
       float: left; 
       clear: left
@@ -45,9 +49,18 @@ ui = fluidPage(
       width: 80px;
       height: 35px;
     }
+    #pcr_prop {
+      width: 100px;
+      height: 35px;
+    }
     #train_pct {
       width: 80px;
       height: 35px;
+    }
+    #num_axes_using {
+      width: 80px;
+      height: 35px;
+      vertical-align: -30px;
     }
     #data_seed {
       width: 100px;
