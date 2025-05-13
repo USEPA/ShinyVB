@@ -5,7 +5,7 @@ ModelingPanel = sidebarLayout(
     tags$style(type = "text/css", "#modelingsidepanel {width: 350px !important;}"),
     
     checkboxGroupInput(
-      "coves_to_use",
+      "feats_to_use",
       "Features to Use:",
       choices = "",
       inline = TRUE
@@ -13,8 +13,9 @@ ModelingPanel = sidebarLayout(
     
     tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
     
-    fluidRow(HTML('<div style="position: relative; top: 20px;">'),column(6, checkboxInput("pca_dat", "Use PCA Data", FALSE)),HTML("</div>"),
-             column(6, numericInput("num_axes_using", label = "# Axes to Use", value = 2, min = 1, max=20, step=1))),
+    fluidRow(column(12, checkboxInput("use_pca_data", "Use PCA Data", FALSE))),
+    
+    disabled(checkboxGroupInput("pcax_to_use","PCA Axes to Use:",choices = "",inline = TRUE)),
 
     tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
     
@@ -26,15 +27,15 @@ ModelingPanel = sidebarLayout(
         title = "General Options",
         content = card(
           h5(HTML("<i>Left-Censored Limits (Non-Detects)</i>")),
-          fluidRow(column(4,numericInput("lc_lowval", label='Lower', value = 0, min=0)),
-                   column(4, numericInput("lc_upval", label='Upper', value = 3, min=0)),
+          fluidRow(column(4,numericInput("lc_lowval", label='Lower', value = 0)),
+                   column(4, numericInput("lc_upval", label='Upper', value = 3)),
                    column(4)),
           h5(HTML("<i>Right-Censored Limits (TNTC)</i>")),
-          fluidRow(column(5,numericInput("rc_lowval", label='Lower', value = 1000, min=1)),
-                   column(5, numericInput("rc_upval", label='Upper', value = 10000, min=1)),
+          fluidRow(column(5,numericInput("rc_lowval", label='Lower', value = 1000)),
+                   column(5, numericInput("rc_upval", label='Upper', value = 10000)),
                    column(2)),
           fluidRow(column(6, numericInput("train_pct",  label="% Training", value = 75, min=1,max=100,step=1)),
-                   column(6, numericInput("MC_runs",  label="Monte Carlo Runs", value = 10, min=1,step=1))),
+                   column(6, numericInput("MC_runs",  label="Monte Carlo Runs", value = 10, min=1,max=10000,step=1))),
           fluidRow(column(6, numericInput("num_folds",  label="CV Folds", value = 5, min=2,max=20,step=1)),
                    column(6, numericInput("model_seed",  label="Rnd Seed", value = 1234, min=1,step=1))),
           fluidRow(column(6, checkboxInput("loggy", "Log Response", FALSE)),
@@ -61,12 +62,15 @@ ModelingPanel = sidebarLayout(
       bs_append (
         title = "XGB Classifier",
         content = card(
-          fluidRow(column(6,checkboxInput("XGBCL_standard", "Standardize Features", FALSE))),
+          fluidRow(column(12,checkboxInput("XGBCL_standard", "Standardize Features", FALSE))),
           fluidRow(column(6,checkboxInput("XGBCL_binarize", "Create Binary Response", TRUE)),
                    column(6, numericInput("XGBCL_binarize_crit_value", label = "Threshold", value = 2,step=0.25))),
-          fluidRow(column(12,actionButton("XGBCL_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px; vertical-align: -12px;'))),
-          fluidRow(class="shortrow",column(12,div(style="height:15px;",tags$hr(style = "border-color: #2c3e50;")))),
-          fluidRow(column(12,actionButton("XGBCL_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
+          fluidRow(column(5,actionButton("XGBCL_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px;')),
+                   column(7,actionButton("XGBCL_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
+          fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
+          fluidRow(column(6,align="left",actionButton("run_XGBCL_select", "Feature Selection", style = 'width:130px; padding:2px; vertical-align: -32px')),
+                   column(6, div(style = "display: inline-block;",numericInput("testcl_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05)))),
+          fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
           fluidRow(column(6,actionButton("run_pred_XGBCL", "Predictions", style = 'width:100px; padding:2px;')),
                   column(6,actionButton("run_fit_XGBCL", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
       
@@ -94,18 +98,16 @@ ModelingPanel = sidebarLayout(
       
       bs_append (
         title = "XGBoost", content= card(
-          fluidRow(class="shortrow",
-                   column(6,div(style = 'height:15px;',checkboxInput("XGB_standardize", "Stnrdz Features", FALSE))),
-                   column(6,actionButton("XGB_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px; vertical-align: -12px;'))),
-          fluidRow(class="shortrow",column(12,div(style="height:15px;",tags$hr(style = "border-color: #2c3e50;")))),
-          fluidRow(column(6,align="left",actionButton("run_XGB_select", "Feature Selection", style = 'width:130px; padding:2px; vertical-align: -40px')),
+          fluidRow(column(12,checkboxInput("XGB_standardize", "Standardize Features", FALSE))),
+          fluidRow(column(5,actionButton("XGB_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px;')),
+                   column(7,actionButton("XGB_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
+          fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
+          fluidRow(column(6,align="left",actionButton("run_XGB_select", "Feature Selection", style = 'width:130px; padding:2px; vertical-align: -32px')),
                    column(6, div(style = "display: inline-block;",numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05)))),
           # fluidRow(column(12,align="right",actionButton("XGB_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
-          fluidRow(class="shortrow",column(12,div(style="height:15px;",tags$hr(style = "border-color: #2c3e50;")))),
-          fluidRow(column(12,actionButton("XGB_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
+          fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
           fluidRow(column(6,actionButton("run_XGB_predict", "Predictions", style = 'width:100px; padding:2px;')),
-                  column(6,align="left",actionButton("XGB_final_fitting", "Fitting", style = 'width:100px; padding:2px;')))),
-        tags$head(tags$style(".shortrow{height:15px;}"))) %>%
+                   column(6,align="left",actionButton("XGB_final_fitting", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c())),
   

@@ -62,6 +62,11 @@ ui = fluidPage(
       height: 35px;
       vertical-align: -30px;
     }
+    #XGBCL_binarize_crit_value {
+      width: 90px;
+      height: 35px;
+      vertical-align: -30px;
+    }
     #data_seed {
       width: 100px;
       height: 35px;

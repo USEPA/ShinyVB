@@ -27,10 +27,10 @@ DataPanel = sidebarLayout(
       column(6,disabled(actionButton("impute_check", "Imputation", style='width: 110px;')))),
       fluidRow(
         column(6,disabled(actionButton("pca_check", "PCA", style='width: 110px; vertical-align: -38px;'))),
-        column(6,class="align-center", numericInput("num_axes", "# PCA Axes", value=2, min=1,max=20,step=1))),
+        column(6,class="align-center", numericInput("num_axes", "# PCA Axes", value=2, min=2,max=20,step=1))),
     fluidRow(
       column(6,disabled(actionButton("run_iso_forest","Outliers: IsoForest", style='width: 150px; align: left; vertical-align: -38px;'))),
-      column(6,numericInput("iso_ndim", "IF Dimensions", value=2, min=1,max=5,step=1))),
+      column(6,numericInput("iso_ndim", "IF Dimensions", value=2, min=1,max=10,step=1))),
     
     bs_accordion(id="plotting") %>%
       

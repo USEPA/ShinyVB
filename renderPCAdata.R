@@ -4,6 +4,7 @@ renderPCAdata = function(data,
                          output) {
   
   if (is.null(data)) {
+    output$PCAdata = NULL
     return()
   } else {
     

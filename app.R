@@ -1,66 +1,77 @@
 setwd(getwd())
 
-library(bsicons)
 library(bslib)
 library(bsplus)
-library(caret)
 library(cluster)
-library(colorspace)
 library(corrplot)
-library(DBI)
-library(devtools)
-library(dplyr)
 library(future)
 library(ggdist)
-library(gghalves)
 library(ggplot2)
-library(ggpmisc)
-library(ggtext)
-library(glmnet)
 library(glmnetUtils)
+library(grDevices)
 library(grid)
-library(gridExtra)
 library(hash)
-library(Hmisc)
-library(hrbrthemes)
-library(htmltools)
 library(ipc)
 library(isotree)
 library(leaflet)
-library(lime)
 library(lubridate)
-library(magrittr)
-library(Metrics)
-library(Nmisc)
+library(Matrix)
+library(methods)
+library(missForest)
 library(openxlsx)
-library(permimp)
-library(pdp)
 library(plotly)
 library(plyr)
-library(png)
 library(promises)
 library(pso)
-library(ragg)
-library(RColorBrewer)
+library(purrr)
 library(RSQLite)
-library(reshape2)
-library(reactable)
-library(readxl)
-library(rsample)
 library(SHAPforxgboost)
 library(shiny)
 library(shinybusy)
-library(shinydashboard)
-library(shinydashboardPlus)
 library(shinyjs)
 library(shinythemes)
+library(shinyvalidate)
 library(stats)
-library(tidymodels)
-library(tidyr)
+library(stringr)
 library(tidyverse)
+library(tools)
 library(units)
 library(xgboost)
 library(DT)
+
+# library(NCmisc)
+# library(here)
+
+# library(bsicons)
+# library(htmltools)
+# library(caret)
+# library(DBI)
+# library(dplyr)
+# library(colorspace)
+# library(devtools)
+# library(glmnet)
+# library(reactable)
+# library(gghalves)
+# library(ggpmisc)
+# library(ggtext)
+# library(gridExtra)
+# library(Hmisc)
+# library(hrbrthemes)
+# library(lime)
+# library(magrittr)
+# library(Metrics)
+# library(pdp)
+# library(permimp)
+# library(png)
+# library(ragg)
+# library(RColorBrewer)
+# library(reshape2)
+# library(rsample)
+# library(shinydashboard)
+# library(shinydashboardPlus)
+# library(tidymodels)
+# library(tidyr)
+
 plan(multicore)
 
 source("renderdata.R")
@@ -74,27 +85,106 @@ source("scatter_confuse.R")
 source("impute.R")
 source("createAO.R")
 source("confusion.R")
-
-source("xgbcl_feature_selection.R")
 source("xgbcl_call_optimize_HP.R")
-source("xgbcl_pso.R")
 source("xgbcl_call_predict.R")
-source("xgbcl_pred_errors.R")
-source("xgbcl_final.R")
-
 source("xgb_call_optimize_HP.R")
-source("xgb_pso.R")
 source("xgb_call_predict.R")
+source("xgb_pso.R")
+source("xgbcl_pso.R")
 source("xgb_pred_errors.R")
+source("xgbcl_pred_errors.R")
 source("xgb_feature_selection.R")
 
-#all.functions = list.functions.in.file("app.R", alphabetic = TRUE)
+#source("xgbcl_feature_selection.R")
 
 # Define server logic --
 server= function(input,output,session) {
   
+  # funcs = 
+  #   list.files(here::here(), pattern ="\\.R$", recursive = TRUE, full.names = TRUE) %>%
+  #   map(list.functions.in.file) %>%
+  #   flatten
+  
+  # Extract just the unique package names
+  # packages <- 
+  #   funcs %>%
+  #   names %>%
+  #   str_extract("package:[[:alnum:]]*") %>%
+  #   str_split(",") %>%
+  #   unlist %>%
+  #   str_remove("package:") %>%
+  #   unique %>%
+  #   sort
+  # 
+  # packages
+  
+  # See which packages aren't in the tidyverse
+  # setdiff(packages, tidyverse_packages())
+  
+  # renv::init()
+  # dependencies <- renv::dependencies()
+  # print(dependencies$Package)
+  # renv::deactivate(clean = TRUE)
+  
+  # Validation Rules for ALL numeric inputs
+  
+  iv = InputValidator$new()
+  
+  # iv$add_rule("lc_lowval", sv_between(0,1))
+  # iv$add_rule("lc_upval", sv_between(1,10))
+  # iv$add_rule("rc_lowval", sv_between(0,100))
+  # iv$add_rule("rc_upval", sv_between(1000,10000))
+  
+  iv$add_rule("train_pct", sv_between(1,100))
+  iv$add_rule("MC_runs", sv_between(1,10000))
+  iv$add_rule("num_folds", sv_between(2,20))
+  
+  iv$add_rule("data_seed", sv_gte(1))
+  iv$add_rule("model_seed", sv_gte(1))
+  iv$add_rule("iso_ndim", sv_between(1, 10))
+  iv$add_rule("sig_digies", sv_between(0, 12))
+  
+  iv$add_rule("psocl_max_iter", sv_between(5, 1000))
+  iv$add_rule("psocl_swarm_size", sv_between(3, 200))
+  iv$add_rule("membercl_exp", sv_between(0.25, 3))
+  iv$add_rule("sscl_exp", sv_between(0.25,3))
+  
+  iv$add_rule("etacl", sv_between(0,1))
+  iv$add_rule("gammacl", sv_between(0,20))
+  iv$add_rule("nroundscl", sv_between(100,3000))
+  iv$add_rule("max_depthcl", sv_between(1,10))
+  iv$add_rule("min_child_weightcl", sv_between(1,20))
+  iv$add_rule("subsampcl", sv_between(0,1))
+  iv$add_rule("colsampcl", sv_between(0,1))
+  iv$add_rule("ratecl_drop", sv_between(0,1))
+  iv$add_rule("skipcl_drop", sv_between(0,1))
+  
+  iv$add_rule("LG_pred_dc", sv_between(0, 1))
+  iv$add_rule("LG_fit_dc", sv_between(0, 1))
+  iv$add_rule("XGBCL_pred_dc", sv_between(0,1))
+  iv$add_rule("XGBCL_dec_crit", sv_between(0,1))
+  
+  iv$add_rule("pso_max_iter", sv_between(5, 1000))
+  iv$add_rule("pso_swarm_size", sv_between(3, 200))
+  iv$add_rule("member_exp", sv_between(0.25, 3))
+  iv$add_rule("ss_exp", sv_between(0.25,3))
+  
+  iv$add_rule("eta", sv_between(0,1))
+  iv$add_rule("gamma", sv_between(0,20))
+  iv$add_rule("nrounds", sv_between(100,3000))
+  iv$add_rule("max_depth", sv_between(1,10))
+  iv$add_rule("min_child_weight", sv_between(1,20))
+  iv$add_rule("subsamp", sv_between(0,1))
+  iv$add_rule("colsamp", sv_between(0,1))
+  iv$add_rule("rate_drop", sv_between(0,1))
+  iv$add_rule("skip_drop", sv_between(0,1))
+  
+  iv$enable()
+  
+  # Create a temporary SQL database
   temp_db = dbConnect(RSQLite::SQLite(), ":memory:")
   
+  # Leaflet map variables
   bo = reactiveVal(0)
   map_clicks = reactiveValues(points = data.frame())
   
@@ -103,8 +193,10 @@ server= function(input,output,session) {
   PCA_dataset = reactiveVal()
   response_var = reactiveVal(2)
   col_names = reactiveVal()
-  cove_names = reactiveVal()
-  coves_being_used = reactiveVal()
+  feat_names = reactiveVal()
+  feats_being_used = reactiveVal()
+  pca_axes = reactiveVal()
+  pcax_being_used = reactiveVal()
   init_data = data.frame()
   init_feat_props = hash()
   feat_props = hash()
@@ -201,8 +293,8 @@ server= function(input,output,session) {
   observeEvent(input$pca_check, {
     
     data0 = current_data()
-    data = data0[,-1]
-    feat_data = data[,-response_var()]
+    data = data0[,-response_var()]
+    feat_data = data[,-1]
     
     pca_axes_max = ncol(feat_data)
     
@@ -239,6 +331,9 @@ server= function(input,output,session) {
       
       PCA_dataset(PCA_data)
       
+      pca_axes(colnames(PCA_dataset())[3:ncol(PCA_data)])
+      pcax_being_used(pca_axes())
+      
       PCA_coefficients = data.frame(round(pca_result$rotation[,1:n_axes],4))
       PCA_coefficients = cbind(Feature = rownames(PCA_coefficients), PCA_coefficients)
       
@@ -260,6 +355,8 @@ server= function(input,output,session) {
                     "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       renderPCAdata(PCA_dataset(),date_format_string,ignored_rows,output)
+      
+      iv$add_rule("num_axes_using", sv_between(2, input$num_axes))
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = "PCA Results")
@@ -292,8 +389,10 @@ server= function(input,output,session) {
     temp_data = init_data[,-1]
     temp_data = temp_data[,-1]
     
-    cove_names(colnames(temp_data))
-    coves_being_used(colnames(temp_data))
+    feat_names(colnames(temp_data))
+    feats_being_used(colnames(temp_data))
+    pca_axes(NULL)
+    pcax_being_used(NULL)
     col_names(colnames(init_data))
     current_data(init_data)
     PCA_dataset(NULL)
@@ -312,6 +411,9 @@ server= function(input,output,session) {
     
     renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
     renderPCAdata(PCA_dataset(),date_format_string,ignored_rows,output)
+    
+    output$PCA_coeffs = NULL
+    output$PCA_summary = NULL
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
@@ -366,11 +468,19 @@ server= function(input,output,session) {
       current_data(init_data)
       col_names(colnames(init_data))
       
-      temp_data = init_data[,-1]
-      temp_data = temp_data[,-1]
+      updateNumericInput(session, "LG_binarize_crit_value",value = round(median(current_data()[,response_var()]),2),
+                         min=min(current_data()[,response_var()]),max=max(current_data()[,response_var()]))
+      updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(current_data()[,response_var()]),2),
+                         min=min(current_data()[,response_var()]),max=max(current_data()[,response_var()]))
       
-      coves_being_used(colnames(temp_data))
-      cove_names(colnames(temp_data))
+      iv$add_rule("LG_binarize_crit_value", sv_between(min(init_data[,response_var()]),max(init_data[,response_var()])))
+      iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(init_data[,response_var()]),max(init_data[,response_var()])))
+      
+      feat_data0 = init_data[,-1]
+      feat_data = feat_data0[,-1]
+      
+      feats_being_used(colnames(feat_data))
+      feat_names(colnames(feat_data))
       
       enable("restore")
       enable("col_props")
@@ -391,6 +501,8 @@ server= function(input,output,session) {
                          max = input$num_axes
       )
       
+      iv$add_rule("num_axes", sv_between(2, pca_axes_max))
+      
       updateSelectInput(session,"col_props",choices=c("-",col_names()))
       updateSelectInput(session,"rainplot",choices=c("-",col_names()))
       updateSelectInput(session,"lineplot",choices=c("-",col_names()))
@@ -401,6 +513,9 @@ server= function(input,output,session) {
       
       renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
       renderPCAdata(PCA_dataset(),date_format_string,ignored_rows,output)
+      
+      output$PCA_coeffs = NULL
+      output$PCA_summary = NULL
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
@@ -445,6 +560,13 @@ server= function(input,output,session) {
     if ((input$data_columns_selected+1) != response_var()) {
       response_var(input$data_columns_selected + 1)
       renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
+      
+      pca_axes(NULL)
+      pcax_being_used(NULL)
+      PCA_dataset(NULL)
+      renderPCAdata(PCA_dataset(),date_format_string,ignored_rows,output)
+      output$PCA_coeffs = NULL
+      output$PCA_summary = NULL
     }
   })
   
@@ -600,6 +722,10 @@ server= function(input,output,session) {
       
       if (!(input$A_name %in% col_names()) & !(input$O_name %in% col_names())) {
         
+        pca_axes(NULL)
+        pcax_being_used(NULL)
+        PCA_dataset(NULL)
+        
         new_data = createAO(col_names(),input$speed,input$direct,input$A_name,input$O_name,current_data(),bo())
         
         for (i in (ncol(new_data)-1):ncol(new_data)) {
@@ -616,6 +742,8 @@ server= function(input,output,session) {
         updateSelectInput(session,"scatterx",selected=input$scatterx,choices=c("-",col_names()))
         updateSelectInput(session,"scattery",selected=input$scattery,choices=c("-",col_names()))
         
+        PCA_dataset(NULL)
+        renderPCAdata(PCA_dataset(),date_format_string,ignored_rows,output)
         renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
         
       } else {
@@ -625,6 +753,22 @@ server= function(input,output,session) {
       
     } else {
       showModal(modalDialog(div("ERROR: A speed and direction data column must be specified.",style="font-size:160%"),easyClose = T))
+    }
+  })
+  
+  # Toggle between normal and PCA data use
+  
+  observeEvent(input$use_pca_data, {
+    
+    if (input$use_pca_data) {
+
+      shinyjs::disable("feats_to_use")
+      shinyjs::enable("pcax_to_use")
+      
+    } else {
+      
+      shinyjs::enable("feats_to_use")
+      shinyjs::disable("pcax_to_use")
     }
   })
   
@@ -643,12 +787,36 @@ server= function(input,output,session) {
         temp_data1 = temp_data[,-response_var()]
         temp_data2 = temp_data1[,-1]
         
-        cove_names(colnames(temp_data2))
+        feat_names(colnames(temp_data2))
         
-        updateCheckboxGroupInput(session,"coves_to_use",choices=cove_names(),selected=coves_being_used(),inline=T)
+        updateCheckboxGroupInput(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),inline=T)
         
-        updateNumericInput(session, "LG_binarize_crit_value",value = round(median(current_data()[,response_var()]),2),)
-        updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(current_data()[,response_var()]),2),)
+        if (input$use_pca_data) {
+          delay(1,disable("feats_to_use"))
+        }
+        
+        updateNumericInput(session, "LG_binarize_crit_value",value = round(median(current_data()[,response_var()]),2),
+                           min=min(current_data()[,response_var()]),max=max(current_data()[,response_var()]))
+        updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(current_data()[,response_var()]),2),
+                           min=min(current_data()[,response_var()]),max=max(current_data()[,response_var()]))
+      }
+      
+      if (is.null(PCA_dataset())) {
+        return()
+        
+      } else {
+        
+        tmp_data = PCA_dataset()
+        tmp_data1 = tmp_data[,-1]
+        tmp_data2 = tmp_data1[,-1]
+        
+        pca_axes(colnames(tmp_data2))
+        
+        updateCheckboxGroupInput(session,"pcax_to_use",choices=pca_axes(),selected=pcax_being_used(),inline=T)
+        
+        if (!input$use_pca_data) {
+          delay(1,disable("pcax_to_use"))
+        }
       }
       
     } else {
@@ -656,10 +824,12 @@ server= function(input,output,session) {
     }
   })
   
-  observeEvent(input$coves_to_use, {
-      
-      coves_being_used(input$coves_to_use)
-
+  observeEvent(input$feats_to_use, {
+      feats_being_used(input$feats_to_use)
+  })
+  
+  observeEvent(input$pcax_to_use, {
+    pcax_being_used(input$pcax_to_use)
   })
   
   # Logistic regression predictions on test data
@@ -702,10 +872,21 @@ server= function(input,output,session) {
   
   observeEvent(input$run_pred_LG, {
     
+    req(iv$is_valid())
+    
     set.seed(input$model_seed)
     
-    data0 = current_data()
-    rv=response_var()
+    if (input$use_pca_data) {
+      data0 = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data0 = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+  
     MC_runs = input$MC_runs
     
     crit_value = input$LG_binarize_crit_value
@@ -724,9 +905,9 @@ server= function(input,output,session) {
     # REMOVE NA'S FROM RESPONSE VARIABLE
     data1 = data1[!is.na(data1[,rv]),]
     
-    var_list = c(1,rv,which(colnames(data1) %in% input$coves_to_use))
+    var_list = c(1,rv,which(colnames(data1) %in% feats_to_use))
     data2 = data1[,var_list]
-    colnames(data2) = c(colnames(data0)[1],"Response",input$coves_to_use)
+    colnames(data2) = c(colnames(data0)[1],"Response",feats_to_use)
     
     # RANDOMIZE DATA
     if (input$randomize==TRUE) {
@@ -752,7 +933,7 @@ server= function(input,output,session) {
       
       coeff_folds = matrix(0, nrow = ncol(data), ncol = tot_folds+1)
       coeff_folds = as.data.frame(coeff_folds)
-      coeff_folds[,1] = c("(Intercept)",input$coves_to_use)
+      coeff_folds[,1] = c("(Intercept)",feats_to_use)
       
       #Perform cross validation
       for (f in 1:tot_folds) {
@@ -766,7 +947,7 @@ server= function(input,output,session) {
         
         temp_coeffs = matrix(0, nrow = ncol(data), ncol = MC_runs+1)
         temp_coeffs = data.frame(temp_coeffs)
-        temp_coeffs[,1] = c("(Intercept)",input$coves_to_use)
+        temp_coeffs[,1] = c("(Intercept)",feats_to_use)
         
         withProgress(
           message = 'Logistic Prediction Progress',
@@ -881,9 +1062,14 @@ server= function(input,output,session) {
           })
         
       } #End the Fold runs
+    
+      if (input$use_pca_data) {
+        prediction_results = data.frame(cbind(data2[,1],fold_predictions[,1],fold_predictions[,2],round(data[,-1],4)))
+      } else {
+        prediction_results = data.frame(cbind(data2[,1],fold_predictions[,1],fold_predictions[,2],data[,-1]))
+      }
       
-      prediction_results = data.frame(cbind(data2[,1],fold_predictions[,1],fold_predictions[,2],data[,-1]))
-      colnames(prediction_results) = c(colnames(data2)[1],colnames(data0)[rv],"Predictions",input$coves_to_use)
+      colnames(prediction_results) = c(colnames(data2)[1],colnames(data0)[rv],"Predictions",feats_to_use)
       
       prediction_results = prediction_results[order(prediction_results[,1]),]
       
@@ -978,10 +1164,20 @@ server= function(input,output,session) {
   
   observeEvent(input$run_fitted_LG, {
     
-    set.seed(input$model_seed)
+    req(iv$is_valid())
     
-    data0 = current_data()
-    rv=response_var()
+    if (input$use_pca_data) {
+      data0 = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data0 = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
+    set.seed(input$model_seed)
     
     crit_value = input$LG_binarize_crit_value
     
@@ -999,9 +1195,9 @@ server= function(input,output,session) {
     # REMOVE NA'S FROM RESPONSE VARIABLE
     data1 = data1[!is.na(data1[,rv]),]
     
-    var_list = c(1,rv,which(colnames(data1) %in% input$coves_to_use))
+    var_list = c(1,rv,which(colnames(data1) %in% feats_to_use))
     data2 = data1[,var_list]
-    colnames(data2) = c(colnames(data0)[1],"Response",input$coves_to_use)
+    colnames(data2) = c(colnames(data0)[1],"Response",feats_to_use)
     
     # RANDOMIZE DATA
     if (input$randomize==TRUE) {
@@ -1022,7 +1218,7 @@ server= function(input,output,session) {
     
     fitted_coeffs = matrix(0, nrow = ncol(data), ncol = 3)
     fitted_coeffs = data.frame(fitted_coeffs)
-    fitted_coeffs[,1] = c("(Intercept)",input$coves_to_use)
+    fitted_coeffs[,1] = c("(Intercept)",feats_to_use)
     
     fitted_values = matrix(0, nrow = 0, ncol = 2)
     fitted_values = data.frame(fitted_values)
@@ -1032,7 +1228,7 @@ server= function(input,output,session) {
     
     temp_coeffs = matrix(0, nrow = ncol(data), ncol = MC_runs+1)
     temp_coeffs = data.frame(temp_coeffs)
-    temp_coeffs[,1] = c("(Intercept)",input$coves_to_use)
+    temp_coeffs[,1] = c("(Intercept)",feats_to_use)
     
     withProgress(
       message = 'Logistic Fitting Progress',
@@ -1123,7 +1319,7 @@ server= function(input,output,session) {
     model_results = cbind(obs_mean_values,fit_mean_values)
     
     fitted_model_results = data.frame(cbind(data2[,1],model_results[,1],model_results[,2],data[,-1]))
-    colnames(fitted_model_results) = c(colnames(data2)[1],colnames(data0)[rv],"Fitted_Prob",input$coves_to_use)
+    colnames(fitted_model_results) = c(colnames(data2)[1],colnames(data0)[rv],"Fitted_Prob",feats_to_use)
     
     fitted_model_results = fitted_model_results[order(fitted_model_results[,1]),]
     
@@ -1197,7 +1393,20 @@ server= function(input,output,session) {
   
   observeEvent(input$run_XGBCL_optimize_HP, {
     
-    xgbcl_optim_HP_results = xgbcl_call_optimize_HP(current_data(),response_var(),id_var,input$model_seed,ignored_rows,input$coves_to_use,input$lc_lowval,
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
+    xgbcl_optim_HP_results = xgbcl_call_optimize_HP(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_lowval,
                                                 input$lc_upval,input$rc_lowval,input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$randomize,
                                                 input$XGBCL_standard,input$XGBCL_hyper_metric,input$psocl_max_iter,input$psocl_swarm_size,input$membercl_exp,
                                                 input$sscl_exp,input$XGBCL_binarize,input$XGBCL_binarize_crit_value)
@@ -1231,8 +1440,8 @@ server= function(input,output,session) {
         column(4,numericInput("gammacl", label="Gamma", value = gammacl_set(), min=0, max=20, step = 1)),
         column(4,numericInput("nroundscl", label="# Rounds", value = nroundscl_set(), min=100, max=3000, step = 25))),
       fluidRow(
-        column(6,numericInput("max_depthcl", label="Max Tree Depth", value = max_depthcl_set(), min=1)),
-        column(6,numericInput("min_child_weightcl", label="Min Leaf Size", value = min_child_weightcl_set(), min=1))),
+        column(6,numericInput("max_depthcl", label="Max Tree Depth", value = max_depthcl_set(), min=1,max=10, step=1)),
+        column(6,numericInput("min_child_weightcl", label="Min Leaf Size", value = min_child_weightcl_set(), min=1,max=20,step=1))),
       fluidRow(
         column(6,numericInput("subsampcl", label="Subsample Proportion", value = subsampcl_set(), min=0,max=1, step=0.01)),
         column(6,numericInput("colsampcl", label="Column Sample Proportion", value = colsampcl_set(), min=0,max=1,step=0.01))),
@@ -1340,7 +1549,20 @@ server= function(input,output,session) {
   
   observeEvent(input$run_pred_XGBCL, {
     
-    xgbcl_pred_results = xgbcl_call_predict(current_data(),response_var(),id_var,input$model_seed,ignored_rows,input$coves_to_use,input$lc_lowval,
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
+    xgbcl_pred_results = xgbcl_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_lowval,
                               input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
                               input$XGBCL_standard,xgbcl_tree_method_set(),xgbcl_booster_set(),dartcl_normalize_type_set(),dartcl_sample_type_set(),
                               ratecl_drop_set(),skipcl_drop_set(),Optimal_CLHP$eta,Optimal_CLHP$gamma,Optimal_CLHP$max_depth,
@@ -1447,27 +1669,39 @@ server= function(input,output,session) {
   
   observeEvent(input$run_fit_XGBCL, {
     
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
     crit_value = input$XGBCL_binarize_crit_value
     MC_runs = input$MC_runs
-    resvar = response_var()
     
     if (is.null(ignored_rows)) {
-      data0 = current_data()
+      data0 = data
     } else {
-      data0 = current_data()[-ignored_rows,]
+      data0 = data[-ignored_rows,]
     }
     
     if (input$XGBCL_binarize) {
-      new_Y = ifelse(test = data0[,resvar] >= crit_value, yes = 1, no = 0)
-      data0[,resvar] = new_Y
+      new_Y = ifelse(test = data0[,rv] >= crit_value, yes = 1, no = 0)
+      data0[,rv] = new_Y
     }
     
     # REMOVE NA'S FROM RESPONSE VARIABLE
-    data0 = data0[!is.na(data0[,resvar]), ]
+    data0 = data0[!is.na(data0[,rv]), ]
     
-    var_list = c(resvar,which(colnames(data0) %in% input$coves_to_use))
+    var_list = c(rv,which(colnames(data0) %in% feats_to_use))
     data = data0[,var_list]
-    colnames(data) = c(colnames(data0)[[resvar]],input$coves_to_use)
+    colnames(data) = c(colnames(data0)[[rv]],feats_to_use)
     
     if (input$XGBCL_standard) {
       
@@ -1496,9 +1730,9 @@ server= function(input,output,session) {
         temp_fits = matrix(0, nrow = nrow(data), ncol = 2*MC_runs)
         temp_fits = data.frame(temp_fits)
         
-        temp_shapes = matrix(0, nrow = length(input$coves_to_use), ncol = MC_runs+1)
+        temp_shapes = matrix(0, nrow = length(feats_to_use), ncol = MC_runs+1)
         temp_shapes = data.frame(temp_shapes)
-        temp_shapes[,1] = input$coves_to_use
+        temp_shapes[,1] = feats_to_use
         
         for (i in 1:MC_runs) {
           
@@ -1579,8 +1813,8 @@ server= function(input,output,session) {
           }
           
           for (c in 1:nrow(temp_shapes)) {
-            current_cove = temp_shapes[c,1]
-            temp_shapes[c,i+1] = as.numeric(shap[which(shap[,1] == current_cove),2])
+            current_feat = temp_shapes[c,1]
+            temp_shapes[c,i+1] = as.numeric(shap[which(shap[,1] == current_feat),2])
           }
           
           incProgress(1/MC_runs, detail = paste("MC run: ",i,"/",MC_runs))
@@ -1596,7 +1830,7 @@ server= function(input,output,session) {
     fit_mean_values = rowMeans(even_columns)
     fits = cbind(obs_mean_values,round(fit_mean_values,3))
     
-    xgbcl_results = data.frame(cbind(data0[,1],round(fits[,1],4),round(fits[,2],4),data[,-1]))
+    xgbcl_results = data.frame(cbind(data0[,1],round(fits[,1],4),round(fits[,2],4),round(data[,-1],4)))
     colnames(xgbcl_results) = c(colnames(data0)[[1]],colnames(data)[[1]],"Fitted_Prob",colnames(data[,-1]))
     
     xgbcl_shapes1 = as.data.frame(temp_shapes[,-1])
@@ -1658,435 +1892,6 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Fitting')
   })
-  
-  # PCR predictions on test data - NOT USING ANYMORE
-  
-  observeEvent(input$PCR_pred_stand, {
-    
-    if (nrow(PCR_pred_scat_dat) != 0) {
-      
-      output$PCR_pred_scatplot = renderPlotly(scatter_confuse(PCR_pred_scat_dat,input$PCR_pred_stand,input$PCR_pred_dc))
-      
-      confuse_results = confuse(PCR_pred_scat_dat[,2:3],input$PCR_pred_stand,input$PCR_pred_dc)
-      confuse_table = matrix(0,nrow=1,ncol=4)
-      
-      confuse_table[1,1] = confuse_results$TP
-      confuse_table[1,2] = confuse_results$TN
-      confuse_table[1,3] = confuse_results$FP
-      confuse_table[1,4] = confuse_results$FN
-      
-      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-      
-      output$PCR_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-                      options = list(autoWidth = F,dom='tB', paging = F,buttons = c('copy', 'csv', 'excel'),scrollX = F,scrollY = F,
-                      columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
-                      {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$PCR_pred_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
-                      round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
-    }
-  })
-  
-  observeEvent(input$PCR_pred_dc, {
-    
-    if (nrow(PCR_pred_scat_dat) != 0) {
-      
-      output$PCR_pred_scatplot = renderPlotly(scatter_confuse(PCR_pred_scat_dat,input$PCR_pred_stand,input$PCR_pred_dc))
-      
-      confuse_results = confuse(PCR_pred_scat_dat[,2:3],input$PCR_pred_stand,input$PCR_pred_dc)
-      confuse_table = matrix(0,nrow=1,ncol=4)
-      
-      confuse_table[1,1] = confuse_results$TP
-      confuse_table[1,2] = confuse_results$TN
-      confuse_table[1,3] = confuse_results$FP
-      confuse_table[1,4] = confuse_results$FN
-      
-      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-      
-      output$PCR_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-                      options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',
-                      orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
-                      {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$PCR_pred_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
-                      round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
-    }
-  })
-  
-  observeEvent(input$run_PCR_predict, {
-    
-    data = current_data()
-    
-    if (any(is.na(data[,3:ncol(data)]))) {
-      
-      showModal(modalDialog(paste("PCA does not tolerate missing feature values. You can either Impute these
-                (on the Data tab) or Disable rows/columns with missing values."),footer = modalButton("Close")))
-      
-    } else {
-      
-      pcr_pred_results = pcr_call_predict(current_data(),response_var(),id_var,input$model_seed,ignored_rows,input$coves_to_use,input$lc_lowval,
-                        input$lc_upval,input$rc_lowval,input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$randomize,input$pcr_prop)
-      
-      
-      PCA_coefficients = data.frame(round(pcr_pred_results[[2]]$rotation,4))
-      PCA_coefficients = cbind(Feature = rownames(PCA_coefficients), PCA_coefficients)
-      
-      PCA_summary = summary(pcr_pred_results[[2]])
-      PCA_summary_df = data.frame(rbind(round(PCA_summary$importance[1,],3),PCA_summary$importance[2,],PCA_summary$importance[3,]))
-      summ_rownames= c("Std. Dev.","Var Explained","Cum Var Explained")
-      PCA_summary_df = cbind(summ_rownames,PCA_summary_df)
-      colnames(PCA_summary_df)[1] = "Metric"
-      
-      output$PCA_coeffs = DT::renderDataTable(server = T, {data = datatable(PCA_coefficients,rownames = F,selection =
-                      list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                      list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                      className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                      "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$PCA_summary = DT::renderDataTable(server = T, {data = datatable(PCA_summary_df,rownames = F,selection =
-                      list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                      list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                      className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                      "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      PCR_saved_predictions <<- pcr_pred_results[[1]]
-      
-      pcr_pred_stepr = round((max(PCR_saved_predictions[,2])-min(PCR_saved_predictions[,2]))/40,2)
-      
-      updateNumericInput(session, "PCR_pred_stand",
-                         value = round(mean(PCR_saved_predictions[,2]),2),
-                         max = round(max(PCR_saved_predictions[,2]),2),
-                         min = round(min(PCR_saved_predictions[,2]),2),
-                         step = pcr_pred_stepr
-      )
-      
-      pcr_pred_stepdc = round((max(PCR_saved_predictions[,3])-min(PCR_saved_predictions[,3]))/40,2)
-      
-      updateNumericInput(session, "PCR_pred_dc",
-                         value = round(mean(PCR_saved_predictions[,3]),2),
-                         max = round(max(PCR_saved_predictions[,3]),2),
-                         min = round(min(PCR_saved_predictions[,3]),2),
-                         step = pcr_pred_stepdc
-      )
-      
-      output$PCR_predictions = DT::renderDataTable(server = T, {data = datatable(PCR_saved_predictions,rownames = F,selection =
-              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions='Buttons',options = list(autoWidth = F,
-              paging = TRUE,pageLength = 17,dom="ltBp",buttons = c('copy', 'csv', 'excel'),scrollX = TRUE,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',
-              orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744',
-              'color': '#fff'});","}")))
-      })
-      
-      
-      
-      PCR_pred_scat_dat <<- PCR_saved_predictions[,1:3]
-      output$PCR_pred_scatplot = renderPlotly(scatter_confuse(PCR_pred_scat_dat,input$PCR_pred_stand,input$PCR_pred_dc))
-      
-      confuse_results = confuse(PCR_pred_scat_dat[,2:3],input$PCR_pred_stand,input$PCR_pred_dc)
-      confuse_table = matrix(0,nrow=1,ncol=4)
-      
-      confuse_table[1,1] = confuse_results$TP
-      confuse_table[1,2] = confuse_results$TN
-      confuse_table[1,3] = confuse_results$FP
-      confuse_table[1,4] = confuse_results$FN
-      
-      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-      
-      output$PCR_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-                      options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                      columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
-                      {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$PCR_pred_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
-                      round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
-      
-      resid_data = PCR_pred_scat_dat[,c(1,3)] %>% mutate(Residuals = round(PCR_pred_scat_dat[,2]-PCR_pred_scat_dat[,3],3))
-      
-      output$PCR_pred_resid_scatplot = renderPlotly(scatter(resid_data))
-      
-      output$PCR_pred_lineplot = renderPlotly(plot_ly(PCR_pred_scat_dat, x = ~PCR_pred_scat_dat[,1], y = ~PCR_pred_scat_dat[,2], name="Observations",
-                              type="scatter", mode = "lines",text = ~paste("<b>ID: </b>",PCR_pred_scat_dat[,1],"<br><b>Observed Value:</b> ",
-                              PCR_pred_scat_dat[,2],sep=""),hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5)) %>%
-                      add_trace(y = ~PCR_pred_scat_dat[,3], name="Predictions", mode = 'lines',
-                              text = ~paste("<b>ID: </b>",PCR_pred_scat_dat[,1],"<br><b>Predicted Value:</b> ",round(PCR_pred_scat_dat[,3],3),sep=""),
-                              hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-                      layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",font=list(size=20)),
-                              range=c(min(0.99*min(PCR_pred_scat_dat[,2],PCR_pred_scat_dat[,3]),1.01*min(PCR_pred_scat_dat[,2],PCR_pred_scat_dat[,3])),
-                              max(0.99*max(PCR_pred_scat_dat[,2],PCR_pred_scat_dat[,3]),1.01*max(PCR_pred_scat_dat[,2],PCR_pred_scat_dat[,3]))))))
-      
-      output$PCR_used_hp_pred = DT::renderDataTable(server=T,{data = datatable(Optimal_PCR,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-                              target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
-                              pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                              initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      removeModal()
-      
-      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'PCR: Predict')
-      
-    }
-  })
-  
-  # PCR Fitting of entire data set - NOT USING ANYMORE
-  
-  observeEvent(input$PCR_stand, {
-    
-    if (nrow(PCR_scat_dat) != 0) {
-      
-      output$PCR_scatplot = renderPlotly(scatter_confuse(PCR_scat_dat,input$PCR_stand,input$PCR_dec_crit))
-      
-      confuse_results = confuse(PCR_scat_dat[,2:3],input$PCR_stand,input$PCR_dec_crit)
-      confuse_table = matrix(0,nrow=1,ncol=4)
-      
-      confuse_table[1,1] = confuse_results$TP
-      confuse_table[1,2] = confuse_results$TN
-      confuse_table[1,3] = confuse_results$FP
-      confuse_table[1,4] = confuse_results$FN
-      
-      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-      
-      output$PCR_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-                      options = list(autoWidth = F,dom='tB', paging = F,buttons = c('copy', 'csv', 'excel'),scrollX = F,scrollY = F,
-                      columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
-                      {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$PCR_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
-                      round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
-    }
-  })
-  
-  observeEvent(input$PCR_dec_crit, {
-    
-    if (nrow(PCR_scat_dat) != 0) {
-      
-      output$PCR_scatplot = renderPlotly(scatter_confuse(PCR_scat_dat,input$PCR_stand,input$PCR_dec_crit))
-      
-      confuse_results = confuse(PCR_scat_dat[,2:3],input$PCR_stand,input$PCR_dec_crit)
-      confuse_table = matrix(0,nrow=1,ncol=4)
-      
-      confuse_table[1,1] = confuse_results$TP
-      confuse_table[1,2] = confuse_results$TN
-      confuse_table[1,3] = confuse_results$FP
-      confuse_table[1,4] = confuse_results$FN
-      
-      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-      
-      output$PCR_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-                      options = list(autoWidth = F,dom='tB', paging = F,buttons = c('copy', 'csv', 'excel'),scrollX = F,scrollY = F,
-                      columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
-                      {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$PCR_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
-                      round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
-    }
-  })
-  
-  observeEvent(input$PCR_final_fitting, {
-    
-    set.seed(input$model_seed)
-    
-    if (is.null(ignored_rows)) {
-      data = current_data()
-    } else {
-      data = current_data()[-ignored_rows,]
-    }
-    
-    # REMOVE NA'S FROM RESPONSE VARIABLE
-    data = data[!is.na(data[,response_var()]), ]
-    
-    if (any(is.na(data[,3:ncol(data)]))) {
-      
-      showModal(modalDialog(paste("PCA does not tolerate missing feature values. You can either Impute these
-                (on the Data tab) or Disable rows/columns with missing values."),footer = modalButton("Close")))
-      
-    } else {
-      
-      #Randomly shuffle the data
-      if (input$randomize == TRUE) {
-        data = data[sample(nrow(data)), ]
-      }
-      
-      # Isolate the features
-      feat_data = data[,input$coves_to_use]
-      
-      # Run PCA on feature data
-      pca_result = prcomp(feat_data, scale. = TRUE)
-      pca_summary = summary(pca_result)
-      
-      cumulative_proportions = pca_summary$importance[3,]
-      
-      explained=0
-      dataset = cbind(data[,1],data[,response_var()])
-      
-      for (i in 1:length(cumulative_proportions)) {
-        if (explained <= input$pcr_prop) {
-          dataset = cbind(dataset, pca_result$x[,i])
-          explained = cumulative_proportions[i]
-        }
-      }
-      
-      MC_runs = input$MC_runs
-      
-      withProgress(
-        message = 'PCR Fitting Progress',
-        detail = paste("MC runs:", x = MC_runs),
-        value = 0,
-        {
-          
-          temp_fits = matrix(0, nrow = nrow(dataset), ncol = 2*MC_runs)
-          temp_fits = data.frame(temp_fits)
-          
-          for (i in 1:MC_runs) {
-            
-            # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
-            if (input$loggy == TRUE) {
-              for (j in 1:nrow(dataset)) {
-                if (dataset[j, 2] == "TNTC") {
-                  dataset[j, 2] = log10(runif(1, min = rc_lowval, max = rc_upval))
-                }
-                
-                if (dataset[j, 2] == "ND") {
-                  dataset[j, 2] = log10(runif(1, min = lc_lowval, max = lc_upval))
-                }
-              }
-            } else {
-              for (j in 1:nrow(dataset)) {
-                if (dataset[j, 2] == "TNTC") {
-                  dataset[j, 2] = (runif(1, min = rc_lowval, max = rc_upval))
-                }
-                
-                if (dataset[j, 2] == "ND") {
-                  dataset[j, 2] = (runif(1, min = lc_lowval, max = lc_upval))
-                }
-              }
-            }
-            
-            temp_fits[,2*i-1] = dataset[,2]
-            
-            training = data.frame(dataset[,-1])
-            colnames(training)[1] = "Response"
-            
-            #fit training data
-            model = lm(Response~.,data=training,na.action=na.exclude)
-            
-            fitvals = predict(model, newdata = training)
-            temp_fits[,2*i] = round(fitvals,3)
-            
-            incProgress(1/MC_runs, detail = paste("MC run: ",i,"/",MC_runs))
-            
-          } #End the MC runs
-          
-        })
-      
-      even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
-      odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
-      
-      obs_mean_values = rowMeans(odd_columns)
-      fit_mean_values = rowMeans(even_columns)
-      fits = cbind(round(obs_mean_values,3),round(fit_mean_values,3))
-      
-      fitted_results = data.frame(cbind(dataset[,1],fits,round(dataset[,3:ncol(dataset)],4)))
-      fitted_results = fitted_results[order(fitted_results[,1]),]
-      
-      pcr_fits = data.frame(fitted_results)
-      
-      colnames(pcr_fits)[1:3] = c(colnames(data)[1],colnames(data)[response_var()],"Fitted_Value")
-      
-      for (t in 4:ncol(pcr_fits)) {
-        colnames(pcr_fits)[t] = paste("PCA",t-3)
-      }
-      
-      PCA_coefficients = data.frame(round(pca_result$rotation,4))
-      PCA_coefficients = cbind(Feature = rownames(PCA_coefficients), PCA_coefficients)
-      
-      PCA_summary_df = data.frame(rbind(round(pca_summary$importance[1,],3),pca_summary$importance[2,],pca_summary$importance[3,]))
-      summary_rownames= c("Std. Dev.","Var Explained","Cum Var Explained")
-      PCA_summary_df = cbind(summary_rownames,PCA_summary_df)
-      colnames(PCA_summary_df)[1] = "Metric"
-      
-      output$PCA_fcoeffs = DT::renderDataTable(server = T, {data = datatable(PCA_coefficients,rownames = F,selection =
-                        list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                        list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                        className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                        "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$PCA_fsummary = DT::renderDataTable(server = T, {data = datatable(PCA_summary_df,rownames = F,selection =
-                        list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                        list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                        className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                        "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      pcr_stepr = round((max(pcr_fits[,2])-min(pcr_fits[,2]))/40,2)
-      
-      updateNumericInput(session, "PCR_stand",
-                         value = round(mean(pcr_fits[,2]),2),
-                         max = round(max(pcr_fits[,2]),2),
-                         min = round(min(pcr_fits[,2]),2),
-                         step = pcr_stepr
-      )
-      
-      pcr_stepdc = round((max(pcr_fits[,3])-min(pcr_fits[,3]))/40,2)
-      
-      updateNumericInput(session, "PCR_dec_crit",
-                         value = round(mean(pcr_fits[,3]),2),
-                         max = round(max(pcr_fits[,3]),2),
-                         min = round(min(pcr_fits[,3]),2),
-                         step = pcr_stepdc
-      )
-      
-      output$PCR_fits = DT::renderDataTable(server = T, {data = datatable(pcr_fits,rownames = F,selection =
-              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions='Buttons',options = list(autoWidth = F,
-              paging = TRUE,pageLength = 17,dom="ltBp",buttons = c('copy', 'csv', 'excel'),scrollX = TRUE,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',
-              orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744',
-              'color': '#fff'});","}")))
-      })
-      
-      PCR_scat_dat <<- pcr_fits[,1:3]
-      output$PCR_scatplot = renderPlotly(scatter_confuse(PCR_scat_dat,input$PCR_stand,input$PCR_dec_crit))
-      
-      confuse_results = confuse(PCR_scat_dat[,2:3],input$PCR_stand,input$PCR_dec_crit)
-      confuse_table = matrix(0,nrow=1,ncol=4)
-      
-      confuse_table[1,1] = confuse_results$TP
-      confuse_table[1,2] = confuse_results$TN
-      confuse_table[1,3] = confuse_results$FP
-      confuse_table[1,4] = confuse_results$FN
-      
-      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-      
-      output$PCR_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-                      options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                      columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
-                      {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$PCR_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
-                      round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
-      
-      resid_data = PCR_scat_dat[,c(1,3)] %>% mutate(Residuals = round(PCR_scat_dat[,2]-PCR_scat_dat[,3],3))
-      
-      output$PCR_resid_scatplot = renderPlotly(scatter(resid_data))
-      
-      output$PCR_lineplot = renderPlotly(plot_ly(PCR_scat_dat, x = ~PCR_scat_dat[,1], y = ~PCR_scat_dat[,2], name="Observations",
-                            type="scatter", mode = "lines",text = ~paste("<b>ID: </b>",PCR_scat_dat[,1],"<br><b>Observed Value:</b> ",
-                            PCR_scat_dat[,2],sep=""),hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5)) %>%
-                      add_trace(y = ~PCR_scat_dat[,3], name="Fitted_Values", mode = 'lines',
-                            text = ~paste("<b>ID: </b>",PCR_scat_dat[,1],"<br><b>Fitted Value:</b> ",round(PCR_scat_dat[,3],3),sep=""),
-                            hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-                      layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fits",font=list(size=20)),
-                            range=c(min(0.99*min(PCR_scat_dat[,2],PCR_scat_dat[,3]),1.01*min(PCR_scat_dat[,2],PCR_scat_dat[,3])),
-                            max(0.99*max(PCR_scat_dat[,2],PCR_scat_dat[,3]),1.01*max(PCR_scat_dat[,2],PCR_scat_dat[,3]))))))
-      
-      removeModal()
-      
-      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'PCR: Fitting')
-    }
-  })
 
   # XGB feature selection
   
@@ -2095,6 +1900,21 @@ server= function(input,output,session) {
     if(running())
       return(NULL)
     running(TRUE)
+    
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+      pcax_being_used(feats_to_use)
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+      feats_being_used(feats_to_use)
+    }
     
     eta = eta_set()
     gamma = gamma_set()
@@ -2106,12 +1926,11 @@ server= function(input,output,session) {
     colsamp = colsamp_set()
     
     if (is.null(ignored_rows)) {
-      xgb_select_data = current_data()
+      xgb_select_data = data
     } else {
-      xgb_select_data = current_data()[-ignored_rows,]
+      xgb_select_data = data[-ignored_rows,]
     }
     
-    resvar = response_var()
     xgb_tree_method = xgb_tree_method_set()
     xgb_boost = xgb_booster_set()
     dart_normalize_type = dart_normalize_type_set()
@@ -2120,7 +1939,6 @@ server= function(input,output,session) {
     skip_drop = skip_drop_set()
     
     xgb_standardize = input$XGB_standardize
-    coves_to_use = input$coves_to_use
     lc_lowval = input$lc_lowval
     lc_upval = input$lc_upval
     rc_lowval = input$rc_lowval
@@ -2132,13 +1950,11 @@ server= function(input,output,session) {
     test_weight = input$test_weight
     seed = input$model_seed
     
-    coves_being_used(coves_to_use)
-    
     xgb_select_result(NULL)
     
     xgb_select_calculation <<- future({
       
-      xgb_selection(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
+      xgb_selection(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                     xgb_standardize,xgb_tree_method,xgb_boost,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
                     min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db)
       
@@ -2158,9 +1974,9 @@ server= function(input,output,session) {
     
     output$XGB_select = DT::renderDataTable(server=T,{
       data = datatable(xgb_select_result(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-                                                                     target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = 17,scrollX = F,
-                                                                                                                                                   scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                                                                                                                                                   initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
+        target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = 17,scrollX = F,
+        scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+        initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
         formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
       data$x$data[[1]] = as.numeric(data$x$data[[1]])
       data
@@ -2180,7 +1996,11 @@ server= function(input,output,session) {
   
   observeEvent(input$XGB_select_rows_selected, ignoreInit = T, {
     
-    all_covar = coves_being_used()
+    if (input$use_pca_data) {
+      all_feats = pca_axes()
+    } else {
+      all_feats = feat_names()
+    }
     
     temp_data = dbReadTable(temp_db, "xgb_selection_results")
     
@@ -2189,14 +2009,17 @@ server= function(input,output,session) {
     if (crit_val > 1) {
       
       tossed_covar = temp_data[which(as.numeric(temp_data$Iteration) < crit_val),"Lowest.SHAP"]
-      remaining = all_covar[-which(all_covar %in% tossed_covar)]
+      remaining = all_feats[-which(all_feats %in% tossed_covar)]
       
     } else {
-      remaining = all_covar
+      remaining = all_feats
     }
     
-    updateCheckboxGroupInput(session,"coves_to_use",choices=cove_names(),selected=remaining,inline=T)
-    
+    if (input$use_pca_data) {
+      updateCheckboxGroupInput(session,"pcax_to_use",choices=pca_axes(),selected=remaining,inline=T)
+    } else {
+      updateCheckboxGroupInput(session,"feats_to_use",choices=feat_names(),selected=remaining,inline=T)
+    }
   })
   
   # XGB HP optimization
@@ -2219,7 +2042,20 @@ server= function(input,output,session) {
   
   observeEvent(input$run_XGB_optimize_HP, {
     
-    xgb_optim_HP_results = xgb_call_optimize_HP(current_data(),response_var(),id_var,input$model_seed,ignored_rows,input$coves_to_use,input$lc_lowval,
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
+    xgb_optim_HP_results = xgb_call_optimize_HP(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_lowval,
                             input$lc_upval,input$rc_lowval,input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$randomize,input$XGB_standardize,
                             input$XGB_hyper_metric,input$pso_max_iter,input$pso_swarm_size,input$member_exp,input$ss_exp)
     
@@ -2242,12 +2078,100 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: HP Optim')
   })
   
+  # XGB HP Settings
+  
+  observeEvent(input$XGB_params, {
+    
+    showModal(modalDialog(title="XGB Hyperparameters",easyClose=F,card(
+      fluidRow(
+        column(4,numericInput("eta", label="Eta", value = eta_set(),min=0,max=1,step=0.01)),
+        column(4,numericInput("gamma", label="Gamma", value = gamma_set(), min=0, max=20, step = 1)),
+        column(4,numericInput("nrounds", label="# Rounds", value = nrounds_set(), min=100, max=3000, step = 25))),
+      fluidRow(
+        column(6,numericInput("max_depth", label="Max Tree Depth", value = max_depth_set(), min=1)),
+        column(6,numericInput("min_child_weight", label="Min Leaf Size", value = min_child_weight_set(), min=1))),
+      fluidRow(
+        column(6,numericInput("subsamp", label="Subsample Proportion", value = subsamp_set(), min=0,max=1, step=0.01)),
+        column(6,numericInput("colsamp", label="Column Sample Proportion", value = colsamp_set(), min=0,max=1,step=0.01))),
+      fluidRow(
+        column(4,selectInput("XGB_tree_method",label = "Tree Method",selected =xgb_tree_method_set(),choices = c("hist","exact","approx"))),
+        column(4,selectInput("XGB_booster",label = "Booster",selected =xgb_booster_set(),choices = c("gbtree","gblinear","dart")))),
+      fluidRow(column(12,tags$h5("CAUTION: DART booster + Feature Selection = long computational times!"))),
+      fluidRow(
+        column(6, selectInput("dart_normalize_type",label = "Normalization Type",selected =dart_normalize_type_set(),choices = c("tree","forest"))),
+        column(6, selectInput("dart_sample_type",label = "Sample Algorithm",selected =dart_sample_type_set(),choices = c("uniform","weighted")))),
+      # fluidRow(
+      #   column(12, selectInput("objective",
+      #          label = "Objective Fcn",
+      #          selected ="reg:linear",
+      #          choices = c("reg:linear","reg:logistic","binary:logistic","multi:softmax","multi:softprob")))),
+      fluidRow(
+        column(6,numericInput("rate_drop", label="Drop Rate", value = rate_drop_set(), min=0,max=1,step=0.01)),
+        column(6,numericInput("skip_drop", label="Skip Prob", value = skip_drop_set(), min=0,max=1,step=0.01)))),
+      footer = div(actionButton("save_XGB_hp_settings",label='Save Settings'),modalButton("Close"))))
+    
+    if (xgb_booster_set() == "dart") {
+      shinyjs::enable("dart_normalize_type")
+      shinyjs::enable("dart_sample_type")
+      shinyjs::enable("rate_drop")
+      shinyjs::enable("skip_drop")
+    } else {
+      shinyjs::disable("dart_normalize_type")
+      shinyjs::disable("dart_sample_type")
+      shinyjs::disable("rate_drop")
+      shinyjs::disable("skip_drop")
+    }
+  })
+  
+  observeEvent(input$save_XGB_hp_settings, ignoreInit = T, {
+    
+    eta_set(input$eta)
+    gamma_set(input$gamma)
+    max_depth_set(input$max_depth)
+    min_child_weight_set(input$min_child_weight)
+    nrounds_set(input$nrounds)
+    early_stop_set(input$early_stop)
+    nfold_set(input$nfold)
+    subsamp_set(input$subsamp)
+    colsamp_set(input$colsamp)
+    
+    xgb_tree_method_set(input$XGB_tree_method)
+    xgb_booster_set(input$XGB_booster)
+    
+    dart_normalize_type_set(input$dart_normalize_type)
+    dart_sample_type_set(input$dart_sample_type)
+    rate_drop_set(input$rate_drop)
+    skip_drop_set(input$skip_drop)
+    
+    Optimal_HP <<- data.frame(max_depth = input$max_depth,eta = input$eta,subsample = input$subsamp,colsample_bytree = input$colsamp,
+                              min_child_weight = input$min_child_weight,gamma = input$gamma,nrounds = input$nrounds)
+    
+    removeModal()
+    
+  })
+  
+  observeEvent(input$XGB_booster, {
+    if (input$XGB_booster == "dart") {
+      shinyjs::enable("dart_normalize_type")
+      shinyjs::enable("dart_sample_type")
+      shinyjs::enable("rate_drop")
+      shinyjs::enable("skip_drop")
+    } else {
+      shinyjs::disable("dart_normalize_type")
+      shinyjs::disable("dart_sample_type")
+      shinyjs::disable("rate_drop")
+      shinyjs::disable("skip_drop")
+    }
+  })
+  
   # XGB predictions on test data
   
   observeEvent(input$XGB_pred_stand, {
     
     if (nrow(XGB_pred_scat_dat) != 0) {
       
+      iv$add_rule("XGB_pred_stand", sv_between(min(XGB_pred_scat_dat[,2]),max(XGB_pred_scat_dat[,2])))
+
       output$XGB_pred_scatplot = renderPlotly(scatter_confuse(XGB_pred_scat_dat,input$XGB_pred_stand,input$XGB_pred_dc))
       
       confuse_results = confuse(XGB_pred_scat_dat[,2:3],input$XGB_pred_stand,input$XGB_pred_dc)
@@ -2274,6 +2198,8 @@ server= function(input,output,session) {
   observeEvent(input$XGB_pred_dc, {
     
     if (nrow(XGB_pred_scat_dat) != 0) {
+    
+      iv$add_rule("XGB_pred_dc", sv_between(min(XGB_pred_scat_dat[,3]),max(XGB_pred_scat_dat[,3])))
       
       output$XGB_pred_scatplot = renderPlotly(scatter_confuse(XGB_pred_scat_dat,input$XGB_pred_stand,input$XGB_pred_dc))
       
@@ -2300,10 +2226,23 @@ server= function(input,output,session) {
   
   observeEvent(input$run_XGB_predict, {
     
-    xgb_pred_results = xgb_call_predict(current_data(),response_var(),id_var,input$model_seed,ignored_rows,input$coves_to_use,input$lc_lowval,
-                                 input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
-                                 input$XGB_standardize,Optimal_HP$eta,Optimal_HP$gamma,Optimal_HP$max_depth,
-                                 Optimal_HP$min_child_weight,Optimal_HP$subsamp,Optimal_HP$colsamp,Optimal_HP$nrounds)
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
+    xgb_pred_results = xgb_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_lowval,
+                            input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
+                            input$XGB_standardize,Optimal_HP$eta,Optimal_HP$gamma,Optimal_HP$max_depth,
+                            Optimal_HP$min_child_weight,Optimal_HP$subsamp,Optimal_HP$colsamp,Optimal_HP$nrounds)
     
     XGB_saved_predictions <<- xgb_pred_results[[1]]
     
@@ -2394,6 +2333,8 @@ server= function(input,output,session) {
     
     if (nrow(XGB_scat_dat) != 0) {
       
+      iv$add_rule("XGB_stand", sv_between(min(XGB_scat_dat[,2]),max(XGB_scat_dat[,2])))
+      
       output$XGB_scatplot = renderPlotly(scatter_confuse(XGB_scat_dat,input$XGB_stand,input$XGB_dec_crit))
       
       xgb_confuse_results = confuse(XGB_scat_dat[,2:3],input$XGB_stand,input$XGB_dec_crit)
@@ -2422,6 +2363,8 @@ server= function(input,output,session) {
     
     if (nrow(XGB_scat_dat) != 0) {
       
+      iv$add_rule("XGB_dec_crit", sv_between(min(XGB_scat_dat[,3]),max(XGB_scat_dat[,3])))
+      
       output$XGB_scatplot = renderPlotly(scatter_confuse(XGB_scat_dat,input$XGB_stand,input$XGB_dec_crit))
       
       xgb_confuse_results = confuse(XGB_scat_dat[,2:3],input$XGB_stand,input$XGB_dec_crit)
@@ -2447,16 +2390,29 @@ server= function(input,output,session) {
   
   observeEvent(input$XGB_final_fitting, {
     
-    if (is.null(ignored_rows)) {
-      data0 = current_data()
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
     } else {
-      data0 = current_data()[-ignored_rows,]
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
+    if (is.null(ignored_rows)) {
+      data0 = data
+    } else {
+      data0 = data[-ignored_rows,]
     }
     
     # REMOVE NA'S FROM RESPONSE VARIABLE
-    data0 = data0[!is.na(data0[,response_var()]), ]
+    data0 = data0[!is.na(data0[,rv]), ]
     
-    var_list = c(response_var(),which(colnames(data0) %in% input$coves_to_use))
+    var_list = c(rv,which(colnames(data0) %in% feats_to_use))
     data = data0[,var_list]
     
     MC_runs = input$MC_runs
@@ -2464,9 +2420,9 @@ server= function(input,output,session) {
     temp_fits = matrix(0, nrow = nrow(data), ncol = 2*MC_runs)
     temp_fits = data.frame(temp_fits)
     
-    temp_shapes = matrix(0, nrow = length(input$coves_to_use), ncol = MC_runs+1)
+    temp_shapes = matrix(0, nrow = length(feats_to_use), ncol = MC_runs+1)
     temp_shapes = data.frame(temp_shapes)
-    temp_shapes[,1] = input$coves_to_use
+    temp_shapes[,1] = feats_to_use
     
     if (input$XGB_standardize) {
       
@@ -2565,8 +2521,8 @@ server= function(input,output,session) {
           }
           
           for (c in 1:nrow(temp_shapes)) {
-            current_cove = temp_shapes[c,1]
-            temp_shapes[c,i+1] = as.numeric(shap_temp[shap_temp[,1] == current_cove,2])
+            current_feat = temp_shapes[c,1]
+            temp_shapes[c,i+1] = as.numeric(shap_temp[shap_temp[,1] == current_feat,2])
           }
           
           incProgress(1/MC_runs, detail = paste("MC run: ",i,"/",MC_runs))
@@ -2587,7 +2543,7 @@ server= function(input,output,session) {
     
     XGB_shapes0 = rowMeans(temp_shapes1)
     
-    XGB_results = cbind(data0[,1],fits[,1:2],data[,2:ncol(data)])
+    XGB_results = cbind(data0[,1],fits[,1:2],round(data[,2:ncol(data)],4))
     colnames(XGB_results) = c(colnames(data0)[[1]],colnames(data)[[1]],"Fitted_Values",colnames(data[,-1]))
     
     XGB_shapes = data.frame(cbind(temp_shapes[,1],format(round(XGB_shapes0,4),scientific=FALSE)))
@@ -2668,97 +2624,13 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Fitting')
   })
   
-  # XGB HP Settings
-  
-  observeEvent(input$XGB_params, {
-    
-    showModal(modalDialog(title="XGB Hyperparameters",easyClose=F,card(
-      fluidRow(
-        column(4,numericInput("eta", label="Eta", value = eta_set(),min=0,max=1,step=0.01)),
-        column(4,numericInput("gamma", label="Gamma", value = gamma_set(), min=0, max=20, step = 1)),
-        column(4,numericInput("nrounds", label="# Rounds", value = nrounds_set(), min=100, max=3000, step = 25))),
-      fluidRow(
-        column(6,numericInput("max_depth", label="Max Tree Depth", value = max_depth_set(), min=1)),
-        column(6,numericInput("min_child_weight", label="Min Leaf Size", value = min_child_weight_set(), min=1))),
-      fluidRow(
-        column(6,numericInput("subsamp", label="Subsample Proportion", value = subsamp_set(), min=0,max=1, step=0.01)),
-        column(6,numericInput("colsamp", label="Column Sample Proportion", value = colsamp_set(), min=0,max=1,step=0.01))),
-      fluidRow(
-        column(4,selectInput("XGB_tree_method",label = "Tree Method",selected =xgb_tree_method_set(),choices = c("hist","exact","approx"))),
-        column(4,selectInput("XGB_booster",label = "Booster",selected =xgb_booster_set(),choices = c("gbtree","gblinear","dart")))),
-      fluidRow(column(12,tags$h5("CAUTION: DART booster + Feature Selection = long computational times!"))),
-      fluidRow(
-        column(6, selectInput("dart_normalize_type",label = "Normalization Type",selected =dart_normalize_type_set(),choices = c("tree","forest"))),
-        column(6, selectInput("dart_sample_type",label = "Sample Algorithm",selected =dart_sample_type_set(),choices = c("uniform","weighted")))),
-      # fluidRow(
-      #   column(12, selectInput("objective",
-      #          label = "Objective Fcn",
-      #          selected ="reg:linear",
-      #          choices = c("reg:linear","reg:logistic","binary:logistic","multi:softmax","multi:softprob")))),
-      fluidRow(
-        column(6,numericInput("rate_drop", label="Drop Rate", value = rate_drop_set(), min=0,max=1,step=0.01)),
-        column(6,numericInput("skip_drop", label="Skip Prob", value = skip_drop_set(), min=0,max=1,step=0.01)))),
-      footer = div(actionButton("save_XGB_hp_settings",label='Save Settings'),modalButton("Close"))))
-    
-    if (xgb_booster_set() == "dart") {
-      shinyjs::enable("dart_normalize_type")
-      shinyjs::enable("dart_sample_type")
-      shinyjs::enable("rate_drop")
-      shinyjs::enable("skip_drop")
-    } else {
-      shinyjs::disable("dart_normalize_type")
-      shinyjs::disable("dart_sample_type")
-      shinyjs::disable("rate_drop")
-      shinyjs::disable("skip_drop")
-    }
-  })
-  
-  observeEvent(input$save_XGB_hp_settings, ignoreInit = T, {
-    
-    eta_set(input$eta)
-    gamma_set(input$gamma)
-    max_depth_set(input$max_depth)
-    min_child_weight_set(input$min_child_weight)
-    nrounds_set(input$nrounds)
-    early_stop_set(input$early_stop)
-    nfold_set(input$nfold)
-    subsamp_set(input$subsamp)
-    colsamp_set(input$colsamp)
-    
-    xgb_tree_method_set(input$XGB_tree_method)
-    xgb_booster_set(input$XGB_booster)
-    
-    dart_normalize_type_set(input$dart_normalize_type)
-    dart_sample_type_set(input$dart_sample_type)
-    rate_drop_set(input$rate_drop)
-    skip_drop_set(input$skip_drop)
-    
-    Optimal_HP <<- data.frame(max_depth = input$max_depth,eta = input$eta,subsample = input$subsamp,colsample_bytree = input$colsamp,
-                              min_child_weight = input$min_child_weight,gamma = input$gamma,nrounds = input$nrounds)
-    
-    removeModal()
-    
-  })
-  
-  observeEvent(input$XGB_booster, {
-    if (input$XGB_booster == "dart") {
-      shinyjs::enable("dart_normalize_type")
-      shinyjs::enable("dart_sample_type")
-      shinyjs::enable("rate_drop")
-      shinyjs::enable("skip_drop")
-    } else {
-      shinyjs::disable("dart_normalize_type")
-      shinyjs::disable("dart_sample_type")
-      shinyjs::disable("rate_drop")
-      shinyjs::disable("skip_drop")
-    }
-  })
-  
   # Elastic Net predictions on test data
   
   observeEvent(input$EN_pred_stand, {
     
     if (nrow(EN_pred_scat_dat) != 0) {
+      
+      iv$add_rule("EN_pred_stand", sv_between(min(EN_pred_scat_dat[,2]),max(EN_pred_scat_dat[,2])))
       
       output$EN_scatplot = renderPlotly(scatter_confuse(EN_pred_scat_dat,input$EN_pred_stand,input$EN_pred_dc))
       
@@ -2788,6 +2660,8 @@ server= function(input,output,session) {
     
     if (nrow(EN_pred_scat_dat) != 0) {
       
+      iv$add_rule("EN_pred_dc", sv_between(min(EN_pred_scat_dat[,3]),max(EN_pred_scat_dat[,3])))
+      
       output$EN_scatplot = renderPlotly(scatter_confuse(EN_pred_scat_dat,input$EN_pred_stand,input$EN_pred_dc))
       
       confuse_results = confuse(EN_pred_scat_dat[,2:3],input$EN_pred_stand,input$EN_pred_dc)
@@ -2814,22 +2688,35 @@ server= function(input,output,session) {
   
   observeEvent(input$EN_pred, {
     
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
     set.seed(input$model_seed)
     
     MC_runs = input$MC_runs
     
     if (is.null(ignored_rows)) {
-      EN_data0 = current_data()
+      EN_data0 = data
     } else {
-      EN_data0 = current_data()[-ignored_rows,]
+      EN_data0 = data[-ignored_rows,]
     }
     
     # REMOVE NA'S FROM RESPONSE VARIABLE
-    EN_data0 = EN_data0[!is.na(EN_data0[,response_var()]),]
+    EN_data0 = EN_data0[!is.na(EN_data0[,rv]),]
     
-    var_list = c(1,response_var(),which(colnames(EN_data0) %in% input$coves_to_use))
+    var_list = c(1,rv,which(colnames(EN_data0) %in% feats_to_use))
     EN_data = EN_data0[,var_list]
-    colnames(EN_data) = c(colnames(current_data())[[1]],"Response",input$coves_to_use)
+    colnames(EN_data) = c(colnames(data)[[1]],"Response",feats_to_use)
     
     # RANDOMIZE DATA
     if (input$randomize==TRUE) {
@@ -2837,9 +2724,9 @@ server= function(input,output,session) {
       EN_data = EN_data[random_index, ]
     }
     
-    data = EN_data[,-1]
+    using_data = EN_data[,-1]
     
-    if (any(is.na(data[,-1]))) {
+    if (any(is.na(using_data[,-1]))) {
       
       showModal(modalDialog(paste("Elastic Net does not tolerate missing feature values. You can either Impute these
                 (on the Data tab) or Disable rows/columns with missing values."),footer = modalButton("Close")))
@@ -2848,28 +2735,28 @@ server= function(input,output,session) {
       
       #Create n folds
       tot_folds = input$num_folds
-      folds = cut(seq(1, nrow(data)), breaks = tot_folds, labels = FALSE)
+      folds = cut(seq(1, nrow(using_data)), breaks = tot_folds, labels = FALSE)
       
       fold_predictions = matrix(0, nrow = 0, ncol = 2)
       fold_predictions = as.data.frame(fold_predictions)
       
-      coeff_folds = matrix(0, nrow = ncol(data), ncol = tot_folds+1)
+      coeff_folds = matrix(0, nrow = ncol(using_data), ncol = tot_folds+1)
       coeff_folds = as.data.frame(coeff_folds)
-      coeff_folds[,1] = c("(Intercept)",input$coves_to_use)
+      coeff_folds[,1] = c("(Intercept)",feats_to_use)
       
       #Perform cross validation
       for (f in 1:tot_folds) {
         
         testIndices = which(folds == f, arr.ind = TRUE)
-        testData = data[testIndices, ]
-        trainData = data[-testIndices, ]
+        testData = using_data[testIndices, ]
+        trainData = using_data[-testIndices, ]
         
         temp_preds = matrix(0, nrow = nrow(testData), ncol = 2*MC_runs)
         temp_preds = data.frame(temp_preds)
         
-        temp_coeffs = matrix(0, nrow = ncol(data), ncol = MC_runs+1)
+        temp_coeffs = matrix(0, nrow = ncol(using_data), ncol = MC_runs+1)
         temp_coeffs = data.frame(temp_coeffs)
-        temp_coeffs[,1] = c("(Intercept)",input$coves_to_use)
+        temp_coeffs[,1] = c("(Intercept)",feats_to_use)
         
         withProgress(
           message = 'EN Prediction Progress',
@@ -2971,8 +2858,8 @@ server= function(input,output,session) {
           })
       } #End the Fold runs
       
-      prediction_results = data.frame(cbind(EN_data[,1],round(fold_predictions[,1],3),round(fold_predictions[,2],3),data[,-1]))
-      colnames(prediction_results) = c(colnames(EN_data)[[1]],colnames(data)[[1]],"Predictions",colnames(data[,-1]))
+      prediction_results = data.frame(cbind(EN_data[,1],round(fold_predictions[,1],3),round(fold_predictions[,2],3),round(using_data[,-1],4)))
+      colnames(prediction_results) = c(colnames(EN_data)[[1]],colnames(using_data)[[1]],"Predictions",colnames(using_data[,-1]))
       
       prediction_results = prediction_results[order(prediction_results[,1]),]
       
@@ -3053,6 +2940,8 @@ server= function(input,output,session) {
     
     if (nrow(EN_scat_dat) != 0) {
       
+      iv$add_rule("EN_stand", sv_between(min(EN_scat_dat[,2]),max(EN_scat_dat[,2])))
+      
       output$EN_scatplot = renderPlotly(scatter_confuse(EN_scat_dat,input$EN_stand,input$EN_dec_crit))
       
       EN_confuse_results = confuse(EN_scat_dat[,2:3],input$EN_stand,input$EN_dec_crit)
@@ -3081,6 +2970,8 @@ server= function(input,output,session) {
     
     if (nrow(EN_scat_dat) != 0) {
       
+      iv$add_rule("EN_dec_crit", sv_between(min(EN_scat_dat[,3]),max(EN_scat_dat[,3])))
+      
       output$EN_scatplot = renderPlotly(scatter_confuse(EN_scat_dat,input$EN_stand,input$EN_dec_crit))
       
       EN_confuse_results = confuse(EN_scat_dat[,2:3],input$EN_stand,input$EN_dec_crit)
@@ -3106,22 +2997,35 @@ server= function(input,output,session) {
   
   observeEvent(input$EN_fit, {
     
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
     set.seed(input$model_seed)
     
     MC_runs=input$MC_runs
     
     if (is.null(ignored_rows)) {
-      EN_data0 = current_data()
+      EN_data0 = data
     } else {
-      EN_data0 = current_data()[-ignored_rows,]
+      EN_data0 = data[-ignored_rows,]
     }
     
     # REMOVE NA'S FROM RESPONSE VARIABLE
-    EN_data0 = EN_data0[!is.na(EN_data0[,response_var()]),]
+    EN_data0 = EN_data0[!is.na(EN_data0[,rv]),]
     
-    var_list = c(response_var(),which(colnames(EN_data0) %in% input$coves_to_use))
+    var_list = c(rv,which(colnames(EN_data0) %in% feats_to_use))
     EN_data = EN_data0[,var_list]
-    colnames(EN_data) = c("Response",input$coves_to_use)
+    colnames(EN_data) = c("Response",feats_to_use)
     
     if (any(is.na(EN_data[,-1]))) {
       
@@ -3135,7 +3039,7 @@ server= function(input,output,session) {
       
       temp_coeffs = matrix(0, nrow = ncol(EN_data), ncol = MC_runs+1)
       temp_coeffs = data.frame(temp_coeffs)
-      temp_coeffs[,1] = c("(Intercept)",input$coves_to_use)
+      temp_coeffs[,1] = c("(Intercept)",feats_to_use)
       
       withProgress(
         message = 'EN Fitting Progress',
@@ -3212,7 +3116,7 @@ server= function(input,output,session) {
       
       obs_mean_values = rowMeans(odd_columns)
       fit_mean_values = rowMeans(even_columns)
-      EN_results = data.frame(cbind(EN_data0[,1],round(obs_mean_values,3),round(fit_mean_values,3),EN_data[,-1]))
+      EN_results = data.frame(cbind(EN_data0[,1],round(obs_mean_values,3),round(fit_mean_values,3),round(EN_data[,-1],4)))
       colnames(EN_results) = c(colnames(EN_data0)[[1]],colnames(EN_data)[[1]],"Fitted_Value",colnames(EN_data[,-1]))
       
       en_stepr = round((max(EN_results[,2])-min(EN_results[,2]))/40,2)
@@ -3285,6 +3189,8 @@ server= function(input,output,session) {
   
   observeEvent(input$run_iso_forest, {
     
+    req(iv$is_valid())
+    
     # if (is.null(ignored_rows)) {
     #   iso_data0 = current_data()
     #   iso_data = current_data()[,-c(id_var,response_var())]
@@ -3293,7 +3199,18 @@ server= function(input,output,session) {
     #   iso_data = iso_data0[,-c(id_var,response_var())]
     # }
     
-    iso_data = current_data()[,-c(id_var,response_var())]
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
+    iso_data = data[,-c(id_var,rv)]
     
     samp_size = min(nrow(iso_data), 10000L)
     ndim = input$iso_ndim
@@ -3302,7 +3219,7 @@ server= function(input,output,session) {
     iso_results = data.frame(iso_results)
     colnames(iso_results) = c("ID","Depth_Score","Adj_Depth_Score","Density_Score","Adj_Density_Score","Overall")
     
-    iso_results[,1] = current_data()[,1]
+    iso_results[,1] = data[,1]
     
     techs = c("depth","adj_depth", "density", "adj_density")
     

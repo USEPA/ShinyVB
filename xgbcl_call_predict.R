@@ -133,7 +133,7 @@ xgbcl_call_predict = function(current_data,
     pred_shapes[,i+1] = prediction_fold_result[[2]]
   }
   
-  prediction_results[,3] = round(prediction_results[,3],3)
+  prediction_results[,3:ncol(prediction_results)] = round(prediction_results[,3:ncol(prediction_results)],4)
   prediction_results = prediction_results[order(prediction_results[,1]),]
   colnames(prediction_results) = c(colnames(current_data)[1],colnames(current_data)[resvar], "Predictive_Prob", coves_to_use)
   xgb_predictions = data.frame(prediction_results)

@@ -1,11 +1,11 @@
-xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
+xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                       xgb_standardize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
                       max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db) {
   
   set.seed(as.integer(seed))
   
   selector = "SHAP"
-  cove_data=xgb_select_data[,coves_to_use]
+  feat_data=xgb_select_data[,feats_to_use]
   
   if(xgb_booster == "-") {
     xgb_booster = "gbtree"
@@ -13,24 +13,24 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
 
   if (xgb_standardize==TRUE) {
     
-    for (i in 1:nrow(cove_data)) {
-      for (j in 1:ncol(cove_data)) {
-        if (is.numeric(cove_data[i,j])==TRUE) {
+    for (i in 1:nrow(feat_data)) {
+      for (j in 1:ncol(feat_data)) {
+        if (is.numeric(feat_data[i,j])==TRUE) {
           
-          range = (max(na.omit(cove_data[,j])) - min(na.omit(cove_data[,j])))
+          range = (max(na.omit(feat_data[,j])) - min(na.omit(feat_data[,j])))
           
           if (range == 0) {
-            cove_data[i,j] = 0
+            feat_data[i,j] = 0
           } else {
-              cove_data[i,j]=(cove_data[i,j] - min(na.omit(cove_data[,j]))) / range
+            feat_data[i,j]=(feat_data[i,j] - min(na.omit(feat_data[,j]))) / range
           }
         }
       }
     }
   }
   
-  data = data.frame(cbind(xgb_select_data[,resvar],cove_data))
-  colnames(data) = c(colnames(xgb_select_data)[resvar],coves_to_use)
+  data = data.frame(cbind(xgb_select_data[,rv],feat_data))
+  colnames(data) = c(colnames(xgb_select_data)[rv],feats_to_use)
   
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data=data[!is.na(data[,1]),]
@@ -81,7 +81,7 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
   
   withProgress(
     message = 'Calculation in progress',
-    detail = paste0("Covariates remaining:",i=remaining,"; Current iteration:",j=1,"/",MC_runs),
+    detail = paste0("Features remaining:",i=remaining,"; Current iteration:",j=1,"/",MC_runs),
     value = 0,
     {
       
@@ -165,7 +165,7 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
             shap_train[c,j+1] = shap_temp[shap_temp[,1] == current_cove,2]
           }
           
-          incProgress(1/(remaining*MC_runs),detail = paste0("Covariates remaining:",ncol(train)-1,"; Current iteration:",j,"/",MC_runs))
+          incProgress(1/(remaining*MC_runs),detail = paste0("Features remaining:",ncol(train)-1,"; Current iteration:",j,"/",MC_runs))
           
         } #END the MC/Iterations Loop
         
@@ -188,7 +188,6 @@ xgb_selection = function(xgb_select_data,seed,resvar,coves_to_use,lc_lowval,lc_u
         loser_gain_name = gain_train[loser_gain,1]
         
         # Compute average Shap value and find the covariate with the lowest Shap
-        
         shap_train = as.data.frame(shap_train)
         shap_result = matrix(0,nrow=nrow(shap_train),ncol=ncol(shap_train)-1)
         
