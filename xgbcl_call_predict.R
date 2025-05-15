@@ -1,9 +1,10 @@
 xgbcl_call_predict = function(current_data,
-                       resvar,
+                       rv,
                        id_var,
                        seed,
                        ignored_rows,
-                       coves_to_use,
+                       feats_to_use,
+                       eval_metric,
                        lc_lowval,
                        lc_upval,
                        rc_lowval,
@@ -41,31 +42,31 @@ xgbcl_call_predict = function(current_data,
   }
   
   if (binarize) {
-    new_Y = ifelse(test = data[,resvar] >= crit_value, yes = 1, no = 0)
-    data[,resvar] = new_Y
+    new_Y = ifelse(test = data[,rv] >= crit_value, yes = 1, no = 0)
+    data[,rv] = new_Y
   }
 
   # REMOVE NA'S FROM RESPONSE VARIABLE
-  data = data[!is.na(data[, resvar]), ]
+  data = data[!is.na(data[,rv]), ]
   
   #Randomly shuffle the data
   if (randomize == TRUE) {
     data = data[sample(nrow(data)), ]
   }
   
-  covar_data = data[,coves_to_use]
+  feat_data = data[,feats_to_use]
   
-  std_covar_data = covar_data
+  std_feat_data = feat_data
   
   # Min/Max Standardize the features
   if (standardize == TRUE) {
-    for (i in 1:nrow(std_covar_data)) {
-      for (j in 1:ncol(std_covar_data)) {
-        if (is.numeric(std_covar_data[i, j]) == TRUE) {
-          if (max(na.omit(std_covar_data[, j])) - min(na.omit(std_covar_data[, j])) == 0) {
-            std_covar_data[i, j] = 0
+    for (i in 1:nrow(std_feat_data)) {
+      for (j in 1:ncol(std_feat_data)) {
+        if (is.numeric(std_feat_data[i, j]) == TRUE) {
+          if (max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j])) == 0) {
+            std_feat_data[i, j] = 0
           } else {
-            std_covar_data[i, j] = (std_covar_data[i, j] - min(na.omit(std_covar_data[, j]))) / (max(na.omit(std_covar_data[, j])) - min(na.omit(std_covar_data[, j])))
+            std_feat_data[i, j] = (std_feat_data[i, j] - min(na.omit(std_feat_data[, j]))) / (max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j])))
           }
         }
       }
@@ -73,19 +74,19 @@ xgbcl_call_predict = function(current_data,
   }
   
   # Add the standardized features back into the data frame for analysis
-  dataset = cbind(data[,id_var],data[,resvar],std_covar_data)
+  dataset = cbind(data[,id_var],data[,rv],std_feat_data)
   colnames(dataset)[1] = colnames(current_data)[id_var]
-  colnames(dataset)[2] = colnames(current_data)[resvar]
+  colnames(dataset)[2] = colnames(current_data)[rv]
   
   #Create n folds
   tot_folds = nfolds
   folds = cut(seq(1, nrow(dataset)), breaks = tot_folds, labels = FALSE)
   
-  prediction_results = matrix(0, nrow = 0, ncol = length(coves_to_use) + 3)
+  prediction_results = matrix(0, nrow = 0, ncol = length(feats_to_use) + 3)
   prediction_results = data.frame(prediction_results)
   
-  pred_shapes = matrix(0, nrow = length(coves_to_use), ncol = tot_folds+1)
-  pred_shapes[,1] = coves_to_use
+  pred_shapes = matrix(0, nrow = length(feats_to_use), ncol = tot_folds+1)
+  pred_shapes[,1] = feats_to_use
   pred_shapes = data.frame(pred_shapes)
   
   #Perform cross validation
@@ -99,8 +100,9 @@ xgbcl_call_predict = function(current_data,
     prediction_fold_result = xgbcl_pred_fold_errors(
       trainData,
       testData,
-      resvar,
-      coves_to_use,
+      rv,
+      feats_to_use,
+      eval_metric,
       lc_lowval,
       lc_upval,
       rc_lowval,
@@ -135,7 +137,7 @@ xgbcl_call_predict = function(current_data,
   
   prediction_results[,3:ncol(prediction_results)] = round(prediction_results[,3:ncol(prediction_results)],4)
   prediction_results = prediction_results[order(prediction_results[,1]),]
-  colnames(prediction_results) = c(colnames(current_data)[1],colnames(current_data)[resvar], "Predictive_Prob", coves_to_use)
+  colnames(prediction_results) = c(colnames(current_data)[1],colnames(current_data)[rv], "Predictive_Prob", feats_to_use)
   xgb_predictions = data.frame(prediction_results)
   
   pred_shapes = data.frame(cbind(pred_shapes[,1],format(round(rowMeans(pred_shapes[,-1]),4),scientific=F)))

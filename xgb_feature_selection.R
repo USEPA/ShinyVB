@@ -1,6 +1,6 @@
 xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                       xgb_standardize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
-                      max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db) {
+                      max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db) {
   
   set.seed(as.integer(seed))
   
@@ -74,8 +74,8 @@ xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval
   }
   
   remaining = ncol(data)-2
-  Iteration_results = matrix(0, nrow=remaining, ncol=8)
-  colnames(Iteration_results) = c("Iteration","Lowest Gain","Gain","Lowest SHAP","SHAP","RMSE_Train","RMSE_Test","RMSE_Weighted")
+  Iteration_results = matrix(0, nrow=remaining, ncol=7)
+  colnames(Iteration_results) = c("Iteration","Lowest_Gain","Gain","Lowest_SHAP","SHAP","RMSE_Train","RMSE_Test")
   smp_size = floor(train_prop * nrow(data))
   temp_data = as.data.frame(data)
   
@@ -134,18 +134,18 @@ xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval
           
           # Recording Gain
           
-          xgb_covariates = as.matrix(xgb.importance(model = temp_model)[,1])
+          xgb_features = as.matrix(xgb.importance(model = temp_model)[,1])
           xgb_gain = as.matrix(xgb.importance(model = temp_model)[,2])
           
-          gain_temp=data.frame(cbind(xgb_covariates,xgb_gain))
+          gain_temp=data.frame(cbind(xgb_features,xgb_gain))
           gain_train[,1] = colnames(train[,-1])
           
           for (f in 1:nrow(gain_train)) {
             
-            cove_name = gain_train[f,1]
+            feat_name = gain_train[f,1]
             
-            if (cove_name %in% gain_temp$Feature) {
-              gain_train[f,j+1] = as.numeric(unlist(subset(gain_temp, gain_temp$Feature == cove_name, select = "Gain")))
+            if (feat_name %in% gain_temp$Feature) {
+              gain_train[f,j+1] = as.numeric(unlist(subset(gain_temp, gain_temp$Feature == feat_name, select = "Gain")))
             } else {
               gain_train[f,j+1] = 0.0000
             }
@@ -161,8 +161,8 @@ xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval
           shap_train[,1] = colnames(train[,-1])
           
           for (c in 1:nrow(shap_train)) {
-            current_cove = shap_train[c,1]
-            shap_train[c,j+1] = shap_temp[shap_temp[,1] == current_cove,2]
+            current_feat = shap_train[c,1]
+            shap_train[c,j+1] = shap_temp[shap_temp[,1] == current_feat,2]
           }
           
           incProgress(1/(remaining*MC_runs),detail = paste0("Features remaining:",ncol(train)-1,"; Current iteration:",j,"/",MC_runs))
@@ -172,7 +172,7 @@ xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval
         RMSE_mean_train = mean(RMSE_temp_train)
         RMSE_mean_test = mean(RMSE_temp_test)
         
-        # Compute average Gain across iterations and find the covariate with the lowest Gain
+        # Compute average Gain across iterations and find the feature with the lowest mean Gain
         
         gain_train = as.data.frame(gain_train)
         gain_result = matrix(0,nrow=nrow(gain_train),ncol=ncol(gain_train)-1)
@@ -187,7 +187,7 @@ xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval
         loser_gain = which.min(rowMeans(gain_result))
         loser_gain_name = gain_train[loser_gain,1]
         
-        # Compute average Shap value and find the covariate with the lowest Shap
+        # Compute average SHAP value and find the feature with the lowest mean SHAP
         shap_train = as.data.frame(shap_train)
         shap_result = matrix(0,nrow=nrow(shap_train),ncol=ncol(shap_train)-1)
         
@@ -208,7 +208,6 @@ xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval
         Iteration_results[i,5] = round(lowest_shap,5)
         Iteration_results[i,6] = round(RMSE_mean_train,4)
         Iteration_results[i,7] = round(RMSE_mean_test,4)
-        Iteration_results[i,8] = round(test_weight*RMSE_mean_test+(1-test_weight)*RMSE_mean_train,4)
         
         # Drop lowest SHAP or Gain
         
@@ -225,6 +224,6 @@ xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval
   
   dbWriteTable(temp_db, "xgb_selection_results", data.frame(Iteration_results), overwrite = TRUE)
 
-  Iteration_results = Iteration_results[,c(1,4:8)]
+  Iteration_results = Iteration_results[,c(1,4:7)]
   Iteration_results
 }

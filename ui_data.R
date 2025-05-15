@@ -38,18 +38,18 @@ DataPanel = sidebarLayout(
       
       bs_append (title="Plotting", content = card(
         
-        div(style = "height: 425px",
+        div(style = "height: 275px",
 
             fluidRow(
-              column(5,selectInput("scatterx",label = "Scatter X",selected ="-",choices = c("-"))),
-              column(7,selectInput("scattery",label = "Scatter Y",selected ="-",choices = c("-")))),
+              column(6,selectInput("scatterx",label = "Scatter X",selectize=FALSE, selected ="-",choices = c("-"))),
+              column(6,selectInput("scattery",label = "Scatter Y",selectize=FALSE, selected ="-",choices = c("-")))),
             
             fluidRow(
               column(12,
                      inputPanel(
                        selectInput(
                          "rainplot",
-                         label = "Raincloud Plot",
+                         label = "Raincloud Plot",selectize=FALSE, 
                          selected =
                            "-",
                          choices = c("-"))))),
@@ -59,7 +59,7 @@ DataPanel = sidebarLayout(
                      inputPanel(
                        selectInput(
                          "lineplot",
-                         label = "Line/Time Series Plot",
+                         label = "Line/Time Series Plot",selectize=FALSE, 
                          selected =
                            "-",
                          choices = c("-")))))
@@ -72,7 +72,7 @@ DataPanel = sidebarLayout(
                  inputPanel(
           selectInput(
             "speed",
-            label = "Speed",
+            label = "Speed",selectize=FALSE, 
             selected =
               "-",
             choices = c("-"))))),
@@ -82,7 +82,7 @@ DataPanel = sidebarLayout(
                  inputPanel(
           selectInput(
             "direct",
-            label = "Direction",
+            label = "Direction",selectize=FALSE, 
             selected =
               "-",
             choices = c("-"))))),

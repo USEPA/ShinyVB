@@ -1,7 +1,8 @@
 xgbcl_pred_fold_errors = function(train_data,
                                 test_data,
-                                resvar,
-                                coves_to_use,
+                                rv,
+                                feats_to_use,
+                                eval_metric,
                                 lc_lowval,
                                 lc_upval,
                                 rc_lowval,
@@ -36,9 +37,9 @@ xgbcl_pred_fold_errors = function(train_data,
       temp_preds = matrix(0, nrow = nrow(test_data), ncol = 2*MC_runs)
       temp_preds = data.frame(temp_preds)
       
-      temp_shapes = matrix(0, nrow = length(coves_to_use), ncol = MC_runs+1)
+      temp_shapes = matrix(0, nrow = length(feats_to_use), ncol = MC_runs+1)
       temp_shapes = data.frame(temp_shapes)
-      temp_shapes[,1] = coves_to_use
+      temp_shapes[,1] = feats_to_use
       
       
       for (i in 1:MC_runs) {
@@ -112,6 +113,7 @@ xgbcl_pred_fold_errors = function(train_data,
           
           params = list(
             objective = "binary:logistic",
+            eval_metric = eval_metric,
             booster = xgbcl_booster,
             rate_drop = ratecl_drop,
             skip_drop = skipcl_drop,
@@ -128,6 +130,7 @@ xgbcl_pred_fold_errors = function(train_data,
         } else {
           params = list(
             objective = "binary:logistic",
+            eval_metric = eval_metric,
             booster = xgbcl_booster,
             tree_method = xgbcl_tree_method,
             eta = eta,

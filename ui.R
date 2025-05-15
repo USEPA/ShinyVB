@@ -64,7 +64,7 @@ ui = fluidPage(
     }
     #XGBCL_binarize_crit_value {
       width: 90px;
-      height: 35px;
+      height: 40px;
       vertical-align: -30px;
     }
     #data_seed {
@@ -83,6 +83,11 @@ ui = fluidPage(
       width: 120px;
       height: 35px;
     }
+    #LG_binarize_crit_value {
+      width: 90px;
+      height: 40px;
+    }
+
     #LG_pred_dc {
       width: 120px;
       height: 35px;
@@ -163,7 +168,15 @@ ui = fluidPage(
         background-color: #ecf0f1;
     }
     .selectize-input {
-      width: 175px;
+      width: 110px;
+    }
+    #LG_eval {
+      width: 125px;
+      height: 40px;
+    }
+    #XGBCL_eval {
+      width: 125px;
+      height: 40px;
     }
     .modal-footer {
       text-align: center;

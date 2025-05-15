@@ -38,39 +38,8 @@ library(tools)
 library(units)
 library(xgboost)
 library(DT)
-
 # library(NCmisc)
 # library(here)
-
-# library(bsicons)
-# library(htmltools)
-# library(caret)
-# library(DBI)
-# library(dplyr)
-# library(colorspace)
-# library(devtools)
-# library(glmnet)
-# library(reactable)
-# library(gghalves)
-# library(ggpmisc)
-# library(ggtext)
-# library(gridExtra)
-# library(Hmisc)
-# library(hrbrthemes)
-# library(lime)
-# library(magrittr)
-# library(Metrics)
-# library(pdp)
-# library(permimp)
-# library(png)
-# library(ragg)
-# library(RColorBrewer)
-# library(reshape2)
-# library(rsample)
-# library(shinydashboard)
-# library(shinydashboardPlus)
-# library(tidymodels)
-# library(tidyr)
 
 plan(multicore)
 
@@ -94,12 +63,13 @@ source("xgbcl_pso.R")
 source("xgb_pred_errors.R")
 source("xgbcl_pred_errors.R")
 source("xgb_feature_selection.R")
+source("xgbcl_feature_selection.R")
 
-#source("xgbcl_feature_selection.R")
+# Define server logic
 
-# Define server logic --
 server= function(input,output,session) {
   
+  # Code to show what libraries are in use by the project
   # funcs = 
   #   list.files(here::here(), pattern ="\\.R$", recursive = TRUE, full.names = TRUE) %>%
   #   map(list.functions.in.file) %>%
@@ -118,15 +88,7 @@ server= function(input,output,session) {
   # 
   # packages
   
-  # See which packages aren't in the tidyverse
-  # setdiff(packages, tidyverse_packages())
-  
-  # renv::init()
-  # dependencies <- renv::dependencies()
-  # print(dependencies$Package)
-  # renv::deactivate(clean = TRUE)
-  
-  # Validation Rules for ALL numeric inputs
+  # Validation Rules for most numeric inputs
   
   iv = InputValidator$new()
   
@@ -181,31 +143,42 @@ server= function(input,output,session) {
   
   iv$enable()
   
+  # Read in WQX station and shoreline data
+  
+  station_data <<- data.frame(read.csv("stations.csv"))
+  shoreline_data <<- data.frame(read.csv("shorelines.csv"))
+  
   # Create a temporary SQL database
+  
   temp_db = dbConnect(RSQLite::SQLite(), ":memory:")
   
-  # Leaflet map variables
+  # Leaflet reactive variables
+  
   bo = reactiveVal(0)
   map_clicks = reactiveValues(points = data.frame())
   
-  # General Dataset Variables
+  # General reactive variables
+  
   current_data = reactiveVal()
-  PCA_dataset = reactiveVal()
   response_var = reactiveVal(2)
   col_names = reactiveVal()
   feat_names = reactiveVal()
   feats_being_used = reactiveVal()
-  pca_axes = reactiveVal()
-  pcax_being_used = reactiveVal()
   init_data = data.frame()
   init_feat_props = hash()
   feat_props = hash()
+  PCA_dataset = reactiveVal()
+  pca_axes = reactiveVal()
+  pcax_being_used = reactiveVal()
+  
+  # General non-reactive variables
   
   id_var = 1
   ignored_rows = NULL
   date_format_string = "Other"
 
-  # XGB Hyperparameters
+  # XGB hyperparameters
+  
   xgb_tree_method_set = reactiveVal("hist")
   xgb_booster_set = reactiveVal("gbtree")
   dart_normalize_type_set = reactiveVal("tree")
@@ -225,7 +198,8 @@ server= function(input,output,session) {
   # xgb_hyper_result = reactiveVal()
   # xgb_hyper_calculation = NULL
   
-  # XGBCL Hyperparameters
+  # XGBCL hyperparameters
+  
   xgbcl_tree_method_set = reactiveVal("hist")
   xgbcl_booster_set = reactiveVal("gbtree")
   dartcl_normalize_type_set = reactiveVal("tree")
@@ -239,35 +213,175 @@ server= function(input,output,session) {
   nroundscl_set = reactiveVal(100)
   subsampcl_set = reactiveVal(0.8)
   colsampcl_set = reactiveVal(0.8)
+  xgbcl_select_result = reactiveVal()
+  xgbcl_select_calculation = NULL
   
   #General modeling hyperparameters
+  
   early_stop_set = reactiveVal(20)
   nfold_set = reactiveVal(5)
   
-  # Logistic Regression Results
+  # Logistic Regression results
+  
   LG_scat_dat = data.frame()
   LG_pred_scat_dat = data.frame()
   LG_model = NULL
   
-  # Elastic Net Results
+  # Elastic Net results
+  
   EN_scat_dat = data.frame()
   EN_pred_scat_dat = data.frame()
   EN_model = NULL
   
-  # XGBoost Classifier Results
+  # XGBoost Classifier results
+  
   XGBCL_scat_dat = data.frame()
   XGBCL_pred_scat_dat = data.frame()
   Optimal_CLHP = data.frame(max_depth = 2,eta = 0.05,subsample = 0.8,colsample_bytree = 0.8,min_child_weight = 3,gamma = 1,nrounds = 100)
   XGBCL_model = NULL
   
-  # XGBoost Results
+  # XGBoost results
+  
   XGB_scat_dat = data.frame()
   XGB_pred_scat_dat = data.frame()
   XGB_saved_predictions = data.frame()
   Optimal_HP = data.frame(max_depth = 2,eta = 0.05,subsample = 0.8,colsample_bytree = 0.8,min_child_weight = 3,gamma = 1,nrounds = 100)
   XGB_model = NULL
 
-  # Create correlation matrix for features
+  # Render leaflet map
+  
+  output$map = renderLeaflet({
+    leaflet() |> 
+      addTiles() |> 
+      setView(270, 40, zoom = 5)
+  })
+  
+  # Compute beach orientation based on map clicks
+  
+  observeEvent(input$map_click, {map_click(input$map_click,map_clicks,bo)})
+  
+  # Add/Remove shoreline markers
+  
+  observeEvent(input$show_shorelines, {
+    
+    leafletProxy("map") %>% clearGroup('shore_markers')
+    
+    zoom = input$map_zoom
+    zoom_threshold = 13
+    bounds = input$map_bounds
+    
+    if (zoom < zoom_threshold) {
+      
+      showModal(modalDialog(tags$h4("Zoom to at least level 13 to show beach shorelines."),easyClose = FALSE))
+      
+    } else {
+      
+      if (!is.null(bounds)) {
+        visible_data = data.frame(shoreline_data[shoreline_data$startlat >= bounds$south & shoreline_data$endlat <= bounds$north &
+                                                   shoreline_data$startlong >= bounds$west & shoreline_data$endlong <= bounds$east,])
+      }
+      
+      uniq_rows = data.frame(visible_data[!duplicated(visible_data[3:6]),])
+      uniq_rows = uniq_rows[-nrow(uniq_rows),]
+      
+      if (nrow(uniq_rows)>0) {
+        
+        for (i in 1:nrow(uniq_rows)) {
+          
+          shoreline = data.frame(
+            lon = c(uniq_rows[i,5],uniq_rows[i,6]),       
+            lat =c(uniq_rows[i,3],uniq_rows[i,4])
+          )
+          name = as.character(uniq_rows[i,2])
+          
+          # 
+          
+          leafletProxy("map") %>% addPolylines(., lng=shoreline$lon, lat=shoreline$lat,color='#2c3e50',label = name, opacity=1.0,
+                                               group="shore_markers",popup = paste("Beach ID: ", name)) %>%
+            addCircleMarkers(lng=shoreline$lon[1],lat=shoreline$lat[1],radius=2,opacity=1.0, color="green", group="shore_markers") %>%
+            addCircleMarkers(lng=shoreline$lon[2],lat=shoreline$lat[2],radius=2,opacity=1.0, color="green", group="shore_markers")
+        }
+      }
+    }
+  })
+  
+  observeEvent(input$clear_shorelines, {
+    leafletProxy("map") %>% clearGroup('shore_markers')
+  })
+  
+  # Add/Remove monitoring station markers
+  
+  observeEvent(input$show_stations, {
+    
+    leafletProxy("map") %>% clearGroup('monitor_stations')
+    
+    zoom = input$map_zoom
+    zoom_threshold = 11
+    bounds = input$map_bounds
+    
+    if (zoom < zoom_threshold) {
+      
+      showModal(modalDialog(tags$h4("Zoom to at least level 11 to show monitoring stations."),easyClose = FALSE))
+      
+    } else {
+      
+      if (!is.null(bounds)) {
+        visible_data = data.frame(station_data[station_data$Latitude >= bounds$south & station_data$Latitude <= bounds$north &
+                                                 station_data$Longitude >= bounds$west & station_data$Longitude <= bounds$east,])
+      }
+      
+      uniq_rows = data.frame(visible_data[!duplicated(visible_data[2:3]),])
+      uniq_rows[,2] = as.numeric(uniq_rows[,2])
+      uniq_rows[,3] = as.numeric(uniq_rows[,3])
+      
+      if (nrow(uniq_rows)>0) {
+        
+        leafletProxy("map",data=uniq_rows) %>%
+          {
+            for (i in 1:nrow(uniq_rows)) {
+              addMarkers(.,lng=uniq_rows[i,3],lat=uniq_rows[i,2],popup = as.character(uniq_rows[i,1]), label = as.character(uniq_rows[i,1]), group="monitor_stations")
+            }
+          }
+      }
+    }
+  })
+  
+  observeEvent(input$clear_stations, {
+    leafletProxy("map") %>% clearGroup('monitor_stations')
+  })
+  
+  # Other map stuff
+  
+  observeEvent(input$map_marker_click, {
+    
+    marker = input$map_marker_click
+    
+    if (is.null(marker$group)) {
+      return()
+    } else if (marker$group=='monitor_stations') {
+      
+      showModal(modalDialog(title="WQX Data Retrieval Parameters",easyClose=F,card(
+        fluidRow(column(6,dateInput("start_date", "Start Date:")),column(6,dateInput("end_date", "End Date:"))),
+        fluidRow(column(12,selectInput("data_type",label = "Data Type",selected ="Phys/Chem", selectize=FALSE, choices = c("Phys/Chem","Station Info", "Microbial","Toxicity"))))),
+        footer = modalButton("Close")))
+    } else {
+      return()
+    }
+  })
+  
+  output$bo_text = renderUI({
+    HTML("To determine site orientation, click once anywhere on the shoreline, then again on another point on the shoreline. 
+      A third click, <b>made in the water</b>, calculates/saves the site orientation. A fourth click clears the map, 
+      whereby the process can be repeated.<br><br><i>Note: Any newly calculated orientation replaces the previous one.</i>")
+  })
+  
+  output$zoom_level = renderText({
+    input$map_zoom
+  })
+  
+  output$beach_orient = renderText({bo()})
+  
+  # Create a feature correlation matrix
   
   observeEvent(input$corr_check, {
     
@@ -288,7 +402,7 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'data_tabs', selected = "Correlations")
   })
   
-  # Create PCA_dataset for later analysis
+  # Create PCA dataset for later analysis
   
   observeEvent(input$pca_check, {
     
@@ -309,8 +423,8 @@ server= function(input,output,session) {
     
     if (any(is.na(feat_data))) {
       
-      showModal(modalDialog(paste("PCA does not tolerate missing feature values. You can either Impute these
-              or Disable rows/columns with missing values."),footer = modalButton("Close")))
+      showModal(modalDialog(paste("PCA does not allow missing feature values. You can either Impute these
+              or Disable the rows with missing values."),footer = modalButton("Close")))
       
     } else {
       
@@ -363,7 +477,7 @@ server= function(input,output,session) {
     }
   })
   
-  # Provide data set cell value editing
+  # Provide dataset cell value editing
   
   observeEvent(input$data_cell_edit, ignoreInit = T,ignoreNULL = T, {
     
@@ -380,7 +494,7 @@ server= function(input,output,session) {
     renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
   })
   
-  # Restore the original data set
+  # Restore the original dataset
   
   observeEvent(input$restore, {
     
@@ -523,7 +637,7 @@ server= function(input,output,session) {
     }
   })
   
-  # Input column properties into hash table
+  # Input column properties into the hash table
   
   observeEvent(input$col_props, ignoreInit = T,  {
     
@@ -553,7 +667,7 @@ server= function(input,output,session) {
     
   })
   
-  # Change the response variable column
+  # Change the response variable
   
   observeEvent(input$data_columns_selected, ignoreInit = T, {
     
@@ -570,7 +684,148 @@ server= function(input,output,session) {
     }
   })
   
-  # Plotting functions (raincloud, scatter, line)
+  # Isolation Forest analysis for outlier detection
+  
+  observeEvent(input$run_iso_forest, {
+    
+    req(iv$is_valid())
+    
+    # if (is.null(ignored_rows)) {
+    #   iso_data0 = current_data()
+    #   iso_data = current_data()[,-c(id_var,response_var())]
+    # } else {
+    #   iso_data0 = current_data()[-ignored_rows,]
+    #   iso_data = iso_data0[,-c(id_var,response_var())]
+    # }
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+    }
+    
+    iso_data = data[,-c(id_var,rv)]
+    
+    samp_size = min(nrow(iso_data), 10000L)
+    ndim = input$iso_ndim
+    
+    iso_results = matrix(NA, nrow = nrow(iso_data), ncol = 6)
+    iso_results = data.frame(iso_results)
+    colnames(iso_results) = c("ID","Depth_Score","Adj_Depth_Score","Density_Score","Adj_Density_Score","Overall")
+    
+    iso_results[,1] = data[,1]
+    
+    techs = c("depth","adj_depth", "density", "adj_density")
+    
+    if (ndim == 1) {
+      std_data = FALSE
+    } else {
+      std_data = TRUE
+    }
+    
+    for (i in 1:4) {
+      
+      if (ndim == 1 & i != 3 & i != 4) {
+        miss_action = "divide"
+      } else {
+        miss_action = "impute"
+      }
+      
+      if (i == 2) {
+        pen_range = TRUE
+      } else {
+        pen_range = FALSE
+      }
+      
+      if (i == 3 | i == 4) {
+        if (ndim == 1) {
+          pooled_gain = 0.75
+          mingain = 0.25
+        } else {
+          pooled_gain = 1
+          mingain = 0.25
+        }
+      } else {
+        pooled_gain = 0
+        mingain = 0
+      }
+      
+      isoforest = isolation.forest(iso_data,sample_size = samp_size,ntrees = 100,ndim = ndim,max_depth = ceiling(log2(samp_size)),
+                                   prob_pick_pooled_gain = pooled_gain,min_gain = mingain,missing_action = miss_action,penalize_range = pen_range,
+                                   standardize_data = std_data,scoring_metric = techs[[i]],output_score = TRUE,seed = input$data_seed)
+      
+      iso_results[,i+1] = round(isoforest$scores,3)
+    }
+    
+    iso_results[,6] = round((iso_results[,2] * iso_results[,3] * iso_results[,4] * iso_results[,5])^0.25 - 0.7071,3)
+    
+    output$iso_outliers = DT::renderDataTable(server = T, {data = datatable(iso_results,rownames = F,selection = list(selection = "multiple",
+                                                                                                                      selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
+                                                                                                                                                                                                                    buttons = c('copy', 'csv', 'excel'),pageLength = 20,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                                                                                                                                                                                                                    initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
+    
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Outlier Metric')
+    
+  })
+  
+  # Selection of dataset rows for enabling/disabling
+  
+  observeEvent(input$select_choice, ignoreInit = T, {
+    
+    if (input$select_choice == "Rows") {
+      enable("ignore_rows")
+      enable("enable_rows")
+    } else if (input$select_choice == "Features") {
+      disable("ignore_rows")
+      disable("enable_rows")
+    }
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
+  })
+  
+  observeEvent(input$ignore_rows, ignoreInit = T, {
+    
+    if (input$data_tabs == "Data Table") {
+      add_in = input$data_rows_selected[-1]
+    }
+    if (input$data_tabs == "Outlier Metric") {
+      add_in = input$iso_outliers_rows_selected
+    }
+    
+    if(identical(unique(append(ignored_rows,add_in)),integer(0))) {
+      ignored_rows <<- NULL
+    } else {
+      ignored_rows <<- unique(append(ignored_rows,add_in))
+    }
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
+  })
+  
+  observeEvent(input$enable_rows, ignoreInit = T, {
+    
+    if (input$data_tabs == "Data Table") {
+      add_back = input$data_rows_selected[-1]
+    }
+    if (input$data_tabs == "Outlier Metric") {
+      add_back = input$iso_outliers_rows_selected
+    }
+    
+    if(identical(ignored_rows[!ignored_rows %in% add_back],integer(0))) {
+      ignored_rows <<- NULL
+    } else {
+      ignored_rows <<- ignored_rows[!ignored_rows %in% add_back]
+    }
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
+  })
+  
+  # Plotting functions
   
   observeEvent(input$rainplot, ignoreInit = T, {
     
@@ -653,7 +908,7 @@ server= function(input,output,session) {
     }
   })
   
-  # Feature Imputation functions
+  # Feature imputation
   
   observeEvent(input$continue_impute, {
     removeModal()
@@ -756,7 +1011,7 @@ server= function(input,output,session) {
     }
   })
   
-  # Toggle between normal and PCA data use
+  # Toggle between initial feature and PCA data use
   
   observeEvent(input$use_pca_data, {
     
@@ -772,7 +1027,7 @@ server= function(input,output,session) {
     }
   })
   
-  # Perform certain functions when the "Modeling" tab is selected
+  # Perform certain book-keeping functions when the "Modeling" tab is selected
   
   observeEvent(input$shinyVB, {
     
@@ -832,7 +1087,7 @@ server= function(input,output,session) {
     pcax_being_used(input$pcax_to_use)
   })
   
-  # Logistic regression predictions on test data
+  # Logistic regression predictions
   
   observeEvent(input$LG_pred_dc, {
     
@@ -951,7 +1206,7 @@ server= function(input,output,session) {
         
         withProgress(
           message = 'Logistic Prediction Progress',
-          detail = paste("MC runs:", x = MC_runs,"; Fold:",y = f),
+          detail = paste("MC runs:", x=1,"; Fold:",y = f),
           value = (1-1/tot_folds) - (1/tot_folds)*(tot_folds-f),
           {
             
@@ -1014,14 +1269,15 @@ server= function(input,output,session) {
               temp_preds[,2*i-1] = testData[,1]
               
               # Train the model
-              fit_mod = cva.glmnet(x=as.matrix(trainData[,-1]),y=trainData[,1],nfolds=tot_folds,family="binomial",na.action="na.omit",standardize=input$LG_standard,intercept=TRUE)
+              fit_mod = cva.glmnet(x=as.matrix(trainData[,-1]),y=trainData[,1],nfolds=tot_folds,family="binomial",type.measure=input$LG_eval,na.action="na.omit",
+                                   standardize=input$LG_standard,intercept=TRUE)
               
-              get_model_params <- function(fit) {
-                alpha <- fit$alpha
-                lambdaMin <- sapply(fit$modlist, `[[`, "lambda.min")
-                lambdaSE <- sapply(fit$modlist, `[[`, "lambda.1se")
-                error <- sapply(fit$modlist, function(mod) {min(mod$cvm)})
-                best <- which.min(error)
+              get_model_params = function(fit) {
+                alpha = fit$alpha
+                lambdaMin = sapply(fit$modlist, `[[`, "lambda.min")
+                lambdaSE = sapply(fit$modlist, `[[`, "lambda.1se")
+                error = sapply(fit$modlist, function(mod) {min(mod$cvm)})
+                best = which.min(error)
                 data.frame(alpha = alpha[best], lambdaMin = lambdaMin[best],
                            lambdaSE = lambdaSE[best], eror = error[best])
               }
@@ -1029,7 +1285,7 @@ server= function(input,output,session) {
               alpha = get_model_params(fit_mod)$alpha
               lambda = get_model_params(fit_mod)$lambdaMin
               
-              model = glmnet(x=as.matrix(trainData[,-1]),trainData[,1],lambda=lambda, alpha=alpha, na.action="na.omit", family="binomial",
+              model = glmnet(x=as.matrix(trainData[,-1]),trainData[,1],lambda=lambda, alpha=alpha,na.action="na.omit", family="binomial",type.measure=input$LG_eval,
                              standardize=input$LG_standard,intercept=TRUE)
               
               preds = predict(model, newx = as.matrix(testData[,-1]), type = "response")
@@ -1124,7 +1380,7 @@ server= function(input,output,session) {
       updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'LG: Predict')
   })
   
-  # Logistic regression fitting of entire data set
+  # Logistic regression fitting
   
   observeEvent(input$LG_fit_dc, {
     
@@ -1232,7 +1488,7 @@ server= function(input,output,session) {
     
     withProgress(
       message = 'Logistic Fitting Progress',
-      detail = paste("MC runs:", x = MC_runs),
+      detail = paste("MC runs:", x=1),
       value = 1/MC_runs,
       {
         
@@ -1268,15 +1524,15 @@ server= function(input,output,session) {
           temp_fits[,2*i-1] = data[,1]
           
           # determine best alpha and lambda
-          fit_mod = cva.glmnet(x=as.matrix(data[,-1]),y=data[,1],nfolds=input$num_folds,family="binomial",na.action="na.omit",
+          fit_mod = cva.glmnet(x=as.matrix(data[,-1]),y=data[,1],nfolds=input$num_folds,family="binomial",type.measure=input$LG_eval,na.action="na.omit",
                       standardize=input$LG_standard,intercept=TRUE)
           
-          get_model_params <- function(fit) {
-            alpha <- fit$alpha
-            lambdaMin <- sapply(fit$modlist, `[[`, "lambda.min")
-            lambdaSE <- sapply(fit$modlist, `[[`, "lambda.1se")
-            error <- sapply(fit$modlist, function(mod) {min(mod$cvm)})
-            best <- which.min(error)
+          get_model_params = function(fit) {
+            alpha = fit$alpha
+            lambdaMin = sapply(fit$modlist, `[[`, "lambda.min")
+            lambdaSE = sapply(fit$modlist, `[[`, "lambda.1se")
+            error = sapply(fit$modlist, function(mod) {min(mod$cvm)})
+            best = which.min(error)
             data.frame(alpha = alpha[best], lambdaMin = lambdaMin[best],
                        lambdaSE = lambdaSE[best], eror = error[best])
           }
@@ -1285,7 +1541,7 @@ server= function(input,output,session) {
           lambda = get_model_params(fit_mod)$lambdaMin
           
           # fit final model
-          model = glmnet(x=as.matrix(data[,-1]),data[,1],lambda=lambda, alpha=alpha, na.action="na.omit", family="binomial",
+          model = glmnet(x=as.matrix(data[,-1]),data[,1],lambda=lambda, alpha=alpha, na.action="na.omit",family="binomial",type.measure=input$LG_eval,
                       standardize=input$LG_standard,intercept=TRUE)
           
           fits = predict(model, newx = as.matrix(data[,-1]), type = "response")
@@ -1379,8 +1635,6 @@ server= function(input,output,session) {
     
     showModal(modalDialog(title="HP Optimization", card(
       fluidRow(
-        column(5,selectInput("XGBCL_hyper_metric", "Evaluation Metric", choices = c("logloss","auc"), selected = "logloss"))),
-      fluidRow(
         column(4,numericInput("psocl_max_iter", "Max Iterations", min=5, max=1000, value=20, step = 1)),
         column(2),
         column(4,numericInput("psocl_swarm_size", "Swarm Size", min=3, max=200, value=10, step = 1))),
@@ -1408,7 +1662,7 @@ server= function(input,output,session) {
     
     xgbcl_optim_HP_results = xgbcl_call_optimize_HP(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_lowval,
                                                 input$lc_upval,input$rc_lowval,input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$randomize,
-                                                input$XGBCL_standard,input$XGBCL_hyper_metric,input$psocl_max_iter,input$psocl_swarm_size,input$membercl_exp,
+                                                input$XGBCL_standard,input$XGBCL_eval,input$psocl_max_iter,input$psocl_swarm_size,input$membercl_exp,
                                                 input$sscl_exp,input$XGBCL_binarize,input$XGBCL_binarize_crit_value)
     
     xgbcl_optim_HP_results1 = data.frame(xgbcl_optim_HP_results)
@@ -1509,7 +1763,177 @@ server= function(input,output,session) {
     }
   })
   
-  # XGB Classifier predictions on test data
+  # XGBCL feature selection
+  
+  observeEvent(input$run_XGBCL_select, {
+    
+    if(running())
+      return(NULL)
+    running(TRUE)
+    
+    req(iv$is_valid())
+    
+    if (input$use_pca_data) {
+      data = PCA_dataset()
+      rv=2
+      feats_to_use = input$pcax_to_use
+      ignored_rows = NULL
+      pcax_being_used(feats_to_use)
+    } else {
+      data = current_data()
+      rv=response_var()
+      feats_to_use = input$feats_to_use
+      feats_being_used(feats_to_use)
+    }
+    
+    crit_value = input$XGBCL_binarize_crit_value
+    eval_metric = input$XGBCL_eval
+    
+    if (input$XGBCL_binarize) {
+      new_Y = ifelse(test = data[,rv] >= crit_value, yes = 1, no = 0)
+      data[,rv] = new_Y
+    }
+    
+    if (is.null(ignored_rows)) {
+      xgbcl_select_data = data
+    } else {
+      xgbcl_select_data = data[-ignored_rows,]
+    }
+    
+    eta = etacl_set()
+    gamma = gammacl_set()
+    max_depth = max_depthcl_set()
+    min_child_weight = min_child_weightcl_set()
+    nrounds = nroundscl_set()
+    early_stop = early_stop_set()
+    subsamp = subsampcl_set()
+    colsamp = colsampcl_set()
+    
+    xgb_tree_method = xgbcl_tree_method_set()
+    xgb_boost = xgbcl_booster_set()
+    dart_normalize_type = dartcl_normalize_type_set()
+    dart_sample_type = dartcl_sample_type_set()
+    rate_drop = ratecl_drop_set()
+    skip_drop = skipcl_drop_set()
+    
+    xgb_standardize = input$XGBCL_standard
+    lc_lowval = input$lc_lowval
+    lc_upval = input$lc_upval
+    rc_lowval = input$rc_lowval
+    rc_upval = input$rc_upval
+    train_prop = input$train_pct/100
+    MC_runs = input$MC_runs
+    loggy = input$loggy
+    randomize = input$randomize
+    seed = input$model_seed
+    
+    xgbcl_select_result(NULL)
+
+    xgbcl_select_calculation <<- future({
+
+      xgbcl_selection(xgbcl_select_data,seed,rv,feats_to_use,crit_value,eval_metric,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
+                    xgb_standardize,xgb_tree_method,xgb_boost,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
+                    min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db)
+
+    }, seed=TRUE)
+
+    prom = xgbcl_select_calculation %...>% xgbcl_select_result
+
+    prom = catch(xgbcl_select_calculation,
+                 function(e){
+                   xgbcl_select_result(NULL)
+                   showModal(modalDialog(paste0("XGBCL covariate filtering cancelled. No results generated."),footer = modalButton("Close")))
+                 })
+
+    prom = finally(prom, function(){
+      running(FALSE)
+    })
+    
+    xgbcl_selection_results = dbReadTable(temp_db, "xgbcl_selection_results")
+    xgbcl_selection_results = xgbcl_selection_results[,-3]
+    xgbcl_selection_results = xgbcl_selection_results[,-2]
+    
+    weighted_mean = round(input$testcl_weight*as.numeric(xgbcl_selection_results[,5])+(1-input$testcl_weight)*as.numeric(xgbcl_selection_results[,4]),4)
+    final_xgbcl_select_result = cbind(xgbcl_selection_results,weighted_mean)
+    colnames(final_xgbcl_select_result) = c(colnames(xgbcl_selection_results),"Weighted Mean LnLoss")
+    
+    output$XGBCL_select = DT::renderDataTable(server=T,{
+      data = datatable(final_xgbcl_select_result,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
+                  target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = 17,scrollX = F,
+                  scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
+                  formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
+      data$x$data[[1]] = as.numeric(data$x$data[[1]])
+      data
+    })
+    
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Feat Select')
+    
+    #Return something other than the future so we don't block the UI
+    NULL
+  })
+  
+  observeEvent(input$testcl_weight, {
+    
+    tables = dbListTables(temp_db)
+    
+    if ('xgbcl_selection_results' %in% tables) {
+      
+      xgbcl_selection_results = dbReadTable(temp_db, "xgbcl_selection_results")
+      xgbcl_selection_results = xgbcl_selection_results[,-3]
+      xgbcl_selection_results = xgbcl_selection_results[,-2]
+      
+      weighted_mean = round(input$testcl_weight*as.numeric(xgbcl_selection_results[,5])+(1-input$testcl_weight)*as.numeric(xgbcl_selection_results[,4]),4)
+      final_xgbcl_select_result = cbind(xgbcl_selection_results,weighted_mean)
+      colnames(final_xgbcl_select_result) = c(colnames(xgbcl_selection_results),"Weighted Mean LnLoss")
+      
+      output$XGBCL_select = DT::renderDataTable(server=T,{
+        data = datatable(final_xgbcl_select_result,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
+                  target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = 17,scrollX = F,
+                  scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
+          formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
+        data$x$data[[1]] = as.numeric(data$x$data[[1]])
+        data
+      })
+    }
+  })
+  
+  observeEvent(input$XGBCL_select_cancel, {
+    print("Stopping calculation...")
+    stopMulticoreFuture(xgbcl_select_calculation)
+  })
+  
+  observeEvent(input$XGBCL_select_rows_selected, ignoreInit = T, {
+    
+    if (input$use_pca_data) {
+      all_feats = pca_axes()
+    } else {
+      all_feats = feat_names()
+    }
+    
+    temp_data = dbReadTable(temp_db, "xgbcl_selection_results")
+    
+    crit_val = as.numeric(input$XGBCL_select_rows_selected[1])
+    
+    if (crit_val > 1) {
+      
+      tossed_feats = temp_data[which(as.numeric(temp_data$Iteration) < crit_val),"Lowest_SHAP"]
+      remaining = all_feats[-which(all_feats %in% tossed_feats)]
+      
+    } else {
+      remaining = all_feats
+    }
+    
+    if (input$use_pca_data) {
+      updateCheckboxGroupInput(session,"pcax_to_use",choices=pca_axes(),selected=remaining,inline=T)
+    } else {
+      updateCheckboxGroupInput(session,"feats_to_use",choices=feat_names(),selected=remaining,inline=T)
+    }
+  })
+  
+  # XGB Classifier predictions
   
   observeEvent(input$XGBCL_pred_dc, {
     
@@ -1562,7 +1986,7 @@ server= function(input,output,session) {
       feats_to_use = input$feats_to_use
     }
     
-    xgbcl_pred_results = xgbcl_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_lowval,
+    xgbcl_pred_results = xgbcl_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$XGBCL_eval,input$lc_lowval,
                               input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
                               input$XGBCL_standard,xgbcl_tree_method_set(),xgbcl_booster_set(),dartcl_normalize_type_set(),dartcl_sample_type_set(),
                               ratecl_drop_set(),skipcl_drop_set(),Optimal_CLHP$eta,Optimal_CLHP$gamma,Optimal_CLHP$max_depth,
@@ -1630,7 +2054,7 @@ server= function(input,output,session) {
     
   })
   
-  # XGB Classifier Fitting of entire data set
+  # XGB Classifier fitting
   
   observeEvent(input$XGBCL_dec_crit, {
     
@@ -1771,6 +2195,7 @@ server= function(input,output,session) {
             
             params = list(
               objective = "binary:logistic",
+              eval_metric = input$XGBCL_eval,
               booster = xgbcl_booster_set(),
               rate_drop = ratecl_drop_set(),
               skip_drop = skipcl_drop_set(),
@@ -1787,6 +2212,7 @@ server= function(input,output,session) {
           } else {
             params = list(
               objective = "binary:logistic",
+              eval_metric = input$XGBCL_eval,
               booster = xgbcl_booster_set(),
               tree_method = xgbcl_tree_method_set(),
               eta = Optimal_CLHP$eta,
@@ -1947,7 +2373,6 @@ server= function(input,output,session) {
     MC_runs = input$MC_runs
     loggy = input$loggy
     randomize = input$randomize
-    test_weight = input$test_weight
     seed = input$model_seed
     
     xgb_select_result(NULL)
@@ -1956,7 +2381,7 @@ server= function(input,output,session) {
       
       xgb_selection(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                     xgb_standardize,xgb_tree_method,xgb_boost,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
-                    min_child_weight,subsamp,colsamp,nrounds,early_stop,test_weight,temp_db)
+                    min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db)
       
     }, seed=TRUE)
     
@@ -1972,8 +2397,16 @@ server= function(input,output,session) {
       running(FALSE)
     })
     
+    xgb_selection_results = dbReadTable(temp_db, "xgb_selection_results")
+    xgb_selection_results = xgb_selection_results[,-3]
+    xgb_selection_results = xgb_selection_results[,-2]
+    
+    weighted_mean = round(input$test_weight*as.numeric(xgb_selection_results[,5])+(1-input$test_weight)*as.numeric(xgb_selection_results[,4]),4)
+    final_xgb_select_result = cbind(xgb_selection_results,weighted_mean)
+    colnames(final_xgb_select_result) = c(colnames(xgb_selection_results),"Weighted Mean RMSE")
+    
     output$XGB_select = DT::renderDataTable(server=T,{
-      data = datatable(xgb_select_result(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
+      data = datatable(final_xgb_select_result,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
         target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = 17,scrollX = F,
         scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
         initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
@@ -1987,6 +2420,32 @@ server= function(input,output,session) {
     
     #Return something other than the future so we don't block the UI
     NULL
+  })
+  
+  observeEvent(input$test_weight, {
+    
+    tables = dbListTables(temp_db)
+    
+    if ('xgb_selection_results' %in% tables) {
+      
+      xgb_selection_results = dbReadTable(temp_db, "xgb_selection_results")
+      xgb_selection_results = xgb_selection_results[,-3]
+      xgb_selection_results = xgb_selection_results[,-2]
+      
+      weighted_mean = round(input$test_weight*as.numeric(xgb_selection_results[,5])+(1-input$test_weight)*as.numeric(xgb_selection_results[,4]),4)
+      final_xgb_select_result = cbind(xgb_selection_results,weighted_mean)
+      colnames(final_xgb_select_result) = c(colnames(xgb_selection_results),"Weighted Mean RMSE")
+      
+      output$XGB_select = DT::renderDataTable(server=T,{
+        data = datatable(final_xgb_select_result,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
+                target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = 17,scrollX = F,
+                scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
+          formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
+        data$x$data[[1]] = as.numeric(data$x$data[[1]])
+        data
+      })
+    }
   })
   
   observeEvent(input$XGB_select_cancel, {
@@ -2008,7 +2467,7 @@ server= function(input,output,session) {
     
     if (crit_val > 1) {
       
-      tossed_covar = temp_data[which(as.numeric(temp_data$Iteration) < crit_val),"Lowest.SHAP"]
+      tossed_covar = temp_data[which(as.numeric(temp_data$Iteration) < crit_val),"Lowest_SHAP"]
       remaining = all_feats[-which(all_feats %in% tossed_covar)]
       
     } else {
@@ -2078,7 +2537,7 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: HP Optim')
   })
   
-  # XGB HP Settings
+  # XGB HP settings
   
   observeEvent(input$XGB_params, {
     
@@ -2164,7 +2623,7 @@ server= function(input,output,session) {
     }
   })
   
-  # XGB predictions on test data
+  # XGB predictions
   
   observeEvent(input$XGB_pred_stand, {
     
@@ -2327,7 +2786,7 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Predict')
   })
   
-  # XGB Fitting of entire data set
+  # XGB fitting
   
   observeEvent(input$XGB_stand, {
     
@@ -2624,7 +3083,7 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Fitting')
   })
   
-  # Elastic Net predictions on test data
+  # Elastic Net predictions
   
   observeEvent(input$EN_pred_stand, {
     
@@ -2934,7 +3393,7 @@ server= function(input,output,session) {
     }
   })
   
-  # Elastic Net fitting of entire data set
+  # Elastic Net fitting
   
   observeEvent(input$EN_stand, {
     
@@ -3184,167 +3643,6 @@ server= function(input,output,session) {
       updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'EN: Fitting')
     }
   })
-  
-  # Isolation Forest analysis for outlier detection
-  
-  observeEvent(input$run_iso_forest, {
-    
-    req(iv$is_valid())
-    
-    # if (is.null(ignored_rows)) {
-    #   iso_data0 = current_data()
-    #   iso_data = current_data()[,-c(id_var,response_var())]
-    # } else {
-    #   iso_data0 = current_data()[-ignored_rows,]
-    #   iso_data = iso_data0[,-c(id_var,response_var())]
-    # }
-    
-    if (input$use_pca_data) {
-      data = PCA_dataset()
-      rv=2
-      feats_to_use = input$pcax_to_use
-      ignored_rows = NULL
-    } else {
-      data = current_data()
-      rv=response_var()
-      feats_to_use = input$feats_to_use
-    }
-    
-    iso_data = data[,-c(id_var,rv)]
-    
-    samp_size = min(nrow(iso_data), 10000L)
-    ndim = input$iso_ndim
-    
-    iso_results = matrix(NA, nrow = nrow(iso_data), ncol = 6)
-    iso_results = data.frame(iso_results)
-    colnames(iso_results) = c("ID","Depth_Score","Adj_Depth_Score","Density_Score","Adj_Density_Score","Overall")
-    
-    iso_results[,1] = data[,1]
-    
-    techs = c("depth","adj_depth", "density", "adj_density")
-    
-    if (ndim == 1) {
-      std_data = FALSE
-    } else {
-      std_data = TRUE
-    }
-    
-    for (i in 1:4) {
-      
-      if (ndim == 1 & i != 3 & i != 4) {
-        miss_action = "divide"
-      } else {
-        miss_action = "impute"
-      }
-      
-      if (i == 2) {
-        pen_range = TRUE
-      } else {
-        pen_range = FALSE
-      }
-      
-      if (i == 3 | i == 4) {
-        if (ndim == 1) {
-          pooled_gain = 0.75
-          mingain = 0.25
-        } else {
-          pooled_gain = 1
-          mingain = 0.25
-        }
-      } else {
-        pooled_gain = 0
-        mingain = 0
-      }
-      
-      isoforest = isolation.forest(iso_data,sample_size = samp_size,ntrees = 100,ndim = ndim,max_depth = ceiling(log2(samp_size)),
-                          prob_pick_pooled_gain = pooled_gain,min_gain = mingain,missing_action = miss_action,penalize_range = pen_range,
-                          standardize_data = std_data,scoring_metric = techs[[i]],output_score = TRUE,seed = input$data_seed)
-      
-      iso_results[,i+1] = round(isoforest$scores,3)
-    }
-    
-    iso_results[,6] = round((iso_results[,2] * iso_results[,3] * iso_results[,4] * iso_results[,5])^0.25 - 0.7071,3)
-    
-    output$iso_outliers = DT::renderDataTable(server = T, {data = datatable(iso_results,rownames = F,selection = list(selection = "multiple",
-                selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
-                buttons = c('copy', 'csv', 'excel'),pageLength = 17,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-                initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-    updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Outlier Metric')
-    
-  })
-  
-  # Selection of data set rows for enabling/disabling
-  
-  observeEvent(input$select_choice, ignoreInit = T, {
-    
-    if (input$select_choice == "Rows") {
-      enable("ignore_rows")
-      enable("enable_rows")
-    } else if (input$select_choice == "Features") {
-      disable("ignore_rows")
-      disable("enable_rows")
-    }
-    
-    #More stuff to come
-    
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
-  })
-  
-  observeEvent(input$ignore_rows, ignoreInit = T, {
-    
-    if (input$data_tabs == "Data Table") {
-      add_in = input$data_rows_selected[-1]
-    }
-    if (input$data_tabs == "Outlier Metric") {
-      add_in = input$iso_outliers_rows_selected
-    }
-    
-    if(identical(unique(append(ignored_rows,add_in)),integer(0))) {
-      ignored_rows <<- NULL
-    } else {
-      ignored_rows <<- unique(append(ignored_rows,add_in))
-    }
-    
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
-  })
-  
-  observeEvent(input$enable_rows, ignoreInit = T, {
-    
-    if (input$data_tabs == "Data Table") {
-      add_back = input$data_rows_selected[-1]
-    }
-    if (input$data_tabs == "Outlier Metric") {
-      add_back = input$iso_outliers_rows_selected
-    }
-    
-    if(identical(ignored_rows[!ignored_rows %in% add_back],integer(0))) {
-      ignored_rows <<- NULL
-    } else {
-      ignored_rows <<- ignored_rows[!ignored_rows %in% add_back]
-    }
-    
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
-  })
-  
-  # Render leaflet map and compute beach orientation
-  
-  output$map = renderLeaflet({
-    leaflet() |> 
-      addTiles() |> 
-      setView(270, 40, zoom = 5)
-  })
-  
-  observeEvent(input$map_click, {map_click(input$map_click,map_clicks,bo)})
-  
-  output$bo_text = renderUI({
-    HTML("To determine site orientation, click once anywhere on the shoreline, then again on another point on the shoreline. 
-      A third click, <b>made in the water</b>, calculates/saves the site orientation. A fourth click clears the map, 
-      whereby the process can be repeated.<br><br><i>Note: Any newly calculated orientation replaces the previous one.</i>")
-  })
-  
-  output$beach_orient = renderText({bo()})
 }
 
 shinyApp(ui, server)
