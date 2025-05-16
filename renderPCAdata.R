@@ -19,7 +19,7 @@ renderPCAdata = function(data,
     
     row_IDs = data[,1]
     
-    if (date_format_string != "Other") {
+    if (date_format_string != "Non-Date") {
       
       output$PCAdata = DT::renderDataTable(server = T, {
         datatable(

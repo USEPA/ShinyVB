@@ -4,18 +4,32 @@ ModelingPanel = sidebarLayout(
     width = 3,
     tags$style(type = "text/css", "#modelingsidepanel {width: 350px !important;}"),
     
-    checkboxGroupInput(
-      "feats_to_use",
-      "Features to Use:",
-      choices = "",
-      inline = TRUE
+    checkboxGroupButtons(
+      inputId = "feats_to_use",
+      label = "Features to Use: ",
+      choices = "NULL",
+      size = "xs",
+      status = "custom"
     ),
     
-    tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
+    # checkboxGroupInput(
+    #   "feats_to_use",
+    #   "Features to Use:",
+    #   choices = "",
+    #   inline = TRUE
+    # ),
     
-    fluidRow(column(12, checkboxInput("use_pca_data", "Use PCA Data", FALSE))),
+    tags$hr(style = "border-color: #2c3e50; margin-top: 4px; margin-bottom: 4px;"),
     
-    disabled(checkboxGroupInput("pcax_to_use","PCA Axes to Use:",choices = "",inline = TRUE)),
+    fluidRow(column(12, switchInput("use_pca_data", label="Use PCA Data?", labelWidth=85, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+    
+    disabled(checkboxGroupButtons(
+      inputId = "pcax_to_use",
+      label = "PCA Axes to Use: ",
+      choices = "NULL",
+      size = "xs",
+      status = "custom"
+    )),
 
     tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
     
@@ -38,8 +52,8 @@ ModelingPanel = sidebarLayout(
                    column(6, numericInput("MC_runs",  label="Monte Carlo Runs", value = 10, min=1,max=10000,step=1))),
           fluidRow(column(6, numericInput("num_folds",  label="CV Folds", value = 5, min=2,max=20,step=1)),
                    column(6, numericInput("model_seed",  label="Rnd Seed", value = 1234, min=1,step=1))),
-          fluidRow(column(6, checkboxInput("loggy", "Log Response", FALSE)),
-                   column(6, checkboxInput("randomize", "Shuffle Data", FALSE))))) %>%
+          fluidRow(column(12, switchInput("loggy", label="Log10 Response?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+          fluidRow(column(12, switchInput("randomize", label="Shuffle Data?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
@@ -53,8 +67,8 @@ ModelingPanel = sidebarLayout(
       bs_append (
         title = "Logistic Regression",
         content = card(
-            fluidRow(column(12,checkboxInput("LG_standard", "Standardize Features", FALSE))),
-            fluidRow(column(12,checkboxInput("LG_binarize", "Create Binary Response", TRUE))),
+            fluidRow(column(12, switchInput("LG_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+            fluidRow(column(12, switchInput("LG_binarize", label="Binarize Response?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
             fluidRow(column(5,numericInput("LG_binarize_crit_value", label = "Threshold", value = 2,step=0.25)),
                      column(7,selectInput("LG_eval",label = "Evaluation Metric",selectize=FALSE,selected ="deviance",choices = c("deviance","auc")))),
             fluidRow(column(6,actionButton("run_pred_LG", "Predictions", style = 'width:100px; padding:2px;')),
@@ -63,10 +77,10 @@ ModelingPanel = sidebarLayout(
       bs_append (
         title = "XGB Classifier",
         content = card(
-          fluidRow(column(5,checkboxInput("XGBCL_standard", "Stdn. Feats", FALSE)),
-                  column(7,selectInput("XGBCL_eval",label = "Evaluation Metric",selected ="logloss",choices = c("logloss","auc")))),
-          fluidRow(column(6,checkboxInput("XGBCL_binarize", "Create Binary Response", TRUE)),
-                   column(6, numericInput("XGBCL_binarize_crit_value", label = "Threshold", value = 2,step=0.25))),
+          fluidRow(column(12, switchInput("XGBCL_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+          fluidRow(column(12, switchInput("XGBCL_binarize", label="Binarize Response?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+          fluidRow(column(6,numericInput("XGBCL_binarize_crit_value", label = "Threshold", value = 2,step=0.25)),
+                   column(6,selectInput("XGBCL_eval",label = "Evaluation Metric",selected ="logloss",choices = c("logloss","auc")))),
           fluidRow(column(5,actionButton("XGBCL_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px;')),
                    column(7,actionButton("XGBCL_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
           fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
@@ -95,13 +109,13 @@ ModelingPanel = sidebarLayout(
       bs_append (
         title = "Elastic Net",
         content = card(
-          fluidRow(column(12,checkboxInput("EN_standard", "Standardize Features", FALSE))),
+          fluidRow(column(12, switchInput("EN_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
           fluidRow(column(6,actionButton("EN_pred", "Predictions", style = 'width:100px; padding:4px;')),
                   column(6,actionButton("EN_fit", "Fitting", style = 'width:100px; padding:4px;'))))) %>%
       
       bs_append (
         title = "XGBoost", content= card(
-          fluidRow(column(12,checkboxInput("XGB_standardize", "Standardize Features", FALSE))),
+          fluidRow(column(12, switchInput("XGB_standardize", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
           fluidRow(column(5,actionButton("XGB_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px;')),
                    column(7,actionButton("XGB_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
           fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),

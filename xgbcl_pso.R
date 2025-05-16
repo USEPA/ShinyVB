@@ -1,6 +1,8 @@
 xgbcl_pso = function(pso_data,
                    resvar,
                    coves_to_use,
+                   lc_val,
+                   rc_val,
                    lc_lowval,
                    lc_upval,
                    rc_lowval,
@@ -19,7 +21,7 @@ xgbcl_pso = function(pso_data,
 
   withProgress(
     message = 'HP Tuning Progress',
-    detail = paste("MC runs:", x = MC_runs),
+    detail = paste("MC runs:", x = 1,"/",MC_runs),
     value = 0,
     {
 
@@ -30,24 +32,24 @@ xgbcl_pso = function(pso_data,
         # SUBSTITUTE random value FOR RESPONSE VARIABLE non-values and then binarize
         if (loggy == TRUE) {
           for (j in 1:nrow(pso_data)) {
-            if (pso_data[j, 1] == "TNTC") {
+            if (pso_data[j, 1] == rc_val) {
               pso_data[j, 1] = log10(runif(1, min = rc_lowval, max = rc_upval))
               ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
             }
 
-            if (pso_data[j, 1] == "ND") {
+            if (pso_data[j, 1] == lc_val) {
               pso_data[j, 1] = log10(runif(1, min = lc_lowval, max = lc_upval))
               ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
             }
           }
         } else {
           for (j in 1:nrow(pso_data)) {
-            if (pso_data[j, 1] == "TNTC") {
+            if (pso_data[j, 1] == rc_val) {
               pso_data[j, 1] = (runif(1, min = rc_lowval, max = rc_upval))
               ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
             }
 
-            if (pso_data[j, 1] == "ND") {
+            if (pso_data[j, 1] == lc_val) {
               pso_data[j, 1] = (runif(1, min = lc_lowval, max = lc_upval))
               ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
             }

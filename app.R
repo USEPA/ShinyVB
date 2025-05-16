@@ -31,6 +31,7 @@ library(shinybusy)
 library(shinyjs)
 library(shinythemes)
 library(shinyvalidate)
+library(shinyWidgets)
 library(stats)
 library(stringr)
 library(tidyverse)
@@ -38,32 +39,33 @@ library(tools)
 library(units)
 library(xgboost)
 library(DT)
-# library(NCmisc)
-# library(here)
 
 plan(multicore)
 
-source("renderdata.R")
-source("renderPCAdata.R")
-source("rain.R")
-source("lineplot.R")
-source("ui.R")
-source("map_click.R")
-source("scatter.R")
-source("scatter_confuse.R")
-source("impute.R")
 source("createAO.R")
 source("confusion.R")
-source("xgbcl_call_optimize_HP.R")
-source("xgbcl_call_predict.R")
+source("impute.R")
+source("lineplot.R")
+source("map_click.R")
+source("rain.R")
+source("renderdata.R")
+source("renderPCAdata.R")
+source("scatter.R")
+source("scatter_confuse.R")
+source("ui.R")
 source("xgb_call_optimize_HP.R")
 source("xgb_call_predict.R")
-source("xgb_pso.R")
-source("xgbcl_pso.R")
-source("xgb_pred_errors.R")
-source("xgbcl_pred_errors.R")
 source("xgb_feature_selection.R")
+source("xgb_pred_errors.R")
+source("xgb_pso.R")
+source("xgbcl_call_optimize_HP.R")
+source("xgbcl_call_predict.R")
 source("xgbcl_feature_selection.R")
+source("xgbcl_pred_errors.R")
+source("xgbcl_pso.R")
+
+# library(NCmisc)
+# library(here)
 
 # Define server logic
 
@@ -92,6 +94,8 @@ server= function(input,output,session) {
   
   iv = InputValidator$new()
   
+  # iv$add_rule("lc_val", sv_between(-1000000,0))
+  # iv$add_rule("rc_val", sv_between(1000,1000000))
   # iv$add_rule("lc_lowval", sv_between(0,1))
   # iv$add_rule("lc_upval", sv_between(1,10))
   # iv$add_rule("rc_lowval", sv_between(0,100))
@@ -170,12 +174,16 @@ server= function(input,output,session) {
   PCA_dataset = reactiveVal()
   pca_axes = reactiveVal()
   pcax_being_used = reactiveVal()
+  last_plot = reactiveVal(NULL)
+  redraw_rainplot = reactiveVal(FALSE)
+  redraw_scatplot = reactiveVal(FALSE)
+  redraw_lineplot = reactiveVal(FALSE)
   
   # General non-reactive variables
   
   id_var = 1
   ignored_rows = NULL
-  date_format_string = "Other"
+  date_format_string = "Non-Date"
 
   # XGB hyperparameters
   
@@ -264,90 +272,96 @@ server= function(input,output,session) {
   
   observeEvent(input$show_shorelines, {
     
-    leafletProxy("map") %>% clearGroup('shore_markers')
-    
-    zoom = input$map_zoom
-    zoom_threshold = 13
-    bounds = input$map_bounds
-    
-    if (zoom < zoom_threshold) {
+    if (input$show_shorelines) {
       
-      showModal(modalDialog(tags$h4("Zoom to at least level 13 to show beach shorelines."),easyClose = FALSE))
+      leafletProxy("map") %>% clearGroup('shore_markers')
       
-    } else {
+      zoom = input$map_zoom
+      zoom_threshold = 13
+      bounds = input$map_bounds
       
-      if (!is.null(bounds)) {
-        visible_data = data.frame(shoreline_data[shoreline_data$startlat >= bounds$south & shoreline_data$endlat <= bounds$north &
-                                                   shoreline_data$startlong >= bounds$west & shoreline_data$endlong <= bounds$east,])
-      }
-      
-      uniq_rows = data.frame(visible_data[!duplicated(visible_data[3:6]),])
-      uniq_rows = uniq_rows[-nrow(uniq_rows),]
-      
-      if (nrow(uniq_rows)>0) {
+      if (zoom < zoom_threshold) {
         
-        for (i in 1:nrow(uniq_rows)) {
+        updateSwitchInput(session,"show_shorelines",value = FALSE)
+        showModal(modalDialog(tags$h4("Zoom to at least level 13 to show beach shorelines."),easyClose = FALSE))
+        
+      } else {
+        
+        if (!is.null(bounds)) {
+          visible_data = data.frame(shoreline_data[shoreline_data$startlat >= bounds$south & shoreline_data$endlat <= bounds$north &
+                                                     shoreline_data$startlong >= bounds$west & shoreline_data$endlong <= bounds$east,])
+        }
+        
+        uniq_rows = data.frame(visible_data[!duplicated(visible_data[3:6]),])
+        uniq_rows = uniq_rows[-nrow(uniq_rows),]
+        
+        if (nrow(uniq_rows)>0) {
           
-          shoreline = data.frame(
-            lon = c(uniq_rows[i,5],uniq_rows[i,6]),       
-            lat =c(uniq_rows[i,3],uniq_rows[i,4])
-          )
-          name = as.character(uniq_rows[i,2])
-          
-          # 
-          
-          leafletProxy("map") %>% addPolylines(., lng=shoreline$lon, lat=shoreline$lat,color='#2c3e50',label = name, opacity=1.0,
-                                               group="shore_markers",popup = paste("Beach ID: ", name)) %>%
-            addCircleMarkers(lng=shoreline$lon[1],lat=shoreline$lat[1],radius=2,opacity=1.0, color="green", group="shore_markers") %>%
-            addCircleMarkers(lng=shoreline$lon[2],lat=shoreline$lat[2],radius=2,opacity=1.0, color="green", group="shore_markers")
+          for (i in 1:nrow(uniq_rows)) {
+            
+            shoreline = data.frame(
+              lon = c(uniq_rows[i,5],uniq_rows[i,6]),       
+              lat =c(uniq_rows[i,3],uniq_rows[i,4])
+            )
+            name = as.character(uniq_rows[i,2])
+            
+            # 
+            
+            leafletProxy("map") %>% addPolylines(., lng=shoreline$lon, lat=shoreline$lat,color='#2c3e50',label = name, opacity=1.0,
+                                                 group="shore_markers",popup = paste("Beach ID: ", name)) %>%
+              addCircleMarkers(lng=shoreline$lon[1],lat=shoreline$lat[1],radius=2,opacity=1.0, color="green", group="shore_markers") %>%
+              addCircleMarkers(lng=shoreline$lon[2],lat=shoreline$lat[2],radius=2,opacity=1.0, color="green", group="shore_markers")
+          }
         }
       }
+    } else {
+      
+      leafletProxy("map") %>% clearGroup('shore_markers')
     }
-  })
-  
-  observeEvent(input$clear_shorelines, {
-    leafletProxy("map") %>% clearGroup('shore_markers')
   })
   
   # Add/Remove monitoring station markers
   
   observeEvent(input$show_stations, {
     
-    leafletProxy("map") %>% clearGroup('monitor_stations')
-    
-    zoom = input$map_zoom
-    zoom_threshold = 11
-    bounds = input$map_bounds
-    
-    if (zoom < zoom_threshold) {
+    if (input$show_stations) {
       
-      showModal(modalDialog(tags$h4("Zoom to at least level 11 to show monitoring stations."),easyClose = FALSE))
+      leafletProxy("map") %>% clearGroup('monitor_stations')
       
+      zoom = input$map_zoom
+      zoom_threshold = 11
+      bounds = input$map_bounds
+      
+      if (zoom < zoom_threshold) {
+        
+        updateSwitchInput(session,"show_stations",value = FALSE)
+        showModal(modalDialog(tags$h4("Zoom to at least level 11 to show monitoring stations."),easyClose = FALSE))
+        
+      } else {
+        
+        if (!is.null(bounds)) {
+          visible_data = data.frame(station_data[station_data$Latitude >= bounds$south & station_data$Latitude <= bounds$north &
+                                                   station_data$Longitude >= bounds$west & station_data$Longitude <= bounds$east,])
+        }
+        
+        uniq_rows = data.frame(visible_data[!duplicated(visible_data[2:3]),])
+        uniq_rows[,2] = as.numeric(uniq_rows[,2])
+        uniq_rows[,3] = as.numeric(uniq_rows[,3])
+        
+        if (nrow(uniq_rows)>0) {
+          
+          leafletProxy("map",data=uniq_rows) %>%
+            {
+              for (i in 1:nrow(uniq_rows)) {
+                addMarkers(.,lng=uniq_rows[i,3],lat=uniq_rows[i,2],popup = as.character(uniq_rows[i,1]), label = as.character(uniq_rows[i,1]), group="monitor_stations")
+              }
+            }
+        }
+      }
     } else {
       
-      if (!is.null(bounds)) {
-        visible_data = data.frame(station_data[station_data$Latitude >= bounds$south & station_data$Latitude <= bounds$north &
-                                                 station_data$Longitude >= bounds$west & station_data$Longitude <= bounds$east,])
-      }
-      
-      uniq_rows = data.frame(visible_data[!duplicated(visible_data[2:3]),])
-      uniq_rows[,2] = as.numeric(uniq_rows[,2])
-      uniq_rows[,3] = as.numeric(uniq_rows[,3])
-      
-      if (nrow(uniq_rows)>0) {
-        
-        leafletProxy("map",data=uniq_rows) %>%
-          {
-            for (i in 1:nrow(uniq_rows)) {
-              addMarkers(.,lng=uniq_rows[i,3],lat=uniq_rows[i,2],popup = as.character(uniq_rows[i,1]), label = as.character(uniq_rows[i,1]), group="monitor_stations")
-            }
-          }
-      }
+      leafletProxy("map") %>% clearGroup('monitor_stations')
     }
-  })
-  
-  observeEvent(input$clear_stations, {
-    leafletProxy("map") %>% clearGroup('monitor_stations')
   })
   
   # Other map stuff
@@ -371,8 +385,8 @@ server= function(input,output,session) {
   
   output$bo_text = renderUI({
     HTML("To determine site orientation, click once anywhere on the shoreline, then again on another point on the shoreline. 
-      A third click, <b>made in the water</b>, calculates/saves the site orientation. A fourth click clears the map, 
-      whereby the process can be repeated.<br><br><i>Note: Any newly calculated orientation replaces the previous one.</i>")
+      A third click, <b>made in the water</b>, calculates/saves the site orientation. A fourth click starts the process over.
+         <br><br><i>Note: A newly-calculated orientation replaces the previous one.</i>")
   })
   
   output$zoom_level = renderText({
@@ -554,6 +568,11 @@ server= function(input,output,session) {
       showModal(modalDialog(paste("The ID (Column 1) has missing values. Please remedy prior to data importation."),
                             easyClose = F,footer = div(modalButton('Close'))))
       
+    } else if (any(sapply(data.frame(init_data[,-1]), function(col) !is.numeric(col)))) {
+      
+      showModal(modalDialog(paste("This dataset contains non-numeric data. Please remedy prior to data importation."),
+                            easyClose = F,footer = div(modalButton('Close'))))
+      
     } else {
       feat_props_temp = hash()
       
@@ -576,19 +595,26 @@ server= function(input,output,session) {
         init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
         date_format_string <<- "toLocaleString"
       } else {
-        date_format_string <<- "Other"
+        date_format_string <<- "Non-Date"
       }
       
       current_data(init_data)
       col_names(colnames(init_data))
       
-      updateNumericInput(session, "LG_binarize_crit_value",value = round(median(current_data()[,response_var()]),2),
-                         min=min(current_data()[,response_var()]),max=max(current_data()[,response_var()]))
-      updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(current_data()[,response_var()]),2),
-                         min=min(current_data()[,response_var()]),max=max(current_data()[,response_var()]))
+      # Filter the response variable to exclude left and right-censored tags
+      exclude_values = c(input$lc_val, input$rc_val)
+      real_responses = init_data[!init_data[,response_var()] %in% exclude_values,response_var()]
       
-      iv$add_rule("LG_binarize_crit_value", sv_between(min(init_data[,response_var()]),max(init_data[,response_var()])))
-      iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(init_data[,response_var()]),max(init_data[,response_var()])))
+      updateNumericInput(session, "LG_binarize_crit_value",value = round(median(real_responses),2),
+                         min=min(real_responses),max=max(real_responses))
+      updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(real_responses),2),
+                         min=min(real_responses),max=max(real_responses))
+      
+      updateNumericInput(session,"lc_replace",value = round(min(real_responses),3))
+      updateNumericInput(session,"rc_replace",value = round(max(real_responses),3))
+      
+      iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
+      iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
       
       feat_data0 = init_data[,-1]
       feat_data = feat_data0[,-1]
@@ -673,6 +699,21 @@ server= function(input,output,session) {
     
     if ((input$data_columns_selected+1) != response_var()) {
       response_var(input$data_columns_selected + 1)
+      
+      # Filter the response variable to exclude left and right-censored tags
+      exclude_values = c(input$lc_val, input$rc_val)
+      
+      real_responses = current_data()[,response_var()] %>%
+        filter(!value %in% exclude_values)
+      
+      updateNumericInput(session, "LG_binarize_crit_value",value = round(median(real_responses),2),
+                         min=min(real_responses),max=max(real_responses))
+      updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(real_responses),2),
+                         min=min(real_responses),max=max(real_responses))
+      
+      updateNumericInput(session, "lc_replace",value = round(min(real_responses),3))
+      updateNumericInput(session, "rc_replace",value = round(max(real_responses),3))
+      
       renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,feat_props,ignored_rows,output)
       
       pca_axes(NULL)
@@ -827,6 +868,45 @@ server= function(input,output,session) {
   
   # Plotting functions
   
+  observeEvent(input$cens_choice, ignoreInit = T, {
+    
+    if (input$rainplot == colnames(current_data())[response_var()] && last_plot() == "raincloud") {
+      redraw_rainplot(TRUE)
+    } else if ((input$scatterx == colnames(current_data())[response_var()] || input$scattery == colnames(current_data())[response_var()]) && last_plot() == "scatter") {
+      redraw_scatplot(TRUE)
+    } else if (input$lineplot == colnames(current_data())[response_var()] && last_plot() == "lineplot") {
+      redraw_lineplot(TRUE)
+    } else {
+      return()
+    }
+  })
+  
+  observeEvent(input$lc_replace, ignoreInit = T, {
+    
+    if (input$rainplot == colnames(current_data())[response_var()] && last_plot() == "raincloud") {
+      redraw_rainplot(TRUE)
+    } else if ((input$scatterx == colnames(current_data())[response_var()] || input$scattery == colnames(current_data())[response_var()]) && last_plot() == "scatter") {
+      redraw_scatplot(TRUE)
+    } else if (input$lineplot == colnames(current_data())[response_var()] && last_plot() == "lineplot") {
+      redraw_lineplot(TRUE)
+    } else {
+      return()
+    }
+  })
+
+  observeEvent(input$rc_replace, ignoreInit = T, {
+    
+    if (input$rainplot == colnames(current_data())[response_var()] && last_plot() == "raincloud") {
+      redraw_rainplot(TRUE)
+    } else if ((input$scatterx == colnames(current_data())[response_var()] || input$scattery == colnames(current_data())[response_var()]) && last_plot() == "scatter") {
+      redraw_scatplot(TRUE)
+    } else if (input$lineplot == colnames(current_data())[response_var()] && last_plot() == "lineplot") {
+      redraw_lineplot(TRUE)
+    } else {
+      return()
+    }
+  })
+  
   observeEvent(input$rainplot, ignoreInit = T, {
     
     if (input$rainplot != "-") {
@@ -837,6 +917,48 @@ server= function(input,output,session) {
         rain_data0 = current_data()[-ignored_rows,]
       }
       
+      if (input$cens_choice == 'hide') {
+        
+        rain_data0 = rain_data0[!rain_data0[,response_var()] %in% c(input$lc_val, input$rc_val),]
+        
+      } else if (input$cens_choice == 'replace') {
+        
+        rain_data0[rain_data0[,response_var()] == input$lc_val,response_var()] = input$lc_replace
+        rain_data0[rain_data0[,response_var()] == input$rc_val,response_var()] = input$rc_replace
+      }
+      
+      rain_data1 = cbind(rain_data0[,id_var],rain_data0[,input$rainplot])
+      colnames(rain_data1) = c("ID",input$rainplot)
+      
+      output$rainplot = renderPlot({raincloud(rain_data1)})
+      
+      last_plot("raincloud")
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = "Raincloud")
+    }
+  })
+  
+  observeEvent(redraw_rainplot(), ignoreInit = T, {
+    
+    if (input$rainplot != "-") {
+      
+      if (is.null(ignored_rows)) {
+        rain_data0 = current_data()
+      } else {
+        rain_data0 = current_data()[-ignored_rows,]
+      }
+      
+      if (input$cens_choice == 'hide') {
+        
+        rain_data0 = rain_data0[!rain_data0[,response_var()] %in% c(input$lc_val, input$rc_val),]
+        
+      } else if (input$cens_choice == 'replace') {
+        
+        rain_data0[rain_data0[,response_var()] == input$lc_val,response_var()] = input$lc_replace
+        rain_data0[rain_data0[,response_var()] == input$rc_val,response_var()] = input$rc_replace
+      }
+      
       rain_data1 = cbind(rain_data0[,id_var],rain_data0[,input$rainplot])
       colnames(rain_data1) = c("ID",input$rainplot)
       
@@ -844,6 +966,9 @@ server= function(input,output,session) {
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = "Raincloud")
+      
+      redraw_rainplot(FALSE)
+      last_plot("raincloud")
     }
   })
 
@@ -857,6 +982,48 @@ server= function(input,output,session) {
         line_data0 = current_data()[-ignored_rows,]
       }
       
+      if (input$cens_choice == 'hide') {
+        
+        line_data0 = line_data0[!line_data0[,response_var()] %in% c(input$lc_val, input$rc_val),]
+        
+      } else if (input$cens_choice == 'replace') {
+        
+        line_data0[line_data0[,response_var()] == input$lc_val,response_var()] = input$lc_replace
+        line_data0[line_data0[,response_var()] == input$rc_val,response_var()] = input$rc_replace
+      }
+      
+      var_list = c(1,which(colnames(line_data0) == input$lineplot))
+      line_data1 = line_data0[,var_list]
+      
+      output$lineplott = renderPlotly({lineplot(line_data1,input$lineplot)})
+      
+      last_plot("lineplot")
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Line Plot')
+    }
+  })
+  
+  observeEvent(redraw_lineplot(), ignoreInit = T, {
+    
+    if (input$lineplot != "-") {
+      
+      if (is.null(ignored_rows)) {
+        line_data0 = current_data()
+      } else {
+        line_data0 = current_data()[-ignored_rows,]
+      }
+      
+      if (input$cens_choice == 'hide') {
+        
+        line_data0 = line_data0[!line_data0[,response_var()] %in% c(input$lc_val, input$rc_val),]
+        
+      } else if (input$cens_choice == 'replace') {
+        
+        line_data0[line_data0[,response_var()] == input$lc_val,response_var()] = input$lc_replace
+        line_data0[line_data0[,response_var()] == input$rc_val,response_var()] = input$rc_replace
+      }
+      
       var_list = c(1,which(colnames(line_data0) == input$lineplot))
       line_data1 = line_data0[,var_list]
       
@@ -864,6 +1031,9 @@ server= function(input,output,session) {
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Line Plot')
+      
+      redraw_lineplot(FALSE)
+      last_plot("lineplot")
     }
   })
   
@@ -877,10 +1047,22 @@ server= function(input,output,session) {
         scatter_data0 = current_data()[-ignored_rows,]
       }
       
+      if (input$cens_choice == 'hide') {
+        
+        scatter_data0 = scatter_data0[!scatter_data0[,response_var()] %in% c(input$lc_val, input$rc_val),]
+        
+      } else if (input$cens_choice == 'replace') {
+        
+        scatter_data0[scatter_data0[,response_var()] == input$lc_val,response_var()] = input$lc_replace
+        scatter_data0[scatter_data0[,response_var()] == input$rc_val,response_var()] = input$rc_replace
+      }
+      
       var_list = c(1,which(colnames(scatter_data0) == input$scatterx),which(colnames(scatter_data0) == input$scattery))
       scatter_data1 = scatter_data0[,var_list]
       
       output$scatplot = renderPlotly(scatter(scatter_data1))
+      
+      last_plot("scatter")
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
@@ -898,6 +1080,48 @@ server= function(input,output,session) {
         scatter_data0 = current_data()[-ignored_rows,]
       }
       
+      if (input$cens_choice == 'hide') {
+        
+        scatter_data0 = scatter_data0[!scatter_data0[,response_var()] %in% c(input$lc_val, input$rc_val),]
+        
+      } else if (input$cens_choice == 'replace') {
+        
+        scatter_data0[scatter_data0[,response_var()] == input$lc_val,response_var()] = input$lc_replace
+        scatter_data0[scatter_data0[,response_var()] == input$rc_val,response_var()] = input$rc_replace
+      }
+      
+      var_list = c(1,which(colnames(scatter_data0) == input$scatterx),which(colnames(scatter_data0) == input$scattery))
+      scatter_data1 = scatter_data0[,var_list]
+      
+      output$scatplot = renderPlotly(scatter(scatter_data1))
+      
+      last_plot("scatter")
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
+    }
+  })
+  
+  observeEvent(redraw_scatplot(), ignoreInit = T, {
+    
+    if (input$scatterx != "-" & input$scattery!= "-") {
+      
+      if (is.null(ignored_rows)) {
+        scatter_data0 = current_data()
+      } else {
+        scatter_data0 = current_data()[-ignored_rows,]
+      }
+      
+      if (input$cens_choice == 'hide') {
+        
+        scatter_data0 = scatter_data0[!scatter_data0[,response_var()] %in% c(input$lc_val, input$rc_val),]
+        
+      } else if (input$cens_choice == 'replace') {
+        
+        scatter_data0[scatter_data0[,response_var()] == input$lc_val,response_var()] = input$lc_replace
+        scatter_data0[scatter_data0[,response_var()] == input$rc_val,response_var()] = input$rc_replace
+      }
+      
       var_list = c(1,which(colnames(scatter_data0) == input$scatterx),which(colnames(scatter_data0) == input$scattery))
       scatter_data1 = scatter_data0[,var_list]
       
@@ -905,6 +1129,9 @@ server= function(input,output,session) {
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
+      
+      last_plot("scatter")
+      redraw_scatplot(FALSE)
     }
   })
   
@@ -955,8 +1182,8 @@ server= function(input,output,session) {
     if (max_missing > crit_n) {
       
       showModal(modalDialog(
-        paste0("WARNING: Row numbers (", listing, "), have quite a few missing values. Imputation results for these rows 
-               will be highly uncertain. Consider deleting these from the dataset or disabling them."),
+        paste0("WARNING: Row numbers (", listing, ") have quite a few missing values, leading to unstable imputation results.
+                Consider deleting these rows from the dataset or disabling them."),
         footer = tagList(actionButton("continue_impute", "Impute Anyways"),actionButton("end_impute", "Exit"))))
       
     } else {
@@ -1044,7 +1271,7 @@ server= function(input,output,session) {
         
         feat_names(colnames(temp_data2))
         
-        updateCheckboxGroupInput(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),inline=T)
+        updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
         
         if (input$use_pca_data) {
           delay(1,disable("feats_to_use"))
@@ -1067,7 +1294,7 @@ server= function(input,output,session) {
         
         pca_axes(colnames(tmp_data2))
         
-        updateCheckboxGroupInput(session,"pcax_to_use",choices=pca_axes(),selected=pcax_being_used(),inline=T)
+        updateCheckboxGroupButtons(session,"pcax_to_use",choices=pca_axes(),selected=pcax_being_used(),size="xs",status = "custom")
         
         if (!input$use_pca_data) {
           delay(1,disable("pcax_to_use"))
@@ -1077,14 +1304,6 @@ server= function(input,output,session) {
     } else {
       return()
     }
-  })
-  
-  observeEvent(input$feats_to_use, {
-      feats_being_used(input$feats_to_use)
-  })
-  
-  observeEvent(input$pcax_to_use, {
-    pcax_being_used(input$pcax_to_use)
   })
   
   # Logistic regression predictions
@@ -1127,257 +1346,268 @@ server= function(input,output,session) {
   
   observeEvent(input$run_pred_LG, {
     
-    req(iv$is_valid())
+    response_data = as.numeric(current_data()[,response_var()])
+    response_data = response_data[!is.na(response_data)]
     
-    set.seed(input$model_seed)
-    
-    if (input$use_pca_data) {
-      data0 = PCA_dataset()
-      rv=2
-      feats_to_use = input$pcax_to_use
-      ignored_rows = NULL
+    if (length(unique(response_data)) > 2 && input$LG_binarize == FALSE) {
+      
+      showModal(modalDialog(paste("Response Variable must be binarized for this analysis. Choose to 'Binarize' using the button above."),footer = modalButton("Close")))
+      
     } else {
-      data0 = current_data()
-      rv=response_var()
-      feats_to_use = input$feats_to_use
-    }
-  
-    MC_runs = input$MC_runs
-    
-    crit_value = input$LG_binarize_crit_value
-    
-    if (input$LG_binarize) {
-      new_Y = ifelse(test = data0[,rv] >= crit_value, yes = 1, no = 0)
-      data0[,rv] = new_Y
-    }
-    
-    if (is.null(ignored_rows)) {
-      data1 = data0
-    } else {
-      data1 = data0[-ignored_rows,]
-    }
-    
-    # REMOVE NA'S FROM RESPONSE VARIABLE
-    data1 = data1[!is.na(data1[,rv]),]
-    
-    var_list = c(1,rv,which(colnames(data1) %in% feats_to_use))
-    data2 = data1[,var_list]
-    colnames(data2) = c(colnames(data0)[1],"Response",feats_to_use)
-    
-    # RANDOMIZE DATA
-    if (input$randomize==TRUE) {
-      random_index = sample(1:nrow(data2), nrow(data2))
-      data2 = data2[random_index, ]
-    }
-    
-    data = data2[,-1]
-    
-    # if (any(is.na(data[,-1]))) {
-    # 
-    #   showModal(modalDialog(paste("Logistic Regression does not tolerate missing feature values. You can either Impute these
-    #             (on the Data tab) or Disable rows/columns with missing values."),footer = modalButton("Close")))
-    # 
-    # } else {
       
-      #Create n folds
-      tot_folds = input$num_folds
-      folds = cut(seq(1, nrow(data)), breaks = tot_folds, labels = FALSE)
+      req(iv$is_valid())
       
-      fold_predictions = matrix(0, nrow = 0, ncol = 2)
-      fold_predictions = as.data.frame(fold_predictions)
+      set.seed(input$model_seed)
       
-      coeff_folds = matrix(0, nrow = ncol(data), ncol = tot_folds+1)
-      coeff_folds = as.data.frame(coeff_folds)
-      coeff_folds[,1] = c("(Intercept)",feats_to_use)
-      
-      #Perform cross validation
-      for (f in 1:tot_folds) {
-        
-        testIndices = which(folds == f, arr.ind = TRUE)
-        testData = data[testIndices, ]
-        trainData = data[-testIndices, ]
-        
-        temp_preds = matrix(0, nrow = nrow(testData), ncol = 2*MC_runs)
-        temp_preds = data.frame(temp_preds)
-        
-        temp_coeffs = matrix(0, nrow = ncol(data), ncol = MC_runs+1)
-        temp_coeffs = data.frame(temp_coeffs)
-        temp_coeffs[,1] = c("(Intercept)",feats_to_use)
-        
-        withProgress(
-          message = 'Logistic Prediction Progress',
-          detail = paste("MC runs:", x=1,"; Fold:",y = f),
-          value = (1-1/tot_folds) - (1/tot_folds)*(tot_folds-f),
-          {
-            
-            for (i in 1:MC_runs) {
-              
-              incProgress(1/(MC_runs*tot_folds), detail = paste("MC run:",i,"/",MC_runs,"; Fold:",f,"/",tot_folds))
-              
-              # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS in test data and train data
-              if (input$loggy == TRUE) {
-                
-                for (j in 1:nrow(trainData)) {
-                  if (trainData[j, 1] == "TNTC") {
-                    trainData[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
-                    ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
-                  }
-                  
-                  if (trainData[j, 1] == "ND") {
-                    trainData[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
-                    ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
-                  }
-                }
-                
-                for (j in 1:nrow(testData)) {
-                  if (testData[j, 1] == "TNTC") {
-                    testData[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
-                    ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
-                  }
-                  
-                  if (testData[j, 1] == "ND") {
-                    testData[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
-                    ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
-                  }
-                }
-              } else {
-                for (j in 1:nrow(trainData)) {
-                  if (trainData[j, 1] == "TNTC") {
-                    trainData[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
-                    ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
-                  }
-                  
-                  if (trainData[j, 1] == "ND") {
-                    trainData[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
-                    ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
-                  }
-                }
-                for (j in 1:nrow(testData)) {
-                  
-                  if (testData[j, 1] == "TNTC") {
-                    testData[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
-                    ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
-                  }
-                  
-                  if (testData[j, 1] == "ND") {
-                    testData[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
-                    ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
-                  }
-                }
-              }
-              
-              temp_preds[,2*i-1] = testData[,1]
-              
-              # Train the model
-              fit_mod = cva.glmnet(x=as.matrix(trainData[,-1]),y=trainData[,1],nfolds=tot_folds,family="binomial",type.measure=input$LG_eval,na.action="na.omit",
-                                   standardize=input$LG_standard,intercept=TRUE)
-              
-              get_model_params = function(fit) {
-                alpha = fit$alpha
-                lambdaMin = sapply(fit$modlist, `[[`, "lambda.min")
-                lambdaSE = sapply(fit$modlist, `[[`, "lambda.1se")
-                error = sapply(fit$modlist, function(mod) {min(mod$cvm)})
-                best = which.min(error)
-                data.frame(alpha = alpha[best], lambdaMin = lambdaMin[best],
-                           lambdaSE = lambdaSE[best], eror = error[best])
-              }
-              
-              alpha = get_model_params(fit_mod)$alpha
-              lambda = get_model_params(fit_mod)$lambdaMin
-              
-              model = glmnet(x=as.matrix(trainData[,-1]),trainData[,1],lambda=lambda, alpha=alpha,na.action="na.omit", family="binomial",type.measure=input$LG_eval,
-                             standardize=input$LG_standard,intercept=TRUE)
-              
-              preds = predict(model, newx = as.matrix(testData[,-1]), type = "response")
-              
-              tmp_coeffs = coef(model, s = lambda, exact = TRUE)
-              coeffs = data.frame(name = tmp_coeffs@Dimnames[[1]][tmp_coeffs@i + 1], coefficient = round(tmp_coeffs@x,4))
-              
-              for (h in 1:nrow(coeffs)) {
-                if(temp_coeffs[h,1] %in% coeffs[,1]) {
-                  temp_coeffs[h,i+1] = coeffs[which(coeffs[,1] == temp_coeffs[h,1]),2]
-                } else {
-                  temp_coeffs[h,i+1] = 0
-                }
-              }
-              
-              temp_preds[,2*i] = round(preds,3)
-              
-            } #End the MC Runs
-            
-            coeff_folds[,f+1] = round(rowMeans(temp_coeffs[,-1]),5)
-            
-            even_columns = temp_preds[,seq(2, ncol(temp_preds), by = 2)]
-            odd_columns = temp_preds[,seq(1, ncol(temp_preds), by = 2)]
-            
-            obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
-            pred_mean_values = round(rowMeans(even_columns),3)
-            fold_preds = cbind(obs_mean_values,pred_mean_values)
-            
-            fold_predictions = rbind(fold_predictions,fold_preds)
-          })
-        
-      } #End the Fold runs
-    
       if (input$use_pca_data) {
-        prediction_results = data.frame(cbind(data2[,1],fold_predictions[,1],fold_predictions[,2],round(data[,-1],4)))
+        data0 = PCA_dataset()
+        rv=2
+        feats_to_use = input$pcax_to_use
+        ignored_rows = NULL
       } else {
-        prediction_results = data.frame(cbind(data2[,1],fold_predictions[,1],fold_predictions[,2],data[,-1]))
+        data0 = current_data()
+        rv=response_var()
+        feats_to_use = input$feats_to_use
       }
       
-      colnames(prediction_results) = c(colnames(data2)[1],colnames(data0)[rv],"Predictions",feats_to_use)
+      MC_runs = input$MC_runs
       
-      prediction_results = prediction_results[order(prediction_results[,1]),]
+      crit_value = input$LG_binarize_crit_value
       
-      final_coeffs = data.frame(cbind(coeff_folds[,1],round(rowMeans(coeff_folds[,-1]),4),round(exp(rowMeans(coeff_folds[,-1])),4)))
-      colnames(final_coeffs) = c("Feature","Coefficient","Odds Ratio")
+      if (input$LG_binarize) {
+        new_Y = ifelse(test = data0[,rv] >= crit_value, yes = 1, no = 0)
+        data0[,rv] = new_Y
+      }
       
-      output$LG_preds = DT::renderDataTable(server = T, {data = datatable(prediction_results,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
+      if (is.null(ignored_rows)) {
+        data1 = data0
+      } else {
+        data1 = data0[-ignored_rows,]
+      }
+      
+      # REMOVE NA'S FROM RESPONSE VARIABLE
+      data1 = data1[!is.na(data1[,rv]),]
+      
+      var_list = c(1,rv,which(colnames(data1) %in% feats_to_use))
+      data2 = data1[,var_list]
+      colnames(data2) = c(colnames(data0)[1],"Response",feats_to_use)
+      
+      # RANDOMIZE DATA
+      if (input$randomize==TRUE) {
+        random_index = sample(1:nrow(data2), nrow(data2))
+        data2 = data2[random_index, ]
+      }
+      
+      data = data2[,-1]
+      
+      if (any(is.na(data[,-1]))) {
+        
+        showModal(modalDialog(paste("Logistic Regression does not allow missing feature values. You can either Impute these, edit/add a value to the missing cell,
+                or Disable all rows with missing values."),footer = modalButton("Close")))
+        
+      } else {
+        
+        #Create n folds
+        tot_folds = input$num_folds
+        folds = cut(seq(1, nrow(data)), breaks = tot_folds, labels = FALSE)
+        
+        fold_predictions = matrix(0, nrow = 0, ncol = 2)
+        fold_predictions = as.data.frame(fold_predictions)
+        
+        coeff_folds = matrix(0, nrow = ncol(data), ncol = tot_folds+1)
+        coeff_folds = as.data.frame(coeff_folds)
+        coeff_folds[,1] = c("(Intercept)",feats_to_use)
+        
+        #Perform cross validation
+        for (f in 1:tot_folds) {
+          
+          testIndices = which(folds == f, arr.ind = TRUE)
+          testData = data[testIndices, ]
+          trainData = data[-testIndices, ]
+          
+          temp_preds = matrix(0, nrow = nrow(testData), ncol = 2*MC_runs)
+          temp_preds = data.frame(temp_preds)
+          
+          temp_coeffs = matrix(0, nrow = ncol(data), ncol = MC_runs+1)
+          temp_coeffs = data.frame(temp_coeffs)
+          temp_coeffs[,1] = c("(Intercept)",feats_to_use)
+          
+          withProgress(
+            message = 'Logistic Prediction Progress',
+            detail = paste("MC run:", x=1,"/",MC_runs,"; Fold:", y=1,"/",tot_folds),
+            value = 0,
+            {
+              
+              for (i in 1:MC_runs) {
+                
+                incProgress(1/(MC_runs*tot_folds), detail = paste("MC run:",i,"/",MC_runs,"; Fold:",f,"/",tot_folds))
+                
+                # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS in test data and train data
+                if (input$loggy == TRUE) {
+                  
+                  for (j in 1:nrow(trainData)) {
+                    if (trainData[j, 1] == input$rc_val) {
+                      trainData[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
+                      ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
+                    }
+                    
+                    if (trainData[j, 1] == input$lc_val) {
+                      trainData[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
+                      ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
+                    }
+                  }
+                  
+                  for (j in 1:nrow(testData)) {
+                    if (testData[j, 1] == input$rc_val) {
+                      testData[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
+                      ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
+                    }
+                    
+                    if (testData[j, 1] == input$lc_val) {
+                      testData[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
+                      ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
+                    }
+                  }
+                } else {
+                  for (j in 1:nrow(trainData)) {
+                    if (trainData[j, 1] == input$rc_val) {
+                      trainData[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
+                      ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
+                    }
+                    
+                    if (trainData[j, 1] == input$lc_val) {
+                      trainData[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
+                      ifelse(test = trainData[j, 1] >= crit_value, yes = 1, no = 0)
+                    }
+                  }
+                  for (j in 1:nrow(testData)) {
+                    
+                    if (testData[j, 1] == input$rc_val) {
+                      testData[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
+                      ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
+                    }
+                    
+                    if (testData[j, 1] == input$lc_val) {
+                      testData[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
+                      ifelse(test = testData[j, 1] >= crit_value, yes = 1, no = 0)
+                    }
+                  }
+                }
+                
+                temp_preds[,2*i-1] = testData[,1]
+                
+                # Train the model
+                fit_mod = cva.glmnet(x=as.matrix(trainData[,-1]),y=trainData[,1],nfolds=tot_folds,family="binomial",type.measure=input$LG_eval,na.action="na.omit",
+                                     standardize=input$LG_standard,intercept=TRUE)
+                
+                get_model_params = function(fit) {
+                  alpha = fit$alpha
+                  lambdaMin = sapply(fit$modlist, `[[`, "lambda.min")
+                  lambdaSE = sapply(fit$modlist, `[[`, "lambda.1se")
+                  error = sapply(fit$modlist, function(mod) {min(mod$cvm)})
+                  best = which.min(error)
+                  data.frame(alpha = alpha[best], lambdaMin = lambdaMin[best],
+                             lambdaSE = lambdaSE[best], eror = error[best])
+                }
+                
+                alpha = get_model_params(fit_mod)$alpha
+                lambda = get_model_params(fit_mod)$lambdaMin
+                
+                model = glmnet(x=as.matrix(trainData[,-1]),trainData[,1],lambda=lambda, alpha=alpha,na.action="na.omit", family="binomial",type.measure=input$LG_eval,
+                               standardize=input$LG_standard,intercept=TRUE)
+                
+                preds = predict(model, newx = as.matrix(testData[,-1]), type = "response")
+                
+                tmp_coeffs = coef(model, s = lambda, exact = TRUE)
+                coeffs = data.frame(name = tmp_coeffs@Dimnames[[1]][tmp_coeffs@i + 1], coefficient = round(tmp_coeffs@x,4))
+                
+                for (h in 1:nrow(coeffs)) {
+                  if(temp_coeffs[h,1] %in% coeffs[,1]) {
+                    temp_coeffs[h,i+1] = coeffs[which(coeffs[,1] == temp_coeffs[h,1]),2]
+                  } else {
+                    temp_coeffs[h,i+1] = 0
+                  }
+                }
+                
+                temp_preds[,2*i] = round(preds,3)
+                
+              } #End the MC Runs
+              
+              coeff_folds[,f+1] = round(rowMeans(temp_coeffs[,-1]),5)
+              
+              even_columns = temp_preds[,seq(2, ncol(temp_preds), by = 2)]
+              odd_columns = temp_preds[,seq(1, ncol(temp_preds), by = 2)]
+              
+              obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
+              pred_mean_values = round(rowMeans(even_columns),3)
+              fold_preds = cbind(obs_mean_values,pred_mean_values)
+              
+              fold_predictions = rbind(fold_predictions,fold_preds)
+            })
+          
+        } #End the Fold runs
+        
+        if (input$use_pca_data) {
+          prediction_results = data.frame(cbind(data2[,1],fold_predictions[,1],fold_predictions[,2],round(data[,-1],4)))
+        } else {
+          prediction_results = data.frame(cbind(data2[,1],fold_predictions[,1],fold_predictions[,2],data[,-1]))
+        }
+        
+        colnames(prediction_results) = c(colnames(data2)[1],colnames(data0)[rv],"Predictions",feats_to_use)
+        
+        prediction_results = prediction_results[order(prediction_results[,1]),]
+        
+        final_coeffs = data.frame(cbind(coeff_folds[,1],round(rowMeans(coeff_folds[,-1]),4),round(exp(rowMeans(coeff_folds[,-1])),4)))
+        colnames(final_coeffs) = c("Feature","Coefficient","Odds Ratio")
+        
+        output$LG_preds = DT::renderDataTable(server = T, {data = datatable(prediction_results,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
                   target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
                   pageLength = 17,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
                   JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$LG_pred_coeffs = DT::renderDataTable(server = T, {data = datatable(final_coeffs,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                       target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
-                       paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-                       initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      LG_pred_scat_dat <<- prediction_results[,1:3]
-      
-      x_name = colnames(LG_pred_scat_dat)[[2]]
-      y_name = colnames(LG_pred_scat_dat)[[3]]
-      
-      output$LG_pred_scatplot = renderPlot(ggplot(LG_pred_scat_dat, aes(x=LG_pred_scat_dat[,3], fill=as.factor(LG_pred_scat_dat[,2]))) +
-        geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
-        scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
-        geom_vline(xintercept = input$LG_pred_dc, linetype = "dashed", color = "darkgreen") +
-        labs(x = "Predicted Probability", y = "Density", fill="OBS") +
-        theme_bw() +
-        theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
-        theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
-        theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
-      
-      confuse_results = confuse(LG_pred_scat_dat[,2:3],0.5,input$LG_pred_dc)
-      confuse_table = matrix(0,nrow=1,ncol=4)
-      
-      confuse_table[1,1] = confuse_results$TP
-      confuse_table[1,2] = confuse_results$TN
-      confuse_table[1,3] = confuse_results$FP
-      confuse_table[1,4] = confuse_results$FN
-      
-      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-      
-      output$LG_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
+        
+        output$LG_pred_coeffs = DT::renderDataTable(server = T, {data = datatable(final_coeffs,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
+                  target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                  paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+        
+        LG_pred_scat_dat <<- prediction_results[,1:3]
+        
+        x_name = colnames(LG_pred_scat_dat)[[2]]
+        y_name = colnames(LG_pred_scat_dat)[[3]]
+        
+        output$LG_pred_scatplot = renderPlot(ggplot(LG_pred_scat_dat, aes(x=LG_pred_scat_dat[,3], fill=as.factor(LG_pred_scat_dat[,2]))) +
+                                               geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
+                                               scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                                               geom_vline(xintercept = input$LG_pred_dc, linetype = "dashed", color = "darkgreen") +
+                                               labs(x = "Predicted Probability", y = "Density", fill="OBS") +
+                                               theme_bw() +
+                                               theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                                               theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                                               theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+        
+        confuse_results = confuse(LG_pred_scat_dat[,2:3],0.5,input$LG_pred_dc)
+        confuse_table = matrix(0,nrow=1,ncol=4)
+        
+        confuse_table[1,1] = confuse_results$TP
+        confuse_table[1,2] = confuse_results$TN
+        confuse_table[1,3] = confuse_results$FP
+        confuse_table[1,4] = confuse_results$FN
+        
+        colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
+        
+        output$LG_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
                   list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
                   options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
                   columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                   {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      output$LG_pred_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
-                        round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
-      
-      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'LG: Predict')
+        
+        output$LG_pred_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
+                                                         round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
+        
+        updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+        updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'LG: Predict')
+      }
+    }
   })
   
   # Logistic regression fitting
@@ -1420,213 +1650,224 @@ server= function(input,output,session) {
   
   observeEvent(input$run_fitted_LG, {
     
-    req(iv$is_valid())
+    response_data = as.numeric(current_data()[,response_var()])
+    response_data = response_data[!is.na(response_data)]
     
-    if (input$use_pca_data) {
-      data0 = PCA_dataset()
-      rv=2
-      feats_to_use = input$pcax_to_use
-      ignored_rows = NULL
+    if (length(unique(response_data)) > 2 && input$LG_binarize == FALSE) {
+      
+      showModal(modalDialog(paste("Response Variable must be binarized for this analysis. Choose to 'Binarize' using the button above."),footer = modalButton("Close")))
+      
     } else {
-      data0 = current_data()
-      rv=response_var()
-      feats_to_use = input$feats_to_use
-    }
-    
-    set.seed(input$model_seed)
-    
-    crit_value = input$LG_binarize_crit_value
-    
-    if (input$LG_binarize) {
-      new_Y = ifelse(test = data0[,rv] >= crit_value, yes = 1, no = 0)
-      data0[,rv] = new_Y
-    }
-    
-    if (is.null(ignored_rows)) {
-      data1 = data0
-    } else {
-      data1 = data0[-ignored_rows,]
-    }
-    
-    # REMOVE NA'S FROM RESPONSE VARIABLE
-    data1 = data1[!is.na(data1[,rv]),]
-    
-    var_list = c(1,rv,which(colnames(data1) %in% feats_to_use))
-    data2 = data1[,var_list]
-    colnames(data2) = c(colnames(data0)[1],"Response",feats_to_use)
-    
-    # RANDOMIZE DATA
-    if (input$randomize==TRUE) {
-      random_index = sample(1:nrow(data2), nrow(data2))
-      data2 = data2[random_index, ]
-    }
-    
-    data = data2[,-1]
-    
-    MC_runs = input$MC_runs
-    
-    # if (any(is.na(data[,-1]))) {
-    # 
-    #   showModal(modalDialog(paste("Logistic Regression does not tolerate missing feature values. You can either Impute these
-    #             (on the Data tab) or Disable rows/columns with missing values."),footer = modalButton("Close")))
-    # 
-    # } else {
-    
-    fitted_coeffs = matrix(0, nrow = ncol(data), ncol = 3)
-    fitted_coeffs = data.frame(fitted_coeffs)
-    fitted_coeffs[,1] = c("(Intercept)",feats_to_use)
-    
-    fitted_values = matrix(0, nrow = 0, ncol = 2)
-    fitted_values = data.frame(fitted_values)
-    
-    temp_fits = matrix(0, nrow = nrow(data), ncol = 2*MC_runs)
-    temp_fits = data.frame(temp_fits)
-    
-    temp_coeffs = matrix(0, nrow = ncol(data), ncol = MC_runs+1)
-    temp_coeffs = data.frame(temp_coeffs)
-    temp_coeffs[,1] = c("(Intercept)",feats_to_use)
-    
-    withProgress(
-      message = 'Logistic Fitting Progress',
-      detail = paste("MC runs:", x=1),
-      value = 1/MC_runs,
-      {
+      
+      req(iv$is_valid())
+      
+      if (input$use_pca_data) {
+        data0 = PCA_dataset()
+        rv=2
+        feats_to_use = input$pcax_to_use
+        ignored_rows = NULL
+      } else {
+        data0 = current_data()
+        rv=response_var()
+        feats_to_use = input$feats_to_use
+      }
+      
+      set.seed(input$model_seed)
+      
+      crit_value = input$LG_binarize_crit_value
+      
+      if (input$LG_binarize) {
+        new_Y = ifelse(test = data0[,rv] >= crit_value, yes = 1, no = 0)
+        data0[,rv] = new_Y
+      }
+      
+      if (is.null(ignored_rows)) {
+        data1 = data0
+      } else {
+        data1 = data0[-ignored_rows,]
+      }
+      
+      # REMOVE NA'S FROM RESPONSE VARIABLE
+      data1 = data1[!is.na(data1[,rv]),]
+      
+      var_list = c(1,rv,which(colnames(data1) %in% feats_to_use))
+      data2 = data1[,var_list]
+      colnames(data2) = c(colnames(data0)[1],"Response",feats_to_use)
+      
+      # RANDOMIZE DATA
+      if (input$randomize==TRUE) {
+        random_index = sample(1:nrow(data2), nrow(data2))
+        data2 = data2[random_index, ]
+      }
+      
+      data = data2[,-1]
+      
+      MC_runs = input$MC_runs
+      
+      if (any(is.na(data[,-1]))) {
         
-        for (i in 1:MC_runs) {
-          
-          # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS in test data and train data
-          if (input$loggy == TRUE) {
-            for (j in 1:nrow(data)) {
-              if (data[j, 1] == "TNTC") {
-                data[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
-                ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+        showModal(modalDialog(paste("Logistic Regression does not tolerate missing feature values. You can either Impute these
+                or Disable rows with missing values."),footer = modalButton("Close")))
+        
+      } else {
+        
+        fitted_coeffs = matrix(0, nrow = ncol(data), ncol = 3)
+        fitted_coeffs = data.frame(fitted_coeffs)
+        fitted_coeffs[,1] = c("(Intercept)",feats_to_use)
+        
+        fitted_values = matrix(0, nrow = 0, ncol = 2)
+        fitted_values = data.frame(fitted_values)
+        
+        temp_fits = matrix(0, nrow = nrow(data), ncol = 2*MC_runs)
+        temp_fits = data.frame(temp_fits)
+        
+        temp_coeffs = matrix(0, nrow = ncol(data), ncol = MC_runs+1)
+        temp_coeffs = data.frame(temp_coeffs)
+        temp_coeffs[,1] = c("(Intercept)",feats_to_use)
+        
+        withProgress(
+          message = 'Logistic Fitting Progress',
+          detail = paste("MC runs:", x=1,"/",MC_runs),
+          value = 0,
+          {
+            
+            for (i in 1:MC_runs) {
+              
+              # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS in test data and train data
+              if (input$loggy == TRUE) {
+                for (j in 1:nrow(data)) {
+                  if (data[j, 1] == input$rc_val) {
+                    data[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
+                    ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                  
+                  if (data[j, 1] == input$lc_val) {
+                    data[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
+                    ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                }
+              } else {
+                for (j in 1:nrow(data)) {
+                  if (data[j, 1] == input$rc_val) {
+                    data[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
+                    ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                  
+                  if (data[j, 1] == input$lc_val) {
+                    data[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
+                    ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+                  }
+                }
               }
               
-              if (data[j, 1] == "ND") {
-                data[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
-                ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
-              }
-            }
-          } else {
-            for (j in 1:nrow(data)) {
-              if (data[j, 1] == "TNTC") {
-                data[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
-                ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+              temp_fits[,2*i-1] = data[,1]
+              
+              # determine best alpha and lambda
+              fit_mod = cva.glmnet(x=as.matrix(data[,-1]),y=data[,1],nfolds=input$num_folds,family="binomial",type.measure=input$LG_eval,na.action="na.omit",
+                                   standardize=input$LG_standard,intercept=TRUE)
+              
+              get_model_params = function(fit) {
+                alpha = fit$alpha
+                lambdaMin = sapply(fit$modlist, `[[`, "lambda.min")
+                lambdaSE = sapply(fit$modlist, `[[`, "lambda.1se")
+                error = sapply(fit$modlist, function(mod) {min(mod$cvm)})
+                best = which.min(error)
+                data.frame(alpha = alpha[best], lambdaMin = lambdaMin[best],
+                           lambdaSE = lambdaSE[best], eror = error[best])
               }
               
-              if (data[j, 1] == "ND") {
-                data[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
-                ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+              alpha = get_model_params(fit_mod)$alpha
+              lambda = get_model_params(fit_mod)$lambdaMin
+              
+              # fit final model
+              model = glmnet(x=as.matrix(data[,-1]),data[,1],lambda=lambda, alpha=alpha, na.action="na.omit",family="binomial",type.measure=input$LG_eval,
+                             standardize=input$LG_standard,intercept=TRUE)
+              
+              fits = predict(model, newx = as.matrix(data[,-1]), type = "response")
+              temp_fits[,2*i] = round(fits,3)
+              
+              tmp_coeffs = coef(model, s = lambda, exact = TRUE)
+              coeffs = data.frame(name = tmp_coeffs@Dimnames[[1]][tmp_coeffs@i + 1], coefficient = round(tmp_coeffs@x,4))
+              
+              for (h in 1:nrow(coeffs)) {
+                if(temp_coeffs[h,1] %in% coeffs[,1]) {
+                  temp_coeffs[h,i+1] = coeffs[which(coeffs[,1] == temp_coeffs[h,1]),2]
+                } else {
+                  temp_coeffs[h,i+1] = 0
+                }
               }
-            }
-          }
-          
-          temp_fits[,2*i-1] = data[,1]
-          
-          # determine best alpha and lambda
-          fit_mod = cva.glmnet(x=as.matrix(data[,-1]),y=data[,1],nfolds=input$num_folds,family="binomial",type.measure=input$LG_eval,na.action="na.omit",
-                      standardize=input$LG_standard,intercept=TRUE)
-          
-          get_model_params = function(fit) {
-            alpha = fit$alpha
-            lambdaMin = sapply(fit$modlist, `[[`, "lambda.min")
-            lambdaSE = sapply(fit$modlist, `[[`, "lambda.1se")
-            error = sapply(fit$modlist, function(mod) {min(mod$cvm)})
-            best = which.min(error)
-            data.frame(alpha = alpha[best], lambdaMin = lambdaMin[best],
-                       lambdaSE = lambdaSE[best], eror = error[best])
-          }
-          
-          alpha = get_model_params(fit_mod)$alpha
-          lambda = get_model_params(fit_mod)$lambdaMin
-          
-          # fit final model
-          model = glmnet(x=as.matrix(data[,-1]),data[,1],lambda=lambda, alpha=alpha, na.action="na.omit",family="binomial",type.measure=input$LG_eval,
-                      standardize=input$LG_standard,intercept=TRUE)
-          
-          fits = predict(model, newx = as.matrix(data[,-1]), type = "response")
-          temp_fits[,2*i] = round(fits,3)
-          
-          tmp_coeffs = coef(model, s = lambda, exact = TRUE)
-          coeffs = data.frame(name = tmp_coeffs@Dimnames[[1]][tmp_coeffs@i + 1], coefficient = round(tmp_coeffs@x,4))
-          
-          for (h in 1:nrow(coeffs)) {
-            if(temp_coeffs[h,1] %in% coeffs[,1]) {
-              temp_coeffs[h,i+1] = coeffs[which(coeffs[,1] == temp_coeffs[h,1]),2]
-            } else {
-              temp_coeffs[h,i+1] = 0
-            }
-          }
-          
-          incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
-        } #End the MC Runs
-      })
-    
-    # Must add: fit final/global LG_Model
-    
-    fitted_coeffs[,2] = round(rowMeans(temp_coeffs[,-1]),4)
-    fitted_coeffs[,3] = round(exp(fitted_coeffs[,2]),4)
-    
-    even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
-    odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
-    
-    obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
-    fit_mean_values = round(rowMeans(even_columns),3)
-    model_results = cbind(obs_mean_values,fit_mean_values)
-    
-    fitted_model_results = data.frame(cbind(data2[,1],model_results[,1],model_results[,2],data[,-1]))
-    colnames(fitted_model_results) = c(colnames(data2)[1],colnames(data0)[rv],"Fitted_Prob",feats_to_use)
-    
-    fitted_model_results = fitted_model_results[order(fitted_model_results[,1]),]
-    
-    colnames(fitted_coeffs) = c("Feature","Coefficient","Odds Ratio")
-    
-    output$LG_fits = DT::renderDataTable(server = T, {data = datatable(fitted_model_results,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-              target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
-              pageLength = 17,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
-              JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    output$LG_coeffs = DT::renderDataTable(server = T, {data = datatable(fitted_coeffs,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-              target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
-              paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-              initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    LG_scat_dat <<- fitted_model_results[,1:3]
-    
-    x_name = colnames(LG_scat_dat)[[2]]
-    y_name = colnames(LG_scat_dat)[[3]]
-    
-    output$LG_scatplot = renderPlot(ggplot(LG_scat_dat, aes(x=LG_scat_dat[,3], fill=as.factor(LG_scat_dat[,2]))) +
-                            geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
-                            scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
-                            geom_vline(xintercept = input$LG_fit_dc, linetype = "dashed", color = "darkgreen") +
-                            labs(x = "Fitted Probability", y = "Density", fill="OBS") +
-                            theme_bw() +
-                            theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
-                            theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
-                            theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
-    
-    confuse_results = confuse(LG_scat_dat[,2:3],0.5,input$LG_fit_dc)
-    confuse_table = matrix(0,nrow=1,ncol=4)
-    
-    confuse_table[1,1] = confuse_results$TP
-    confuse_table[1,2] = confuse_results$TN
-    confuse_table[1,3] = confuse_results$FP
-    confuse_table[1,4] = confuse_results$FN
-    
-    colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-    
-    output$LG_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
+              
+              incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
+            } #End the MC Runs
+          })
+        
+        # Must add: fit final/global LG_Model
+        
+        fitted_coeffs[,2] = round(rowMeans(temp_coeffs[,-1]),4)
+        fitted_coeffs[,3] = round(exp(fitted_coeffs[,2]),4)
+        
+        even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
+        odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
+        
+        obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
+        fit_mean_values = round(rowMeans(even_columns),3)
+        model_results = cbind(obs_mean_values,fit_mean_values)
+        
+        fitted_model_results = data.frame(cbind(data2[,1],model_results[,1],model_results[,2],data[,-1]))
+        colnames(fitted_model_results) = c(colnames(data2)[1],colnames(data0)[rv],"Fitted_Prob",feats_to_use)
+        
+        fitted_model_results = fitted_model_results[order(fitted_model_results[,1]),]
+        
+        colnames(fitted_coeffs) = c("Feature","Coefficient","Odds Ratio")
+        
+        output$LG_fits = DT::renderDataTable(server = T, {data = datatable(fitted_model_results,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
+                    target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
+                    pageLength = 17,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                    JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+        
+        output$LG_coeffs = DT::renderDataTable(server = T, {data = datatable(fitted_coeffs,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
+                    target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                    paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                    initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+        
+        LG_scat_dat <<- fitted_model_results[,1:3]
+        
+        x_name = colnames(LG_scat_dat)[[2]]
+        y_name = colnames(LG_scat_dat)[[3]]
+        
+        output$LG_scatplot = renderPlot(ggplot(LG_scat_dat, aes(x=LG_scat_dat[,3], fill=as.factor(LG_scat_dat[,2]))) +
+                                          geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
+                                          scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                                          geom_vline(xintercept = input$LG_fit_dc, linetype = "dashed", color = "darkgreen") +
+                                          labs(x = "Fitted Probability", y = "Density", fill="OBS") +
+                                          theme_bw() +
+                                          theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                                          theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                                          theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+        
+        confuse_results = confuse(LG_scat_dat[,2:3],0.5,input$LG_fit_dc)
+        confuse_table = matrix(0,nrow=1,ncol=4)
+        
+        confuse_table[1,1] = confuse_results$TP
+        confuse_table[1,2] = confuse_results$TN
+        confuse_table[1,3] = confuse_results$FP
+        confuse_table[1,4] = confuse_results$FN
+        
+        colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
+        
+        output$LG_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
                   list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
                   options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
                   columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                   {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    output$LG_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
+        
+        output$LG_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
                   round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'LG: Fitting')
+        
+        updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+        updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'LG: Fitting')
+      }
+    }
   })
   
   # HP optimization of the XGB Classifier
@@ -1647,41 +1888,51 @@ server= function(input,output,session) {
   
   observeEvent(input$run_XGBCL_optimize_HP, {
     
-    req(iv$is_valid())
+    response_data = as.numeric(current_data()[,response_var()])
+    response_data = response_data[!is.na(response_data)]
     
-    if (input$use_pca_data) {
-      data = PCA_dataset()
-      rv=2
-      feats_to_use = input$pcax_to_use
-      ignored_rows = NULL
+    if (length(unique(response_data)) > 2 && input$XGBCL_binarize == FALSE) {
+      
+      showModal(modalDialog(paste("Response Variable must be binarized for this analysis. Choose to 'Binarize' using the button above."),footer = modalButton("Close")))
+      
     } else {
-      data = current_data()
-      rv=response_var()
-      feats_to_use = input$feats_to_use
+      
+      req(iv$is_valid())
+      
+      if (input$use_pca_data) {
+        data = PCA_dataset()
+        rv=2
+        feats_to_use = input$pcax_to_use
+        ignored_rows = NULL
+      } else {
+        data = current_data()
+        rv=response_var()
+        feats_to_use = input$feats_to_use
+      }
+      
+      xgbcl_optim_HP_results = xgbcl_call_optimize_HP(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_val,input$rc_val,input$lc_lowval,
+                                                      input$lc_upval,input$rc_lowval,input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$randomize,
+                                                      input$XGBCL_standard,input$XGBCL_eval,input$psocl_max_iter,input$psocl_swarm_size,input$membercl_exp,
+                                                      input$sscl_exp,input$XGBCL_binarize,input$XGBCL_binarize_crit_value)
+      
+      xgbcl_optim_HP_results1 = data.frame(xgbcl_optim_HP_results)
+      
+      Optimal_CLHP$max_depth <<- round(xgbcl_optim_HP_results1[1,1],0)
+      Optimal_CLHP$eta <<- round(xgbcl_optim_HP_results1[2,1],3)
+      Optimal_CLHP$subsample <<- round(xgbcl_optim_HP_results1[3,1],2)
+      Optimal_CLHP$colsample_bytree <<- round(xgbcl_optim_HP_results1[4,1],2)
+      Optimal_CLHP$min_child_weight <<- round(xgbcl_optim_HP_results1[5,1],0)
+      Optimal_CLHP$gamma <<- round(xgbcl_optim_HP_results1[6,1],1)
+      Optimal_CLHP$nrounds <<- round(xgbcl_optim_HP_results1[7,1],0)
+      
+      output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,extensions='Buttons',selection=list(selected =
+                list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
+                scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: HP Optim')
     }
-    
-    xgbcl_optim_HP_results = xgbcl_call_optimize_HP(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_lowval,
-                                                input$lc_upval,input$rc_lowval,input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$randomize,
-                                                input$XGBCL_standard,input$XGBCL_eval,input$psocl_max_iter,input$psocl_swarm_size,input$membercl_exp,
-                                                input$sscl_exp,input$XGBCL_binarize,input$XGBCL_binarize_crit_value)
-    
-    xgbcl_optim_HP_results1 = data.frame(xgbcl_optim_HP_results)
-    
-    Optimal_CLHP$max_depth <<- round(xgbcl_optim_HP_results1[1,1],0)
-    Optimal_CLHP$eta <<- round(xgbcl_optim_HP_results1[2,1],3)
-    Optimal_CLHP$subsample <<- round(xgbcl_optim_HP_results1[3,1],2)
-    Optimal_CLHP$colsample_bytree <<- round(xgbcl_optim_HP_results1[4,1],2)
-    Optimal_CLHP$min_child_weight <<- round(xgbcl_optim_HP_results1[5,1],0)
-    Optimal_CLHP$gamma <<- round(xgbcl_optim_HP_results1[6,1],1)
-    Optimal_CLHP$nrounds <<- round(xgbcl_optim_HP_results1[7,1],0)
-    
-    output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,extensions='Buttons',selection=list(selected =
-                    list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
-                    scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                    initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: HP Optim')
   })
   
   # Set HP values for the XGB Classifier
@@ -1767,111 +2018,123 @@ server= function(input,output,session) {
   
   observeEvent(input$run_XGBCL_select, {
     
-    if(running())
-      return(NULL)
-    running(TRUE)
+    response_data = as.numeric(current_data()[,response_var()])
+    response_data = response_data[!is.na(response_data)]
     
-    req(iv$is_valid())
-    
-    if (input$use_pca_data) {
-      data = PCA_dataset()
-      rv=2
-      feats_to_use = input$pcax_to_use
-      ignored_rows = NULL
-      pcax_being_used(feats_to_use)
+    if (length(unique(response_data)) > 2 && input$XGBCL_binarize == FALSE) {
+      
+      showModal(modalDialog(paste("Response Variable must be binarized for this analysis. Choose to 'Binarize' using the button above."),footer = modalButton("Close")))
+      
     } else {
-      data = current_data()
-      rv=response_var()
-      feats_to_use = input$feats_to_use
-      feats_being_used(feats_to_use)
-    }
-    
-    crit_value = input$XGBCL_binarize_crit_value
-    eval_metric = input$XGBCL_eval
-    
-    if (input$XGBCL_binarize) {
-      new_Y = ifelse(test = data[,rv] >= crit_value, yes = 1, no = 0)
-      data[,rv] = new_Y
-    }
-    
-    if (is.null(ignored_rows)) {
-      xgbcl_select_data = data
-    } else {
-      xgbcl_select_data = data[-ignored_rows,]
-    }
-    
-    eta = etacl_set()
-    gamma = gammacl_set()
-    max_depth = max_depthcl_set()
-    min_child_weight = min_child_weightcl_set()
-    nrounds = nroundscl_set()
-    early_stop = early_stop_set()
-    subsamp = subsampcl_set()
-    colsamp = colsampcl_set()
-    
-    xgb_tree_method = xgbcl_tree_method_set()
-    xgb_boost = xgbcl_booster_set()
-    dart_normalize_type = dartcl_normalize_type_set()
-    dart_sample_type = dartcl_sample_type_set()
-    rate_drop = ratecl_drop_set()
-    skip_drop = skipcl_drop_set()
-    
-    xgb_standardize = input$XGBCL_standard
-    lc_lowval = input$lc_lowval
-    lc_upval = input$lc_upval
-    rc_lowval = input$rc_lowval
-    rc_upval = input$rc_upval
-    train_prop = input$train_pct/100
-    MC_runs = input$MC_runs
-    loggy = input$loggy
-    randomize = input$randomize
-    seed = input$model_seed
-    
-    xgbcl_select_result(NULL)
-
-    xgbcl_select_calculation <<- future({
-
-      xgbcl_selection(xgbcl_select_data,seed,rv,feats_to_use,crit_value,eval_metric,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
-                    xgb_standardize,xgb_tree_method,xgb_boost,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
-                    min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db)
-
-    }, seed=TRUE)
-
-    prom = xgbcl_select_calculation %...>% xgbcl_select_result
-
-    prom = catch(xgbcl_select_calculation,
-                 function(e){
-                   xgbcl_select_result(NULL)
-                   showModal(modalDialog(paste0("XGBCL covariate filtering cancelled. No results generated."),footer = modalButton("Close")))
-                 })
-
-    prom = finally(prom, function(){
-      running(FALSE)
-    })
-    
-    xgbcl_selection_results = dbReadTable(temp_db, "xgbcl_selection_results")
-    xgbcl_selection_results = xgbcl_selection_results[,-3]
-    xgbcl_selection_results = xgbcl_selection_results[,-2]
-    
-    weighted_mean = round(input$testcl_weight*as.numeric(xgbcl_selection_results[,5])+(1-input$testcl_weight)*as.numeric(xgbcl_selection_results[,4]),4)
-    final_xgbcl_select_result = cbind(xgbcl_selection_results,weighted_mean)
-    colnames(final_xgbcl_select_result) = c(colnames(xgbcl_selection_results),"Weighted Mean LnLoss")
-    
-    output$XGBCL_select = DT::renderDataTable(server=T,{
-      data = datatable(final_xgbcl_select_result,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
+      
+      if(running())
+        return(NULL)
+      running(TRUE)
+      
+      req(iv$is_valid())
+      
+      if (input$use_pca_data) {
+        data = PCA_dataset()
+        rv=2
+        feats_to_use = input$pcax_to_use
+        ignored_rows = NULL
+        pcax_being_used(feats_to_use)
+      } else {
+        data = current_data()
+        rv=response_var()
+        feats_to_use = input$feats_to_use
+        feats_being_used(feats_to_use)
+      }
+      
+      crit_value = input$XGBCL_binarize_crit_value
+      eval_metric = input$XGBCL_eval
+      
+      if (input$XGBCL_binarize) {
+        new_Y = ifelse(test = data[,rv] >= crit_value, yes = 1, no = 0)
+        data[,rv] = new_Y
+      }
+      
+      if (is.null(ignored_rows)) {
+        xgbcl_select_data = data
+      } else {
+        xgbcl_select_data = data[-ignored_rows,]
+      }
+      
+      eta = etacl_set()
+      gamma = gammacl_set()
+      max_depth = max_depthcl_set()
+      min_child_weight = min_child_weightcl_set()
+      nrounds = nroundscl_set()
+      early_stop = early_stop_set()
+      subsamp = subsampcl_set()
+      colsamp = colsampcl_set()
+      
+      xgb_tree_method = xgbcl_tree_method_set()
+      xgb_boost = xgbcl_booster_set()
+      dart_normalize_type = dartcl_normalize_type_set()
+      dart_sample_type = dartcl_sample_type_set()
+      rate_drop = ratecl_drop_set()
+      skip_drop = skipcl_drop_set()
+      
+      xgb_standardize = input$XGBCL_standard
+      lc_val = input$lc_val
+      rc_val = input$rc_val
+      lc_lowval = input$lc_lowval
+      lc_upval = input$lc_upval
+      rc_lowval = input$rc_lowval
+      rc_upval = input$rc_upval
+      train_prop = input$train_pct/100
+      MC_runs = input$MC_runs
+      loggy = input$loggy
+      randomize = input$randomize
+      seed = input$model_seed
+      
+      xgbcl_select_result(NULL)
+      
+      xgbcl_select_calculation <<- future({
+        
+        xgbcl_selection(xgbcl_select_data,seed,rv,feats_to_use,crit_value,eval_metric,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
+                        xgb_standardize,xgb_tree_method,xgb_boost,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
+                        min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db)
+        
+      }, seed=TRUE)
+      
+      prom = xgbcl_select_calculation %...>% xgbcl_select_result
+      
+      prom = catch(xgbcl_select_calculation,
+                   function(e){
+                     xgbcl_select_result(NULL)
+                     showModal(modalDialog(paste0("XGBCL covariate filtering cancelled. No results generated."),footer = modalButton("Close")))
+                   })
+      
+      prom = finally(prom, function(){
+        running(FALSE)
+      })
+      
+      xgbcl_selection_results = dbReadTable(temp_db, "xgbcl_selection_results")
+      xgbcl_selection_results = xgbcl_selection_results[,-3]
+      xgbcl_selection_results = xgbcl_selection_results[,-2]
+      
+      weighted_mean = round(input$testcl_weight*as.numeric(xgbcl_selection_results[,5])+(1-input$testcl_weight)*as.numeric(xgbcl_selection_results[,4]),4)
+      final_xgbcl_select_result = cbind(xgbcl_selection_results,weighted_mean)
+      colnames(final_xgbcl_select_result) = c(colnames(xgbcl_selection_results),"Weighted Mean LnLoss")
+      
+      output$XGBCL_select = DT::renderDataTable(server=T,{
+        data = datatable(final_xgbcl_select_result,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
                   target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = 17,scrollX = F,
                   scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
                   initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
-                  formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
-      data$x$data[[1]] = as.numeric(data$x$data[[1]])
-      data
-    })
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Feat Select')
-    
-    #Return something other than the future so we don't block the UI
-    NULL
+              formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
+        data$x$data[[1]] = as.numeric(data$x$data[[1]])
+        data
+      })
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Feat Select')
+      
+      #Return something other than the future so we don't block the UI
+      NULL
+    }
   })
   
   observeEvent(input$testcl_weight, {
@@ -1908,9 +2171,9 @@ server= function(input,output,session) {
   observeEvent(input$XGBCL_select_rows_selected, ignoreInit = T, {
     
     if (input$use_pca_data) {
-      all_feats = pca_axes()
+      all_feats = pcax_being_used()
     } else {
-      all_feats = feat_names()
+      all_feats = feats_being_used()
     }
     
     temp_data = dbReadTable(temp_db, "xgbcl_selection_results")
@@ -1927,9 +2190,9 @@ server= function(input,output,session) {
     }
     
     if (input$use_pca_data) {
-      updateCheckboxGroupInput(session,"pcax_to_use",choices=pca_axes(),selected=remaining,inline=T)
+      updateCheckboxGroupButtons(session,"pcax_to_use",choices=pca_axes(),selected=remaining,size="xs",status = "custom")
     } else {
-      updateCheckboxGroupInput(session,"feats_to_use",choices=feat_names(),selected=remaining,inline=T)
+      updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=remaining,size="xs",status = "custom")
     }
   })
   
@@ -1973,84 +2236,95 @@ server= function(input,output,session) {
   
   observeEvent(input$run_pred_XGBCL, {
     
-    req(iv$is_valid())
+    response_data = as.numeric(current_data()[,response_var()])
+    response_data = response_data[!is.na(response_data)]
     
-    if (input$use_pca_data) {
-      data = PCA_dataset()
-      rv=2
-      feats_to_use = input$pcax_to_use
-      ignored_rows = NULL
+    if (length(unique(response_data)) > 2 && input$XGBCL_binarize == FALSE) {
+      
+      showModal(modalDialog(paste("Response Variable must be binarized for this analysis. Choose to 'Binarize' using the button above."),footer = modalButton("Close")))
+      
     } else {
-      data = current_data()
-      rv=response_var()
-      feats_to_use = input$feats_to_use
-    }
-    
-    xgbcl_pred_results = xgbcl_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$XGBCL_eval,input$lc_lowval,
-                              input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
-                              input$XGBCL_standard,xgbcl_tree_method_set(),xgbcl_booster_set(),dartcl_normalize_type_set(),dartcl_sample_type_set(),
-                              ratecl_drop_set(),skipcl_drop_set(),Optimal_CLHP$eta,Optimal_CLHP$gamma,Optimal_CLHP$max_depth,
-                              Optimal_CLHP$min_child_weight,Optimal_CLHP$subsample,Optimal_CLHP$colsample_bytree,Optimal_CLHP$nrounds,
-                              input$XGBCL_binarize,input$XGBCL_binarize_crit_value)
-    
-    XGBCL_saved_predictions <<- data.frame(xgbcl_pred_results[[1]])
-    
-    XGBCL_pred_shapes = data.frame(xgbcl_pred_results[[2]])
-    colnames(XGBCL_pred_shapes) = c("Feature","SHAP Value")
-    
-    output$XGBCL_predictions = DT::renderDataTable(server = T, {data = datatable(XGBCL_saved_predictions,rownames = F,selection =
+      
+      req(iv$is_valid())
+      
+      if (input$use_pca_data) {
+        data = PCA_dataset()
+        rv=2
+        feats_to_use = input$pcax_to_use
+        ignored_rows = NULL
+      } else {
+        data = current_data()
+        rv=response_var()
+        feats_to_use = input$feats_to_use
+      }
+      
+      xgbcl_pred_results = xgbcl_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$XGBCL_eval,input$lc_val,input$rc_val,input$lc_lowval,
+                                              input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
+                                              input$XGBCL_standard,xgbcl_tree_method_set(),xgbcl_booster_set(),dartcl_normalize_type_set(),dartcl_sample_type_set(),
+                                              ratecl_drop_set(),skipcl_drop_set(),Optimal_CLHP$eta,Optimal_CLHP$gamma,Optimal_CLHP$max_depth,
+                                              Optimal_CLHP$min_child_weight,Optimal_CLHP$subsample,Optimal_CLHP$colsample_bytree,Optimal_CLHP$nrounds,
+                                              input$XGBCL_binarize,input$XGBCL_binarize_crit_value)
+      
+      XGBCL_saved_predictions <<- data.frame(xgbcl_pred_results[[1]])
+      
+      XGBCL_pred_shapes = data.frame(xgbcl_pred_results[[2]])
+      colnames(XGBCL_pred_shapes) = c("Feature","SHAP Value")
+      
+      output$XGBCL_predictions = DT::renderDataTable(server = T, {data = datatable(XGBCL_saved_predictions,rownames = F,selection =
               list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions='Buttons',options = list(autoWidth = F,
               paging = TRUE,pageLength = 17,dom="ltBp",buttons = c('copy', 'csv', 'excel'),scrollX = TRUE,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',
               orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744',
               'color': '#fff'});","}")))
-    })
-    
-    output$XGBCL_pred_shapes = DT::renderDataTable(server = T, {data = datatable(XGBCL_pred_shapes,rownames = F,selection =
-                        list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                        list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                        className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                        "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    XGBCL_pred_scat_dat <<- XGBCL_saved_predictions[,1:3]
-    
-    output$XGBCL_pred_scatplot = renderPlot(ggplot(XGBCL_pred_scat_dat, aes(x=XGBCL_pred_scat_dat[,3], fill=as.factor(XGBCL_pred_scat_dat[,2]))) +
-                                           geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
-                                           scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
-                                           geom_vline(xintercept = input$XGBCL_pred_dc, linetype = "dashed", color = "darkgreen") +
-                                           labs(x = "Predicted Probability", y = "Density", fill="OBS") +
-                                           theme_bw() +
-                                           theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
-                                           theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
-                                           theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
-    
-    confuse_results = confuse(XGBCL_pred_scat_dat[,2:3],0.5,input$XGBCL_pred_dc)
-    confuse_table = matrix(0,nrow=1,ncol=4)
-    
-    confuse_table[1,1] = confuse_results$TP
-    confuse_table[1,2] = confuse_results$TN
-    confuse_table[1,3] = confuse_results$FP
-    confuse_table[1,4] = confuse_results$FN
-    
-    colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-    
-    output$XGBCL_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
+      })
+      
+      output$XGBCL_pred_shapes = DT::renderDataTable(server = T, {data = datatable(XGBCL_pred_shapes,rownames = F,selection =
+              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+              list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+              className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      XGBCL_pred_scat_dat <<- XGBCL_saved_predictions[,1:3]
+      
+      output$XGBCL_pred_scatplot = renderPlot(ggplot(XGBCL_pred_scat_dat, aes(x=XGBCL_pred_scat_dat[,3], fill=as.factor(XGBCL_pred_scat_dat[,2]))) +
+                                                geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
+                                                scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                                                geom_vline(xintercept = input$XGBCL_pred_dc, linetype = "dashed", color = "darkgreen") +
+                                                labs(x = "Predicted Probability", y = "Density", fill="OBS") +
+                                                theme_bw() +
+                                                theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                                                theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                                                theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+      
+      confuse_results = confuse(XGBCL_pred_scat_dat[,2:3],0.5,input$XGBCL_pred_dc)
+      confuse_table = matrix(0,nrow=1,ncol=4)
+      
+      confuse_table[1,1] = confuse_results$TP
+      confuse_table[1,2] = confuse_results$TN
+      confuse_table[1,3] = confuse_results$FP
+      confuse_table[1,4] = confuse_results$FN
+      
+      colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
+      
+      output$XGBCL_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
                       list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
                       options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
                       columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                       {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    output$XGBCL_pred_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
+      
+      output$XGBCL_pred_confuse_text = renderText({paste0("Sensitivity = ",round(confuse_results$Sensitivity,3),"; Specificity = ",
                       round(confuse_results$Specificity,3),"; Accuracy = ",round(confuse_results$Accuracy,3))})
-    
-    output$XGBCL_used_hp_pred = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
+      
+      output$XGBCL_used_hp_pred = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
                       target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
                       pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
                       initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    removeModal()
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Predict')
+      
+      removeModal()
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Predict')
+      
+    }
     
   })
   
@@ -2093,230 +2367,240 @@ server= function(input,output,session) {
   
   observeEvent(input$run_fit_XGBCL, {
     
-    req(iv$is_valid())
+    response_data = as.numeric(current_data()[,response_var()])
+    response_data = response_data[!is.na(response_data)]
     
-    if (input$use_pca_data) {
-      data = PCA_dataset()
-      rv=2
-      feats_to_use = input$pcax_to_use
-      ignored_rows = NULL
-    } else {
-      data = current_data()
-      rv=response_var()
-      feats_to_use = input$feats_to_use
-    }
-    
-    crit_value = input$XGBCL_binarize_crit_value
-    MC_runs = input$MC_runs
-    
-    if (is.null(ignored_rows)) {
-      data0 = data
-    } else {
-      data0 = data[-ignored_rows,]
-    }
-    
-    if (input$XGBCL_binarize) {
-      new_Y = ifelse(test = data0[,rv] >= crit_value, yes = 1, no = 0)
-      data0[,rv] = new_Y
-    }
-    
-    # REMOVE NA'S FROM RESPONSE VARIABLE
-    data0 = data0[!is.na(data0[,rv]), ]
-    
-    var_list = c(rv,which(colnames(data0) %in% feats_to_use))
-    data = data0[,var_list]
-    colnames(data) = c(colnames(data0)[[rv]],feats_to_use)
-    
-    if (input$XGBCL_standard) {
+    if (length(unique(response_data)) > 2 && input$XGBCL_binarize == FALSE) {
       
-      for (i in 1:nrow(data)) {
-        for (j in 2:ncol(data)) {
-          if (is.numeric(data[i,j])) {
-            
-            range = (max(na.omit(data[,j])) - min(na.omit(data[,j])))
-            
-            if (range == 0) {
-              data[i,j] = 0
-            } else {
-              data[i,j]=(data[i,j] - min(na.omit(data[,j]))) / range
+      showModal(modalDialog(paste("Response Variable must be binarized for this analysis. Choose to 'Binarize' using the button above."),footer = modalButton("Close")))
+      
+    } else {
+      
+      req(iv$is_valid())
+      
+      if (input$use_pca_data) {
+        data = PCA_dataset()
+        rv=2
+        feats_to_use = input$pcax_to_use
+        ignored_rows = NULL
+      } else {
+        data = current_data()
+        rv=response_var()
+        feats_to_use = input$feats_to_use
+      }
+      
+      crit_value = input$XGBCL_binarize_crit_value
+      MC_runs = input$MC_runs
+      
+      if (is.null(ignored_rows)) {
+        data0 = data
+      } else {
+        data0 = data[-ignored_rows,]
+      }
+      
+      if (input$XGBCL_binarize) {
+        new_Y = ifelse(test = data0[,rv] >= crit_value, yes = 1, no = 0)
+        data0[,rv] = new_Y
+      }
+      
+      # REMOVE NA'S FROM RESPONSE VARIABLE
+      data0 = data0[!is.na(data0[,rv]), ]
+      
+      var_list = c(rv,which(colnames(data0) %in% feats_to_use))
+      data = data0[,var_list]
+      colnames(data) = c(colnames(data0)[[rv]],feats_to_use)
+      
+      if (input$XGBCL_standard) {
+        
+        for (i in 1:nrow(data)) {
+          for (j in 2:ncol(data)) {
+            if (is.numeric(data[i,j])) {
+              
+              range = (max(na.omit(data[,j])) - min(na.omit(data[,j])))
+              
+              if (range == 0) {
+                data[i,j] = 0
+              } else {
+                data[i,j]=(data[i,j] - min(na.omit(data[,j]))) / range
+              }
             }
           }
         }
       }
-    }
-    
-    withProgress(
-      message = 'XGBCL Fitting Progress',
-      detail = paste("MC runs:", x = 1),
-      value = 0,
-      {
-        
-        temp_fits = matrix(0, nrow = nrow(data), ncol = 2*MC_runs)
-        temp_fits = data.frame(temp_fits)
-        
-        temp_shapes = matrix(0, nrow = length(feats_to_use), ncol = MC_runs+1)
-        temp_shapes = data.frame(temp_shapes)
-        temp_shapes[,1] = feats_to_use
-        
-        for (i in 1:MC_runs) {
+      
+      withProgress(
+        message = 'XGBCL Fitting Progress',
+        detail = paste("MC runs:", x = 1,"/",MC_runs),
+        value = 0,
+        {
           
-          # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
-          if (input$loggy) {
+          temp_fits = matrix(0, nrow = nrow(data), ncol = 2*MC_runs)
+          temp_fits = data.frame(temp_fits)
+          
+          temp_shapes = matrix(0, nrow = length(feats_to_use), ncol = MC_runs+1)
+          temp_shapes = data.frame(temp_shapes)
+          temp_shapes[,1] = feats_to_use
+          
+          for (i in 1:MC_runs) {
             
-            for (j in 1:nrow(data)){
-              if (data[j,1]=="TNTC") {
-                data[j,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
-                ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
-              }
+            # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
+            if (input$loggy) {
               
-              if (data[j,1]=="ND") {
-                data[j,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
-                ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+              for (j in 1:nrow(data)){
+                if (data[j,1]==input$rc_val) {
+                  data[j,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
+                  ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+                }
+                
+                if (data[j,1]==input$lc_val) {
+                  data[j,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
+                  ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+                }
+              }
+            } else {
+              
+              for (j in 1:nrow(data)){
+                if (data[j,1]==input$rc_val) {
+                  data[j,1]=(runif(1, min = rc_lowval, max = rc_upval))
+                  ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+                }
+                
+                if (data[j,1]==input$lc_val) {
+                  data[j,1]=(runif(1, min = lc_lowval, max = lc_upval))
+                  ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
+                }
               }
             }
-          } else {
             
-            for (j in 1:nrow(data)){
-              if (data[j,1]=="TNTC") {
-                data[j,1]=(runif(1, min = rc_lowval, max = rc_upval))
-                ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
-              }
+            temp_fits[,2*i-1] = data[,1]
+            
+            if (xgbcl_booster_set() == "dart") {
               
-              if (data[j,1]=="ND") {
-                data[j,1]=(runif(1, min = lc_lowval, max = lc_upval))
-                ifelse(test = data[j, 1] >= crit_value, yes = 1, no = 0)
-              }
+              params = list(
+                objective = "binary:logistic",
+                eval_metric = input$XGBCL_eval,
+                booster = xgbcl_booster_set(),
+                rate_drop = ratecl_drop_set(),
+                skip_drop = skipcl_drop_set(),
+                sample_type = dartcl_sample_type_set(),
+                normalize_type = dartcl_normalize_type_set(),
+                tree_method = xgbcl_tree_method_set(),
+                eta = Optimal_CLHP$eta,
+                gamma = Optimal_CLHP$gamma,
+                max_depth = Optimal_CLHP$max_depth,
+                min_child_weight = Optimal_CLHP$min_child_weight,
+                subsample = Optimal_CLHP$subsample,
+                colsample_bytree = Optimal_CLHP$colsample_bytree
+              )
+            } else {
+              params = list(
+                objective = "binary:logistic",
+                eval_metric = input$XGBCL_eval,
+                booster = xgbcl_booster_set(),
+                tree_method = xgbcl_tree_method_set(),
+                eta = Optimal_CLHP$eta,
+                gamma = Optimal_CLHP$gamma,
+                max_depth = Optimal_CLHP$max_depth,
+                min_child_weight = Optimal_CLHP$min_child_weight,
+                subsample = Optimal_CLHP$subsample,
+                colsample_bytree = Optimal_CLHP$colsample_bytree
+              )
             }
-          }
-          
-          temp_fits[,2*i-1] = data[,1]
-          
-          if (xgbcl_booster_set() == "dart") {
             
-            params = list(
-              objective = "binary:logistic",
-              eval_metric = input$XGBCL_eval,
-              booster = xgbcl_booster_set(),
-              rate_drop = ratecl_drop_set(),
-              skip_drop = skipcl_drop_set(),
-              sample_type = dartcl_sample_type_set(),
-              normalize_type = dartcl_normalize_type_set(),
-              tree_method = xgbcl_tree_method_set(),
-              eta = Optimal_CLHP$eta,
-              gamma = Optimal_CLHP$gamma,
-              max_depth = Optimal_CLHP$max_depth,
-              min_child_weight = Optimal_CLHP$min_child_weight,
-              subsample = Optimal_CLHP$subsample,
-              colsample_bytree = Optimal_CLHP$colsample_bytree
-            )
-          } else {
-            params = list(
-              objective = "binary:logistic",
-              eval_metric = input$XGBCL_eval,
-              booster = xgbcl_booster_set(),
-              tree_method = xgbcl_tree_method_set(),
-              eta = Optimal_CLHP$eta,
-              gamma = Optimal_CLHP$gamma,
-              max_depth = Optimal_CLHP$max_depth,
-              min_child_weight = Optimal_CLHP$min_child_weight,
-              subsample = Optimal_CLHP$subsample,
-              colsample_bytree = Optimal_CLHP$colsample_bytree
-            )
+            xgbcl_model = xgboost(data = as.matrix(data[,-1]),label=data[,1], params=params, early_stopping_rounds=early_stop_set(), nrounds=Optimal_CLHP$nrounds, verbose=0)
+            
+            fits = predict(xgbcl_model, newdata=as.matrix(data[,-1]))
+            temp_fits[,2*i] = fits
+            
+            if (ncol(data) > 2) {
+              shap_values = shap.values(xgb_model = xgbcl_model, X_train = as.matrix(data[,-1]))
+              mean_shaps = round(shap_values$mean_shap_score,4)
+              shap_names = names(mean_shaps)
+              shap = data.frame(cbind(shap_names,mean_shaps))
+            } else {
+              shap = data.frame("Feature" = colnames(data)[[2]], "mean_shaps" = 0)
+            }
+            
+            for (c in 1:nrow(temp_shapes)) {
+              current_feat = temp_shapes[c,1]
+              temp_shapes[c,i+1] = as.numeric(shap[which(shap[,1] == current_feat),2])
+            }
+            
+            incProgress(1/MC_runs, detail = paste("MC run: ",i,"/",MC_runs))
           }
-          
-          xgbcl_model = xgboost(data = as.matrix(data[,-1]),label=data[,1], params=params, early_stopping_rounds=early_stop_set(), nrounds=Optimal_CLHP$nrounds, verbose=0)
-          
-          fits = predict(xgbcl_model, newdata=as.matrix(data[,-1]))
-          temp_fits[,2*i] = fits
-          
-          if (ncol(data) > 2) {
-            shap_values = shap.values(xgb_model = xgbcl_model, X_train = as.matrix(data[,-1]))
-            mean_shaps = round(shap_values$mean_shap_score,4)
-            shap_names = names(mean_shaps)
-            shap = data.frame(cbind(shap_names,mean_shaps))
-          } else {
-            shap = data.frame("Feature" = colnames(data)[[2]], "mean_shaps" = 0)
-          }
-          
-          for (c in 1:nrow(temp_shapes)) {
-            current_feat = temp_shapes[c,1]
-            temp_shapes[c,i+1] = as.numeric(shap[which(shap[,1] == current_feat),2])
-          }
-          
-          incProgress(1/MC_runs, detail = paste("MC run: ",i,"/",MC_runs))
-        }
-      })
-
-    # Must add: fit global/final XGB_model
-    
-    even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
-    odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
-    
-    obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
-    fit_mean_values = rowMeans(even_columns)
-    fits = cbind(obs_mean_values,round(fit_mean_values,3))
-    
-    xgbcl_results = data.frame(cbind(data0[,1],round(fits[,1],4),round(fits[,2],4),round(data[,-1],4)))
-    colnames(xgbcl_results) = c(colnames(data0)[[1]],colnames(data)[[1]],"Fitted_Prob",colnames(data[,-1]))
-    
-    xgbcl_shapes1 = as.data.frame(temp_shapes[,-1])
-    
-    xgbcl_shapes2 = rowMeans(xgbcl_shapes1)
-    
-    xgbcl_shapes = data.frame(cbind(temp_shapes[,1],xgbcl_shapes2))
-    
-    xgbcl_shapes = xgbcl_shapes[order(xgbcl_shapes[,2],decreasing = T),]
-    colnames(xgbcl_shapes) = c("Feature","Mean_SHAP")
-    
-    output$XGBCL_shapes = DT::renderDataTable(server = T, {data = datatable(xgbcl_shapes,rownames = F,selection =
-                list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    output$XGBCL_fits = DT::renderDataTable(server = T, {data = datatable(xgbcl_results,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp", buttons = c('copy', 'csv', 'excel'),
-                paging = T,pageLength = 17,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
-                JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    XGBCL_scat_dat <<- xgbcl_results[,1:3]
-    
-    output$XGBCL_scatplot = renderPlot(ggplot(XGBCL_scat_dat, aes(x=XGBCL_scat_dat[,3], fill=as.factor(XGBCL_scat_dat[,2]))) +
-                                      geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
-                                      scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
-                                      geom_vline(xintercept = input$XGBCL_dec_crit, linetype = "dashed", color = "darkgreen") +
-                                      labs(x = "Fitted Probability", y = "Density", fill="OBS") +
-                                      theme_bw() +
-                                      theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
-                                      theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
-                                      theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
-
-    xgbcl_confuse_results = confuse(XGBCL_scat_dat[,2:3],0.5,input$XGBCL_dec_crit)
-    xgbcl_confuse_table = matrix(0,nrow=1,ncol=4)
-    
-    xgbcl_confuse_table[1,1] = xgbcl_confuse_results$TP
-    xgbcl_confuse_table[1,2] = xgbcl_confuse_results$TN
-    xgbcl_confuse_table[1,3] = xgbcl_confuse_results$FP
-    xgbcl_confuse_table[1,4] = xgbcl_confuse_results$FN
-    
-    colnames(xgbcl_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-    
-    output$XGBCL_confuse = DT::renderDataTable(server = T, {data = datatable(xgbcl_confuse_table,rownames = F,selection = 
+        })
+      
+      # Must add: fit global/final XGB_model
+      
+      even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
+      odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
+      
+      obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
+      fit_mean_values = rowMeans(even_columns)
+      fits = cbind(obs_mean_values,round(fit_mean_values,3))
+      
+      xgbcl_results = data.frame(cbind(data0[,1],round(fits[,1],4),round(fits[,2],4),round(data[,-1],4)))
+      colnames(xgbcl_results) = c(colnames(data0)[[1]],colnames(data)[[1]],"Fitted_Prob",colnames(data[,-1]))
+      
+      xgbcl_shapes1 = as.data.frame(temp_shapes[,-1])
+      
+      xgbcl_shapes2 = rowMeans(xgbcl_shapes1)
+      
+      xgbcl_shapes = data.frame(cbind(temp_shapes[,1],xgbcl_shapes2))
+      
+      xgbcl_shapes = xgbcl_shapes[order(xgbcl_shapes[,2],decreasing = T),]
+      colnames(xgbcl_shapes) = c("Feature","Mean_SHAP")
+      
+      output$XGBCL_shapes = DT::renderDataTable(server = T, {data = datatable(xgbcl_shapes,rownames = F,selection =
+                  list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                  list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                  className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                  "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      output$XGBCL_fits = DT::renderDataTable(server = T, {data = datatable(xgbcl_results,rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
+                  target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp", buttons = c('copy', 'csv', 'excel'),
+                  paging = T,pageLength = 17,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                  JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      XGBCL_scat_dat <<- xgbcl_results[,1:3]
+      
+      output$XGBCL_scatplot = renderPlot(ggplot(XGBCL_scat_dat, aes(x=XGBCL_scat_dat[,3], fill=as.factor(XGBCL_scat_dat[,2]))) +
+                                           geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
+                                           scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                                           geom_vline(xintercept = input$XGBCL_dec_crit, linetype = "dashed", color = "darkgreen") +
+                                           labs(x = "Fitted Probability", y = "Density", fill="OBS") +
+                                           theme_bw() +
+                                           theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                                           theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                                           theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+      
+      xgbcl_confuse_results = confuse(XGBCL_scat_dat[,2:3],0.5,input$XGBCL_dec_crit)
+      xgbcl_confuse_table = matrix(0,nrow=1,ncol=4)
+      
+      xgbcl_confuse_table[1,1] = xgbcl_confuse_results$TP
+      xgbcl_confuse_table[1,2] = xgbcl_confuse_results$TN
+      xgbcl_confuse_table[1,3] = xgbcl_confuse_results$FP
+      xgbcl_confuse_table[1,4] = xgbcl_confuse_results$FN
+      
+      colnames(xgbcl_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
+      
+      output$XGBCL_confuse = DT::renderDataTable(server = T, {data = datatable(xgbcl_confuse_table,rownames = F,selection = 
                     list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
                     options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
                     columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                     {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    output$XGBCL_confuse_text = renderText({paste0("Sensitivity = ",round(xgbcl_confuse_results$Sensitivity,3),"; Specificity = ",
+      
+      output$XGBCL_confuse_text = renderText({paste0("Sensitivity = ",round(xgbcl_confuse_results$Sensitivity,3),"; Specificity = ",
                     round(xgbcl_confuse_results$Specificity,3),"; Accuracy = ",round(xgbcl_confuse_results$Accuracy,3))})
-    
-    output$XGBCL_used_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
+      
+      output$XGBCL_used_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
                     target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
                     pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
                     initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Fitting')
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Fitting')
+    }
   })
 
   # XGB feature selection
@@ -2365,6 +2649,8 @@ server= function(input,output,session) {
     skip_drop = skip_drop_set()
     
     xgb_standardize = input$XGB_standardize
+    lc_val = input$lc_val
+    rc_val = input$rc_val
     lc_lowval = input$lc_lowval
     lc_upval = input$lc_upval
     rc_lowval = input$rc_lowval
@@ -2379,7 +2665,7 @@ server= function(input,output,session) {
     
     xgb_select_calculation <<- future({
       
-      xgb_selection(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
+      xgb_selection(xgb_select_data,seed,rv,feats_to_use,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                     xgb_standardize,xgb_tree_method,xgb_boost,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
                     min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db)
       
@@ -2456,9 +2742,9 @@ server= function(input,output,session) {
   observeEvent(input$XGB_select_rows_selected, ignoreInit = T, {
     
     if (input$use_pca_data) {
-      all_feats = pca_axes()
+      all_feats = pcax_being_used()
     } else {
-      all_feats = feat_names()
+      all_feats = feats_being_used()
     }
     
     temp_data = dbReadTable(temp_db, "xgb_selection_results")
@@ -2475,9 +2761,9 @@ server= function(input,output,session) {
     }
     
     if (input$use_pca_data) {
-      updateCheckboxGroupInput(session,"pcax_to_use",choices=pca_axes(),selected=remaining,inline=T)
+      updateCheckboxGroupButtons(session,"pcax_to_use",choices=pca_axes(),selected=remaining,size="xs",status = "custom")
     } else {
-      updateCheckboxGroupInput(session,"feats_to_use",choices=feat_names(),selected=remaining,inline=T)
+      updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=remaining,size="xs",status = "custom")
     }
   })
   
@@ -2514,7 +2800,7 @@ server= function(input,output,session) {
       feats_to_use = input$feats_to_use
     }
     
-    xgb_optim_HP_results = xgb_call_optimize_HP(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_lowval,
+    xgb_optim_HP_results = xgb_call_optimize_HP(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_val,input$rc_val,input$lc_lowval,
                             input$lc_upval,input$rc_lowval,input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$randomize,input$XGB_standardize,
                             input$XGB_hyper_metric,input$pso_max_iter,input$pso_swarm_size,input$member_exp,input$ss_exp)
     
@@ -2698,7 +2984,7 @@ server= function(input,output,session) {
       feats_to_use = input$feats_to_use
     }
     
-    xgb_pred_results = xgb_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_lowval,
+    xgb_pred_results = xgb_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_val,input$rc_val,input$lc_lowval,
                             input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
                             input$XGB_standardize,Optimal_HP$eta,Optimal_HP$gamma,Optimal_HP$max_depth,
                             Optimal_HP$min_child_weight,Optimal_HP$subsamp,Optimal_HP$colsamp,Optimal_HP$nrounds)
@@ -2730,7 +3016,7 @@ server= function(input,output,session) {
               list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions='Buttons',options = list(autoWidth = F,
               paging = TRUE,pageLength = 17,dom="ltBp",buttons = c('copy', 'csv', 'excel'),scrollX = TRUE,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',
               orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744',
-              'color': '#fff'});","}")))#{if (date_format_string != "Other") formatDate(data,1,date_format_string) else .}
+              'color': '#fff'});","}")))#{if (date_format_string != "Non-Date") formatDate(data,1,date_format_string) else .}
     })
     
     output$XGB_pred_shapes = DT::renderDataTable(server = T, {data = datatable(XGB_pred_shapes,rownames = F,selection =
@@ -2903,8 +3189,8 @@ server= function(input,output,session) {
     
     withProgress(
       message = 'XGB Fitting Progress',
-      detail = paste("MC runs:", x = MC_runs),
-      value = 1/MC_runs,
+      detail = paste("MC runs:", x = 1,"/",MC_runs),
+      value = 0,
       {
         
         for (i in 1:MC_runs) {
@@ -2913,22 +3199,22 @@ server= function(input,output,session) {
           if (input$loggy==TRUE) {
             
             for (j in 1:nrow(data)){
-              if (data[j,1]=="TNTC") {
+              if (data[j,1]==input$rc_val) {
                 data[j,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
               }
               
-              if (data[j,1]=="ND") {
+              if (data[j,1]==input$lc_val) {
                 data[j,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
               }
             }
           } else {
             
             for (j in 1:nrow(data)){
-              if (data[j,1]=="TNTC") {
+              if (data[j,1]==input$rc_val) {
                 data[j,1]=(runif(1, min = rc_lowval, max = rc_upval))
               }
               
-              if (data[j,1]=="ND") {
+              if (data[j,1]==input$lc_val) {
                 data[j,1]=(runif(1, min = lc_lowval, max = lc_upval))
               }
             }
@@ -3219,8 +3505,8 @@ server= function(input,output,session) {
         
         withProgress(
           message = 'EN Prediction Progress',
-          detail = paste("MC runs:", x = MC_runs,"; Fold:",y = f),
-          value = (1-1/tot_folds) - (1/tot_folds)*(tot_folds-f),
+          detail = paste("MC runs:", x = 1,"/",MC_runs,"; Fold:",y = 1,"/", tot_folds),
+          value = 0,
           {
             
             for (i in 1:MC_runs) {
@@ -3229,41 +3515,41 @@ server= function(input,output,session) {
               if (input$loggy == TRUE) {
                 
                 for (j in 1:nrow(trainData)) {
-                  if (trainData[j, 1] == "TNTC") {
+                  if (trainData[j, 1] == input$rc_val) {
                     trainData[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
                   }
                   
-                  if (trainData[j, 1] == "ND") {
+                  if (trainData[j, 1] == input$lc_val) {
                     trainData[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
                   }
                 }
                 
                 for (j in 1:nrow(testData)) {
-                  if (testData[j, 1] == "TNTC") {
+                  if (testData[j, 1] == input$rc_val) {
                     testData[j, 1] = log10(runif(1, min = input$rc_lowval, max = input$rc_upval))
                   }
                   
-                  if (testData[j, 1] == "ND") {
+                  if (testData[j, 1] == input$lc_val) {
                     testData[j, 1] = log10(runif(1, min = input$lc_lowval, max = input$lc_upval))
                   }
                 }
               } else {
                 for (j in 1:nrow(trainData)) {
-                  if (trainData[j, 1] == "TNTC") {
+                  if (trainData[j, 1] == input$rc_val) {
                     trainData[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
                   }
                   
-                  if (trainData[j, 1] == "ND") {
+                  if (trainData[j, 1] == input$lc_val) {
                     trainData[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
                   }
                 }
                 for (j in 1:nrow(testData)) {
                   
-                  if (testData[j, 1] == "TNTC") {
+                  if (testData[j, 1] == input$rc_val) {
                     testData[j, 1] = (runif(1, min = input$rc_lowval, max = input$rc_upval))
                   }
                   
-                  if (testData[j, 1] == "ND") {
+                  if (testData[j, 1] == input$lc_val) {
                     testData[j, 1] = (runif(1, min = input$lc_lowval, max = input$lc_upval))
                   }
                 }
@@ -3502,7 +3788,7 @@ server= function(input,output,session) {
       
       withProgress(
         message = 'EN Fitting Progress',
-        detail = paste("MC runs: ", x = MC_runs),
+        detail = paste("MC runs: ", x = 1,"/",MC_runs),
         value = 0,
         {
           for (i in 1:MC_runs) {
@@ -3510,22 +3796,22 @@ server= function(input,output,session) {
             if (input$loggy) {
               
               for (j in 1:nrow(EN_data)){
-                if (EN_data[j,1]=="TNTC") {
+                if (EN_data[j,1]==input$rc_val) {
                   EN_data[j,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
                 }
                 
-                if (EN_data[j,1]=="ND") {
+                if (EN_data[j,1]==input$lc_val) {
                   EN_data[j,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
                 }
               }
             } else {
               
               for (j in 1:nrow(EN_data)){
-                if (EN_data[j,1]=="TNTC") {
+                if (EN_data[j,1]==input$rc_val) {
                   EN_data[j,1]=(runif(1, min = rc_lowval, max = rc_upval))
                 }
                 
-                if (EN_data[j,1]=="ND") {
+                if (EN_data[j,1]==input$lc_val) {
                   EN_data[j,1]=(runif(1, min = lc_lowval, max = lc_upval))
                 }
               }
@@ -3566,7 +3852,7 @@ server= function(input,output,session) {
       
       #Must add: Fit final/global EN_model
       
-      mean_coeffs = round(rowMeans(temp_coeffs[,-1]),4)
+      mean_coeffs = format(round(rowMeans(temp_coeffs[,-1]),4),scientific=FALSE)
       EN_coeffs = data.frame(cbind(temp_coeffs[,1],mean_coeffs))
       colnames(EN_coeffs) = c("Feature","Coefficient")
       

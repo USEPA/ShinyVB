@@ -2,6 +2,8 @@ xgb_pred_fold_errors = function(train_data,
                                 test_data,
                                 resvar,
                                 coves_to_use,
+                                lc_val,
+                                rc_val,
                                 lc_lowval,
                                 lc_upval,
                                 rc_lowval,
@@ -21,8 +23,8 @@ xgb_pred_fold_errors = function(train_data,
   
   withProgress(
     message = 'HP Prediction Progress',
-    detail = paste("MC runs:", x = MC_runs,"; Fold: ",fold_num),
-    value = (fold_num/tot_folds)-0.2,
+    detail = paste("MC runs:", x = 1,"/",MC_runs,"; Fold: ",y=1,"/",tot_folds),
+    value = 0,
     {
       
       temp_preds = matrix(0, nrow = nrow(test_data), ncol = 2*MC_runs)
@@ -38,40 +40,40 @@ xgb_pred_fold_errors = function(train_data,
         # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
         if (loggy == TRUE) {
           for (j in 1:nrow(train_data)) {
-            if (train_data[j, 2] == "TNTC") {
+            if (train_data[j, 2] == rc_val) {
               train_data[j, 2] = log10(runif(1, min = rc_lowval, max = rc_upval))
             }
             
-            if (train_data[j, 2] == "ND") {
+            if (train_data[j, 2] == lc_val) {
               train_data[j, 2] = log10(runif(1, min = lc_lowval, max = lc_upval))
             }
           }
           
           for (j in 1:nrow(test_data)) {
-            if (test_data[j, 2] == "TNTC") {
+            if (test_data[j, 2] == rc_val) {
               test_data[j, 2] = log10(runif(1, min = rc_lowval, max = rc_upval))
             }
             
-            if (test_data[j, 2] == "ND") {
+            if (test_data[j, 2] == lc_val) {
               test_data[j, 2] = log10(runif(1, min = lc_lowval, max = lc_upval))
             }
           }
         } else {
           for (j in 1:nrow(train_data)) {
-            if (train_data[j, 2] == "TNTC") {
+            if (train_data[j, 2] == rc_val) {
               train_data[j, 2] = (runif(1, min = rc_lowval, max = rc_upval))
             }
             
-            if (train_data[j, 2] == "ND") {
+            if (train_data[j, 2] == lc_val) {
               train_data[j, 2] = (runif(1, min = lc_lowval, max = lc_upval))
             }
           }
           for (j in 1:nrow(test_data)) {
-            if (test_data[j, 2] == "TNTC") {
+            if (test_data[j, 2] == rc_val) {
               test_data[j, 2] = (runif(1, min = rc_lowval, max = rc_upval))
             }
             
-            if (test_data[j, 2] == "ND") {
+            if (test_data[j, 2] == lc_val) {
               test_data[j, 2] = (runif(1, min = lc_lowval, max = lc_upval))
             }
           }

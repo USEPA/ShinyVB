@@ -1,12 +1,12 @@
-source("bs_multi.R")
-
 DataPanel = sidebarLayout(
   sidebarPanel = sidebarPanel(
     id = "datasidepanel",
     width = 3,
     tags$style(type = "text/css", "#datasidepanel {height: calc(100vh - 70px) !important; width: 385px !important;}"),
     
-    fluidRow(column(12,inputPanel(selectInput("IDasDate",label = "ID/Date Format",selected ="Other",choices = c("Other","MDY","YMD","MDYHM"))))),
+    fluidRow(column(4,inputPanel(selectInput("IDasDate",label = "ID/Date Format",selected ="Non-Date",choices = c("Non-Date","MDY","YMD","MDYHM")))),
+             column(4,numericInput("lc_val", "LC Value", value=-9999)),
+             column(4,numericInput("rc_val", "RC Value", value=9999))),
     fluidRow(column(12,radioButtons(inline=T,"sep","Separator",choices = c(Comma = ",",Semicolon = ";",Space = " ",Tab = "\t"),selected = ","))),
     
     div(fileInput("file1", "Select your data file", buttonLabel = "Browse",accept = c("text/csv",
@@ -38,7 +38,13 @@ DataPanel = sidebarLayout(
       
       bs_append (title="Plotting", content = card(
         
-        div(style = "height: 275px",
+        div(style = "height: 400px",
+            
+            fluidRow(column(12,radioButtons(inline=T,"cens_choice","Censored Response Data",choices = c(Hide = "hide",Use = "use",Replace = "replace"),selected = "hide"))),
+            fluidRow(column(6,numericInput("lc_replace", "Replace LC", value=-1, step=0.1)),
+                     column(6,numericInput("rc_replace", "Replace RC", value=100, step=0.1))),
+            
+            fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;")),
 
             fluidRow(
               column(6,selectInput("scatterx",label = "Scatter X",selectize=FALSE, selected ="-",choices = c("-"))),

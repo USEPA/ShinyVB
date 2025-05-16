@@ -24,7 +24,7 @@ renderdata = function(data,
   
   if (select_choice == "Features") {
     
-    if (date_format_string != "Other") {
+    if (date_format_string != "Non-Date") {
       
       col_list = seq(1, ncol(data))
       remaining = col_list[-id_var]
@@ -103,7 +103,7 @@ renderdata = function(data,
       })
     }
   } else {
-    if (date_format_string != "Other") {
+    if (date_format_string != "Non-Date") {
       col_list = seq(1, ncol(data))
       remaining = col_list[-id_var]
       sig_digies = sig_digies[-id_var]

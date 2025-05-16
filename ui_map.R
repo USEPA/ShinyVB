@@ -4,7 +4,7 @@ MapPanel = sidebarLayout(
                               tags$h4("Beach Orientation Calculator"),
                               tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;"),
                               htmlOutput("bo_text"),
-                              tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;"),
+                              tags$hr(style = "border-color: #2c3e50; margin-top: 6px; margin-bottom: 6px;"),
                               fluidRow(
                                 column(4,tags$h4("Beach Orientation:")),
                                 column(8,div(style="width:60px;",verbatimTextOutput("beach_orient",placeholder = TRUE)))),
@@ -12,10 +12,8 @@ MapPanel = sidebarLayout(
                               tags$hr(style = "border-color: #2c3e50; margin-top: 4px; margin-bottom: 4px;"),
                               fluidRow(column(6,h5(HTML("<i>Zoom Level >= 11</i>"))),
                                        column(6,h5(HTML("<i>Zoom Level >= 13</i>")))),
-                              fluidRow(column(6,actionButton("show_stations", "Show Stations", class="align-center", style='width: 130px; height: 30px;')),
-                                column(6,actionButton("show_shorelines", "Show Beaches",  class="align-center",style='width: 130px; height: 30px;'))),
-                              fluidRow(column(6,actionButton("clear_stations", "Clear Stations",  class="align-center", style='width: 130px; height: 30px;')),
-                                column(6,actionButton("clear_shorelines", "Clear Beaches",  class="align-center",style='width: 130px; height: 30px;'))),
+                              fluidRow(column(6, switchInput("show_stations", label="Show Stations?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small")),
+                                       column(6, switchInput("show_shorelines", label="Show Beaches?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
                               tags$hr(style = "border-color: #2c3e50; margin-top: 4px; margin-bottom: 4px;"),
                               actionButton("retrieve_data", "Retrieve WQX Data",  class="align-center", style='width: 150px; height: 35px;')),
 

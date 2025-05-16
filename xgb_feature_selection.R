@@ -1,4 +1,4 @@
-xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
+xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                       xgb_standardize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
                       max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db) {
   
@@ -99,22 +99,22 @@ xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_lowval,lc_upval
           if (loggy==TRUE) {
             
             for (z in 1:nrow(temp_data)){
-              if (temp_data[z,1]=="TNTC") {
+              if (temp_data[z,1]==rc_val) {
                 temp_data[z,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
               }
               
-              if (temp_data[z,1]=="ND") {
+              if (temp_data[z,1]==lc_val) {
                 temp_data[z,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
               }
             }
           } else {
             
             for (z in 1:nrow(temp_data)){
-              if (temp_data[z,1]=="TNTC") {
+              if (temp_data[z,1]==rc_val) {
                 temp_data[z,1]=(runif(1, min = rc_lowval, max = rc_upval))
               }
               
-              if (temp_data[z,1]=="ND") {
+              if (temp_data[z,1]==lc_val) {
                 temp_data[z,1]=(runif(1, min = lc_lowval, max = lc_upval))
               }
             }

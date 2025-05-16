@@ -49,6 +49,22 @@ ui = fluidPage(
       width: 80px;
       height: 35px;
     }
+    #lc_val {
+      width: 100px;
+      height: 35px;
+        }
+    #rc_val {
+      width: 100px;
+      height: 35px;
+    }
+    #lc_replace {
+      width: 90px;
+      height: 35px;
+        }
+    #rc_replace {
+      width: 90px;
+      height: 35px;
+    }
     #pcr_prop {
       width: 100px;
       height: 35px;
@@ -64,8 +80,7 @@ ui = fluidPage(
     }
     #XGBCL_binarize_crit_value {
       width: 90px;
-      height: 40px;
-      vertical-align: -30px;
+      height: 35px;
     }
     #data_seed {
       width: 100px;
@@ -85,9 +100,8 @@ ui = fluidPage(
     }
     #LG_binarize_crit_value {
       width: 90px;
-      height: 40px;
+      height: 35px;
     }
-
     #LG_pred_dc {
       width: 120px;
       height: 35px;
@@ -153,6 +167,17 @@ ui = fluidPage(
        background-color: #2c3e50;
        color: #18bc9c;
     }
+    .btn.checkbtn.btn-custom.active {
+        background-color: #2c3e50;
+        color: white;
+        border-color: green;
+    }
+    .btn.checkbtn.btn-custom {
+       background-color: #cccccc;
+       color: #111111;
+       border-color: #2c3e50;
+    }
+
     .panel-heading:hover {
       background-color: #cccccc;
       color: #18bc9c;
@@ -176,7 +201,6 @@ ui = fluidPage(
     }
     #XGBCL_eval {
       width: 125px;
-      height: 40px;
     }
     .modal-footer {
       text-align: center;
