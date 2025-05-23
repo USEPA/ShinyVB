@@ -3,6 +3,7 @@ ModelingPanel = sidebarLayout(
     id = "modelingsidepanel",
     width = 3,
     tags$style(type = "text/css", "#modelingsidepanel {width: 350px !important;}"),
+    #h6(HTML("<i>NOTE: Model pipelines require >= 2 selected features/PCA components.</i>")),
     
     checkboxGroupButtons(
       inputId = "feats_to_use",
@@ -11,15 +12,6 @@ ModelingPanel = sidebarLayout(
       size = "xs",
       status = "custom"
     ),
-    
-    # checkboxGroupInput(
-    #   "feats_to_use",
-    #   "Features to Use:",
-    #   choices = "",
-    #   inline = TRUE
-    # ),
-    
-    tags$hr(style = "border-color: #2c3e50; margin-top: 4px; margin-bottom: 4px;"),
     
     fluidRow(column(12, switchInput("use_pca_data", label="Use PCA Data?", labelWidth=85, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
     
@@ -31,7 +23,7 @@ ModelingPanel = sidebarLayout(
       status = "custom"
     )),
 
-    tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
+    tags$hr(style = "border-color: #2c3e50; margin-top: 4px; margin-bottom: 4px;"),
     
     bs_accordion(id = "Modeling") %>%
       
@@ -40,7 +32,7 @@ ModelingPanel = sidebarLayout(
       bs_append (
         title = "General Options",
         content = card(
-          h5(HTML("<i>Left-Censored Limits (Non-Detects)</i>")),
+          h5(HTML("<i>Left-Censored Limits (Non-Detections)</i>")),
           fluidRow(column(4,numericInput("lc_lowval", label='Lower', value = 0)),
                    column(4, numericInput("lc_upval", label='Upper', value = 3)),
                    column(4)),
@@ -52,12 +44,11 @@ ModelingPanel = sidebarLayout(
                    column(6, numericInput("MC_runs",  label="Monte Carlo Runs", value = 10, min=1,max=10000,step=1))),
           fluidRow(column(6, numericInput("num_folds",  label="CV Folds", value = 5, min=2,max=20,step=1)),
                    column(6, numericInput("model_seed",  label="Rnd Seed", value = 1234, min=1,step=1))),
-          fluidRow(column(12, switchInput("loggy", label="Log10 Response?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
-          fluidRow(column(12, switchInput("randomize", label="Shuffle Data?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))))) %>%
+          fluidRow(column(12,switchInput("loggy", label="Log10 Response?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+          fluidRow(column(12,switchInput("randomize", label="Shuffle Data?", labelWidth=100, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
-    tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
     h5(HTML("<i>Binary Response Techniques</i>"),style="text-align:center"),
     
     bs_accordion(id = "Discreet_Techniques") %>%
@@ -67,8 +58,8 @@ ModelingPanel = sidebarLayout(
       bs_append (
         title = "Logistic Regression",
         content = card(
-            fluidRow(column(12, switchInput("LG_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
-            fluidRow(column(12, switchInput("LG_binarize", label="Binarize Response?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+            fluidRow(column(12, switchInput("LG_standard", label="Standardize Features?", labelWidth=125, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))),
+            fluidRow(column(12, switchInput("LG_binarize", label="Binarize Response?", labelWidth=125, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))),
             fluidRow(column(5,numericInput("LG_binarize_crit_value", label = "Threshold", value = 2,step=0.25)),
                      column(7,selectInput("LG_eval",label = "Evaluation Metric",selectize=FALSE,selected ="deviance",choices = c("deviance","auc")))),
             fluidRow(column(6,actionButton("run_pred_LG", "Predictions", style = 'width:100px; padding:2px;')),
@@ -78,7 +69,7 @@ ModelingPanel = sidebarLayout(
         title = "XGB Classifier",
         content = card(
           fluidRow(column(12, switchInput("XGBCL_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
-          fluidRow(column(12, switchInput("XGBCL_binarize", label="Binarize Response?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+          fluidRow(column(12, switchInput("XGBCL_binarize", label="Binarize Response?", labelWidth=125, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))),
           fluidRow(column(6,numericInput("XGBCL_binarize_crit_value", label = "Threshold", value = 2,step=0.25)),
                    column(6,selectInput("XGBCL_eval",label = "Evaluation Metric",selected ="logloss",choices = c("logloss","auc")))),
           fluidRow(column(5,actionButton("XGBCL_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px;')),
@@ -92,24 +83,17 @@ ModelingPanel = sidebarLayout(
                   column(6,actionButton("run_fit_XGBCL", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
-    
-    tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;"),
+
     h5(HTML("<i>Continuous Response Techniques</i>"),style="text-align:center"),
     
     bs_accordion(id = "Continuous_Techniques") %>%
       
       bs_set_opts(panel_type = "primary") %>%
       
-      # bs_append (
-      #   title = "PCR", content= card(
-      #     fluidRow(column(12, div(style = "display: inline-block;",numericInput("pcr_prop", label = "Variance Threshold", value = 0.8, min = 0, max=1, step=0.025)))),
-      #     fluidRow(column(12,actionButton("run_PCR_predict", "Predictions", style = 'width:100px; padding:2px;'))),
-      #     fluidRow(column(12,align="left",actionButton("PCR_final_fitting", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
-      
       bs_append (
         title = "Elastic Net",
         content = card(
-          fluidRow(column(12, switchInput("EN_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+          fluidRow(column(12, switchInput("EN_standard", label="Standardize Features?", labelWidth=125, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))),
           fluidRow(column(6,actionButton("EN_pred", "Predictions", style = 'width:100px; padding:4px;')),
                   column(6,actionButton("EN_fit", "Fitting", style = 'width:100px; padding:4px;'))))) %>%
       
@@ -126,7 +110,10 @@ ModelingPanel = sidebarLayout(
           fluidRow(column(6,actionButton("run_XGB_predict", "Predictions", style = 'width:100px; padding:2px;')),
                    column(6,align="left",actionButton("XGB_final_fitting", "Fitting", style = 'width:100px; padding:2px;'))))) %>%
       
-      bs_accordion_multi(multi=FALSE,open=c())),
+      bs_accordion_multi(multi=FALSE,open=c()),
+  
+  fluidRow(column(12,downloadButton("save_project2", "Save Project"))),
+  fluidRow(column(12,fileInput("load_project2", "Load Project", accept = ".RData")))),
   
   mainPanel = mainPanel(
     width = 9,

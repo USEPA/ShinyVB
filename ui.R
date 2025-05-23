@@ -15,6 +15,8 @@ ui = fluidPage(
     #send_plot+ div>.selectize-input{width: 100px !important;padding: 3px;}
     #scatterx+ div>.selectize-dropdown{width: 175px !important;}
     #scatterx+ div>.selectize-input{width: 130px !important;padding: 3px;}
+    #IDasDate+ div>.selectize-input{width: 130px !important;}
+    #set_column_props+ div>.selectize-input{width: 140px !important;}
     #xgb_hyper_metric+ div>.select-dropdown{width: 100px !important;}
     #xgb_hyper_metric+ div>.select-dropdown-content{height: 200px !important;}
     #scattery+ div>.selectize-dropdown{width: 175px !important;}
@@ -40,6 +42,9 @@ ui = fluidPage(
     .progress-message, .progress-detail {
       float: left; 
       clear: left
+    }
+    #sig_digies {
+      width: 75px;
     }
     #MC_runs {
       width: 100px;
@@ -113,7 +118,7 @@ ui = fluidPage(
     #XGB_stand {
       width: 120px;
       height: 35px;
-        }
+    }
     #XGB_dec_crit {
       width: 120px;
       height: 35px;
@@ -177,7 +182,6 @@ ui = fluidPage(
        color: #111111;
        border-color: #2c3e50;
     }
-
     .panel-heading:hover {
       background-color: #cccccc;
       color: #18bc9c;
@@ -185,12 +189,15 @@ ui = fluidPage(
     .panel-body {
       background-color: #ecf0f1;
     }
-    
     .shiny-input-panel {
         margin: 0px 0px;
         padding: 0px 0px;
         border: 0px solid #e3e3e3;
         background-color: #ecf0f1;
+    }
+    .shiny-input-container {
+        margin-top: 2px;
+        margin-bottom: 2px;
     }
     .selectize-input {
       width: 110px;

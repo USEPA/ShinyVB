@@ -33,7 +33,7 @@ xgbcl_pred_fold_errors = function(train_data,
   withProgress(
     message = 'HP Prediction Progress',
     detail = paste("MC runs:", x = 1,"/",MC_runs,"; Fold: ",y=1,"/",tot_folds),
-    value = 0,
+    value = (fold_num/tot_folds-1/tot_folds),
     {
       
       temp_preds = matrix(0, nrow = nrow(test_data), ncol = 2*MC_runs)
@@ -45,9 +45,7 @@ xgbcl_pred_fold_errors = function(train_data,
       
       
       for (i in 1:MC_runs) {
-        
-        incProgress(1/(MC_runs*tot_folds), detail = paste("MC run: ",i,"/",MC_runs,"; Fold: ",fold_num,"/",tot_folds))
-        
+
         # SUBSTITUTE random value FOR RESPONSE VARIABLE non-values and then binarize
         if (loggy == TRUE) {
           for (j in 1:nrow(train_data)) {
@@ -150,7 +148,7 @@ xgbcl_pred_fold_errors = function(train_data,
         preds = predict(model, X_test)
         temp_preds[,2*i] = round(preds,3)
         
-        shap_values = shap.values(xgb_model = model, X_train = X_test)
+        shap_values = shap.values(xgb_model = model, X_train = X_train)
         mean_shaps = shap_values$mean_shap_score
         shap_names = names(mean_shaps)
         shap_temp = data.frame(cbind(shap_names,mean_shaps))
@@ -159,6 +157,8 @@ xgbcl_pred_fold_errors = function(train_data,
           current_cove = temp_shapes[c,1]
           temp_shapes[c,i+1] = as.numeric(shap_temp[shap_temp[,1] == current_cove,2])
         }
+        
+        incProgress(1/(MC_runs*tot_folds), detail = paste("MC run: ",i,"/",MC_runs,"; Fold: ",fold_num,"/",tot_folds))
         
       } #End the MC runs
     })

@@ -13,9 +13,7 @@ MapPanel = sidebarLayout(
                               fluidRow(column(6,h5(HTML("<i>Zoom Level >= 11</i>"))),
                                        column(6,h5(HTML("<i>Zoom Level >= 13</i>")))),
                               fluidRow(column(6, switchInput("show_stations", label="Show Stations?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small")),
-                                       column(6, switchInput("show_shorelines", label="Show Beaches?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
-                              tags$hr(style = "border-color: #2c3e50; margin-top: 4px; margin-bottom: 4px;"),
-                              actionButton("retrieve_data", "Retrieve WQX Data",  class="align-center", style='width: 150px; height: 35px;')),
+                                       column(6, switchInput("show_shorelines", label="Show Beaches?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small")))),
 
   
   mainPanel = mainPanel(id="mapmainpanel",width=9,

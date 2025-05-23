@@ -24,7 +24,7 @@ renderdata = function(data,
   
   if (select_choice == "Features") {
     
-    if (date_format_string != "Non-Date") {
+    if (date_format_string != "Numeric" && date_format_string != "Character") {
       
       col_list = seq(1, ncol(data))
       remaining = col_list[-id_var]
@@ -66,7 +66,7 @@ renderdata = function(data,
           formatDate(id_var, date_format_string)
       })
       
-    } else {
+    } else if (date_format_string == "Numeric") {
       output$data = DT::renderDataTable(server = T, {
         datatable(
           data,
@@ -100,10 +100,45 @@ renderdata = function(data,
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatRound(columns = 1:ncol(data),digits = sig_digies)
+      })
+    } else if (date_format_string == "Character") {
+      output$data = DT::renderDataTable(server = T, {
+        datatable(
+          data,
+          rownames = F,
+          extensions = 'Buttons',
+          selection = list(
+            selected = list(rows = NULL, cols = response_var - 1),
+            target = "column",
+            mode = "single"
+          ),
+          editable = T,
+          options = list(
+            autoWidth = F,
+            dom='ltBp',
+            paging = TRUE,
+            pageLength = 20,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            buttons = c('copy', 'csv', 'excel'),
+            columnDefs = list(list(
+              targets = '_all', className = 'dt-center'
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "}"
+            )
+          )
+        ) %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatRound(columns = 2:ncol(data),digits = sig_digies)
       })
     }
   } else {
-    if (date_format_string != "Non-Date") {
+    if (date_format_string != "Numeric" && date_format_string != "Character") {
       col_list = seq(1, ncol(data))
       remaining = col_list[-id_var]
       sig_digies = sig_digies[-id_var]
@@ -144,7 +179,7 @@ renderdata = function(data,
           formatDate(id_var, date_format_string)
       })
       
-    } else {
+    } else if (date_format_string == "Numeric") {
       output$data = DT::renderDataTable(server = T, {
         datatable(
           data,
@@ -178,6 +213,41 @@ renderdata = function(data,
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatRound(columns = 1:ncol(data),digits = sig_digies)
+      })
+    } else if (date_format_string == "Character") {
+      output$data = DT::renderDataTable(server = T, {
+        datatable(
+          data,
+          rownames = F,
+          extensions = 'Buttons',
+          selection = list(
+            selected = list(rows = NULL, cols = response_var - 1),
+            target = "row",
+            mode = "multiple"
+          ),
+          editable = T,
+          options = list(
+            autoWidth = F,
+            paging = TRUE,
+            pageLength = 20,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            dom='ltBp',
+            buttons = c('copy', 'csv', 'excel'),
+            columnDefs = list(list(
+              targets = '_all', className = 'dt-center'
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "}"
+            )
+          )
+        ) %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatRound(columns = 2:ncol(data),digits = sig_digies)
       })
     }
   }

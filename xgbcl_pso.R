@@ -26,8 +26,6 @@ xgbcl_pso = function(pso_data,
     {
 
       for (i in 1:MC_runs) {
-        
-        incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
 
         # SUBSTITUTE random value FOR RESPONSE VARIABLE non-values and then binarize
         if (loggy == TRUE) {
@@ -108,7 +106,7 @@ xgbcl_pso = function(pso_data,
 
         # Define parameter bounds for PSO
         param_bounds = matrix(
-          c(1, #lower max_depth
+          c(2, #lower max_depth
             5, #upper max_depth
             0.01, #lower eta
             0.3, #upper eta
@@ -116,10 +114,10 @@ xgbcl_pso = function(pso_data,
             0.9, #upper subsample proportion
             0.5, #lower colsamp_bytree
             0.9, #upper colsamp_bytree
-            3, #lower min_child_weight
+            2, #lower min_child_weight
             10, #upper min_child_weight
-            1, #Lower gamma
-            10, #upper gamma
+            0.25, #Lower gamma
+            5, #upper gamma
             floor(0.33*num_rows), #lower nrounds
             3*num_rows), #upper nrounds
           ncol = 2,
@@ -164,7 +162,7 @@ xgbcl_pso = function(pso_data,
                             best_params[6],
                             round(best_params[7],0))
         
-        print(pso_results)
+        incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
       }
     })
   

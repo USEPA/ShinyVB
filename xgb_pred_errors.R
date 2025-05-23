@@ -24,7 +24,7 @@ xgb_pred_fold_errors = function(train_data,
   withProgress(
     message = 'HP Prediction Progress',
     detail = paste("MC runs:", x = 1,"/",MC_runs,"; Fold: ",y=1,"/",tot_folds),
-    value = 0,
+    value = (fold_num/tot_folds-1/tot_folds),
     {
       
       temp_preds = matrix(0, nrow = nrow(test_data), ncol = 2*MC_runs)
@@ -105,7 +105,7 @@ xgb_pred_fold_errors = function(train_data,
         preds = predict(model, X_test)
         temp_preds[,2*i] = round(preds,3)
         
-        shap_values = shap.values(xgb_model = model, X_train = X_test)
+        shap_values = shap.values(xgb_model = model, X_train = X_train)
         mean_shaps = shap_values$mean_shap_score
         shap_names = names(mean_shaps)
         shap_temp = data.frame(cbind(shap_names,mean_shaps))
