@@ -67,7 +67,7 @@ DataPanel = sidebarLayout(
       bs_accordion_multi(multi=FALSE,open=c()),
     
       fluidRow(column(12,downloadButton("save_project", "Save Project"))),
-      fluidRow(column(12,fileInput("load_project", "Load Project", accept = ".RData")))
+      fluidRow(column(12,fileInput("load_project", "Load Project", buttonLabel = "Browse", accept = ".RData")))
   ),
   
   mainPanel = mainPanel(width=9, id = "data_main_panel",

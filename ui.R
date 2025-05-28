@@ -209,6 +209,15 @@ ui = fluidPage(
     #XGBCL_eval {
       width: 125px;
     }
+    .btn-default.btn-file {
+      height: 42px;
+      width: 80px !important;
+      padding: 6px;
+    }
+    .shiny-download-link {
+      height: 35px;
+      padding: 5px;
+    }
     .modal-footer {
       text-align: center;
     }

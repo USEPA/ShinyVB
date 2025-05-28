@@ -42,11 +42,6 @@ xgbcl_call_predict = function(current_data,
   } else {
     data = data[-ignored_rows,]
   }
-  
-  if (binarize) {
-    new_Y = ifelse(test = data[,rv] >= crit_value, yes = 1, no = 0)
-    data[,rv] = new_Y
-  }
 
   # REMOVE NA'S FROM RESPONSE VARIABLE
   data = data[!is.na(data[,rv]), ]

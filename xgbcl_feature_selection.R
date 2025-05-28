@@ -1,5 +1,5 @@
 xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
-                      standardize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
+                      standardize,binarize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
                       max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db) {
   
   set.seed(as.integer(seed))
@@ -11,11 +11,11 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
     xgb_booster = "gbtree"
   }
 
-  if (standardize==TRUE) {
+  if (standardize) {
     
     for (i in 1:nrow(feat_data)) {
       for (j in 1:ncol(feat_data)) {
-        if (is.numeric(feat_data[i,j])==TRUE) {
+        if (is.numeric(feat_data[i,j])) {
           
           range = (max(na.omit(feat_data[,j])) - min(na.omit(feat_data[,j])))
           
@@ -36,7 +36,7 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
   data=data[!is.na(data[,1]),]
   
   # RANDOMIZE DATA
-  if (randomize==TRUE) {
+  if (randomize) {
     random_index = sample(1:nrow(data), nrow(data))
     data = data[random_index, ]
   }
@@ -99,17 +99,21 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
         
         for (j in 1:MC_runs) {
           
-          # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
+          # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS, then binarize response if requested
           if (loggy==TRUE) {
             
             for (z in 1:nrow(temp_data)){
               if (temp_data[z,1]==rc_val) {
                 temp_data[z,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
                 ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
+              } else if (binarize) {
+                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
               }
               
               if (temp_data[z,1]==lc_val) {
                 temp_data[z,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
+                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
+              } else if (binarize) {
                 ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
               }
             }
@@ -119,10 +123,14 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
               if (temp_data[z,1]==rc_val) {
                 temp_data[z,1]=(runif(1, min = rc_lowval, max = rc_upval))
                 ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
+              } else if (binarize) {
+                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
               }
               
               if (temp_data[z,1]==lc_val) {
                 temp_data[z,1]=(runif(1, min = lc_lowval, max = lc_upval))
+                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
+              } else if (binarize) {
                 ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
               }
             }

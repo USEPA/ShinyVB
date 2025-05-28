@@ -27,11 +27,6 @@ xgbcl_call_optimize_HP = function(current_data,
   
   data = current_data
   
-  if (binarize) {
-    new_Y = ifelse(test = data[,resvar] >= crit_value, yes = 1, no = 0)
-    data[,resvar] = new_Y
-  }
-  
   if (is.null(ignored_rows)) {
     data = data
   } else {
@@ -88,6 +83,7 @@ xgbcl_call_optimize_HP = function(current_data,
     swarm_size,
     member_exp,
     ss_exp,
+    binarize,
     crit_value)
   
   return(pso_result)

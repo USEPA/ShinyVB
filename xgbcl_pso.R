@@ -15,6 +15,7 @@ xgbcl_pso = function(pso_data,
                    swarm_size,
                    member_exp,
                    ss_exp,
+                   binarize,
                    crit_value) {
   
   pso_results = matrix(NA, nrow = MC_runs, ncol = 7)
@@ -33,10 +34,14 @@ xgbcl_pso = function(pso_data,
             if (pso_data[j, 1] == rc_val) {
               pso_data[j, 1] = log10(runif(1, min = rc_lowval, max = rc_upval))
               ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
+              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
             }
 
             if (pso_data[j, 1] == lc_val) {
               pso_data[j, 1] = log10(runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
               ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
             }
           }
@@ -45,10 +50,14 @@ xgbcl_pso = function(pso_data,
             if (pso_data[j, 1] == rc_val) {
               pso_data[j, 1] = (runif(1, min = rc_lowval, max = rc_upval))
               ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
+              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
             }
 
             if (pso_data[j, 1] == lc_val) {
               pso_data[j, 1] = (runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
               ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
             }
           }

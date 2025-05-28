@@ -52,10 +52,14 @@ xgbcl_pred_fold_errors = function(train_data,
             if (train_data[j, 2] == rc_val) {
               train_data[j, 2] = log10(runif(1, min = rc_lowval, max = rc_upval))
               ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
+              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
             
             if (train_data[j, 2] == lc_val) {
               train_data[j, 2] = log10(runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
               ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
           }
@@ -64,10 +68,14 @@ xgbcl_pred_fold_errors = function(train_data,
             if (test_data[j, 2] == rc_val) {
               test_data[j, 2] = log10(runif(1, min = rc_lowval, max = rc_upval))
               ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
+              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
             
             if (test_data[j, 2] == lc_val) {
               test_data[j, 2] = log10(runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
               ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
           }
@@ -76,10 +84,14 @@ xgbcl_pred_fold_errors = function(train_data,
             if (train_data[j, 2] == rc_val) {
               train_data[j, 2] = (runif(1, min = rc_lowval, max = rc_upval))
               ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
+              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
             
             if (train_data[j, 2] == lc_val) {
               train_data[j, 2] = (runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
               ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
           }
@@ -87,10 +99,14 @@ xgbcl_pred_fold_errors = function(train_data,
             if (test_data[j, 2] == rc_val) {
               test_data[j, 2] = (runif(1, min = rc_lowval, max = rc_upval))
               ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
+              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
             
             if (test_data[j, 2] == lc_val) {
               test_data[j, 2] = (runif(1, min = lc_lowval, max = lc_upval))
+              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
+            } else if (binarize) {
               ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
             }
           }
