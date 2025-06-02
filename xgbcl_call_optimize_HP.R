@@ -1,9 +1,9 @@
 xgbcl_call_optimize_HP = function(current_data,
-                       resvar,
-                       id_var,
+                       rv,
+                       iv,
                        seed,
                        ignored_rows,
-                       coves_to_use,
+                       feats_to_use,
                        lc_val,
                        rc_val,
                        lc_lowval,
@@ -34,26 +34,26 @@ xgbcl_call_optimize_HP = function(current_data,
   }
   
   # REMOVE NA'S FROM RESPONSE VARIABLE
-  data = data[!is.na(data[,resvar]), ]
+  data = data[!is.na(data[,rv]), ]
   
   #Randomly shuffle the data
   if (randomize) {
     data = data[sample(nrow(data)), ]
   }
   
-  covar_data = data[,coves_to_use]
+  feat_data = data[,feats_to_use]
   
-  std_covar_data = covar_data
+  std_feat_data = feat_data
   
   # Min/Max Standardize the features
   if (standardize) {
-    for (i in 1:nrow(std_covar_data)) {
-      for (j in 1:ncol(std_covar_data)) {
-        if (is.numeric(std_covar_data[i, j])) {
-          if (max(na.omit(std_covar_data[, j])) - min(na.omit(std_covar_data[, j])) == 0) {
-            std_covar_data[i, j] = 0
+    for (i in 1:nrow(std_feat_data)) {
+      for (j in 1:ncol(std_feat_data)) {
+        if (is.numeric(std_feat_data[i, j])) {
+          if (max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j])) == 0) {
+            std_feat_data[i, j] = 0
           } else {
-            std_covar_data[i, j] = (std_covar_data[i, j] - min(na.omit(std_covar_data[, j]))) / (max(na.omit(std_covar_data[, j])) - min(na.omit(std_covar_data[, j])))
+            std_feat_data[i, j] = (std_feat_data[i, j] - min(na.omit(std_feat_data[, j]))) / (max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j])))
           }
         }
       }
@@ -61,14 +61,14 @@ xgbcl_call_optimize_HP = function(current_data,
   }
   
   # Add the standardized features back into the data frame for analysis
-  dataset = cbind(data[,id_var],data[,resvar],std_covar_data)
-  colnames(dataset)[1] = colnames(current_data)[id_var]
-  colnames(dataset)[2] = colnames(current_data)[resvar]
+  dataset = cbind(data[,iv],data[,rv],std_feat_data)
+  colnames(dataset)[1] = colnames(current_data)[iv]
+  colnames(dataset)[2] = colnames(current_data)[rv]
   
   pso_result = xgbcl_pso(
     dataset[,-1],
-    resvar,
-    coves_to_use,
+    rv,
+    feats_to_use,
     lc_val,
     rc_val,
     lc_lowval,

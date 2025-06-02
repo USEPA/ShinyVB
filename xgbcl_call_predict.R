@@ -1,4 +1,4 @@
-xgbcl_call_predict = function(current_data,
+xgbcl_call_predict = function(data0,
                        rv,
                        id_var,
                        seed,
@@ -35,49 +35,11 @@ xgbcl_call_predict = function(current_data,
   
   set.seed(seed)
   
-  data = current_data
-  
-  if (is.null(ignored_rows)) {
-    data = data
-  } else {
-    data = data[-ignored_rows,]
-  }
-
-  # REMOVE NA'S FROM RESPONSE VARIABLE
-  data = data[!is.na(data[,rv]), ]
-  
-  #Randomly shuffle the data
-  if (randomize == TRUE) {
-    data = data[sample(nrow(data)), ]
-  }
-  
-  feat_data = data[,feats_to_use]
-  
-  std_feat_data = feat_data
-  
-  # Min/Max Standardize the features
-  if (standardize == TRUE) {
-    for (i in 1:nrow(std_feat_data)) {
-      for (j in 1:ncol(std_feat_data)) {
-        if (is.numeric(std_feat_data[i, j]) == TRUE) {
-          if (max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j])) == 0) {
-            std_feat_data[i, j] = 0
-          } else {
-            std_feat_data[i, j] = (std_feat_data[i, j] - min(na.omit(std_feat_data[, j]))) / (max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j])))
-          }
-        }
-      }
-    }
-  }
-  
-  # Add the standardized features back into the data frame for analysis
-  dataset = cbind(data[,id_var],data[,rv],std_feat_data)
-  colnames(dataset)[1] = colnames(current_data)[id_var]
-  colnames(dataset)[2] = colnames(current_data)[rv]
+  data = create_data(data0,rv,feats_to_use,ignored_rows,randomize,standardize)
   
   #Create n folds
   tot_folds = nfolds
-  folds = cut(seq(1, nrow(dataset)), breaks = tot_folds, labels = FALSE)
+  folds = cut(seq(1, nrow(data)), breaks = tot_folds, labels = FALSE)
   
   prediction_results = matrix(0, nrow = 0, ncol = length(feats_to_use) + 3)
   prediction_results = data.frame(prediction_results)
@@ -91,8 +53,11 @@ xgbcl_call_predict = function(current_data,
     fold_num = i
     
     testIndices = which(folds == i, arr.ind = TRUE)
-    testData = dataset[testIndices, ]
-    trainData = dataset[-testIndices, ]
+    testData0 = dataset[testIndices, ]
+    trainData0 = dataset[-testIndices, ]
+    
+    testData = testData0[,-1]
+    trainData = testData0[,-1]
     
     prediction_fold_result = xgbcl_pred_fold_errors(
       trainData,
@@ -128,7 +93,7 @@ xgbcl_call_predict = function(current_data,
       crit_value
     )
     
-    prediction_results1 = cbind(testData[,1],prediction_fold_result[[1]],testData[,3:ncol(testData)])
+    prediction_results1 = cbind(testData0[,1],prediction_fold_result[[1]],testData[,2:ncol(testData)])
     prediction_results = rbind(prediction_results, prediction_results1)
     
     pred_shapes[,i+1] = prediction_fold_result[[2]]
@@ -136,7 +101,7 @@ xgbcl_call_predict = function(current_data,
   
   prediction_results[,3:ncol(prediction_results)] = round(prediction_results[,3:ncol(prediction_results)],4)
   prediction_results = prediction_results[order(prediction_results[,1]),]
-  colnames(prediction_results) = c(colnames(current_data)[1],colnames(current_data)[rv], "Predictive_Prob", feats_to_use)
+  colnames(prediction_results) = c(colnames(data0)[1],colnames(data0)[rv], "Predictive_Prob", feats_to_use)
   xgb_predictions = data.frame(prediction_results)
   
   pred_shapes = data.frame(cbind(pred_shapes[,1],format(round(rowMeans(pred_shapes[,-1]),4),scientific=F)))

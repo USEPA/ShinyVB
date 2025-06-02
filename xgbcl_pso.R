@@ -1,6 +1,6 @@
 xgbcl_pso = function(pso_data,
-                   resvar,
-                   coves_to_use,
+                   rv,
+                   feats_to_use,
                    lc_val,
                    rc_val,
                    lc_lowval,
@@ -27,50 +27,24 @@ xgbcl_pso = function(pso_data,
     {
 
       for (i in 1:MC_runs) {
-
-        # SUBSTITUTE random value FOR RESPONSE VARIABLE non-values and then binarize
-        if (loggy == TRUE) {
-          for (j in 1:nrow(pso_data)) {
-            if (pso_data[j, 1] == rc_val) {
-              pso_data[j, 1] = log10(runif(1, min = rc_lowval, max = rc_upval))
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            }
-
-            if (pso_data[j, 1] == lc_val) {
-              pso_data[j, 1] = log10(runif(1, min = lc_lowval, max = lc_upval))
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            }
-          }
-        } else {
-          for (j in 1:nrow(pso_data)) {
-            if (pso_data[j, 1] == rc_val) {
-              pso_data[j, 1] = (runif(1, min = rc_lowval, max = rc_upval))
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            }
-
-            if (pso_data[j, 1] == lc_val) {
-              pso_data[j, 1] = (runif(1, min = lc_lowval, max = lc_upval))
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            }
+        
+        MC_data = MC_subbin(pso_data,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval,rc_upval)
+        
+        
+        if (LG_binarize) {
+          for (j in 1:nrow(MC_data)) {
+            MC_data[j, 1] = ifelse(test = MC_data[j, 1] >= crit_value, yes = 1, no = 0)
           }
         }
 
         # Prepare data matrices for XGBoost
-        X_train = as.matrix(pso_data[,-1])
-        y_train = pso_data[,1]
+        X_train = as.matrix(MC_data[,-1])
+        y_train = MC_data[,1]
 
         data = xgb.DMatrix(data = X_train, label = y_train)
 
-        num_cols = ncol(pso_data)-1
-        num_rows = nrow(pso_data)
+        num_cols = ncol(MC_data)-1
+        num_rows = nrow(MC_data)
 
         # Cross-validation function to evaluate XGBoost performance with given parameters
         xgb_cv_score = function(params) {

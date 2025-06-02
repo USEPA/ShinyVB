@@ -2,7 +2,7 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
                       standardize,binarize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
                       max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db) {
   
-  set.seed(as.integer(seed))
+  set.seed(seed)
   
   selector = "SHAP"
   feat_data=data0[,feats_to_use]
@@ -10,36 +10,9 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
   if(xgb_booster == "-") {
     xgb_booster = "gbtree"
   }
-
-  if (standardize) {
-    
-    for (i in 1:nrow(feat_data)) {
-      for (j in 1:ncol(feat_data)) {
-        if (is.numeric(feat_data[i,j])) {
-          
-          range = (max(na.omit(feat_data[,j])) - min(na.omit(feat_data[,j])))
-          
-          if (range == 0) {
-            feat_data[i,j] = 0
-          } else {
-            feat_data[i,j]=(feat_data[i,j] - min(na.omit(feat_data[,j]))) / range
-          }
-        }
-      }
-    }
-  }
   
-  data = data.frame(cbind(data0[,rv],feat_data))
-  colnames(data) = c(colnames(data0)[rv],feats_to_use)
-
-  # REMOVE NA'S FROM RESPONSE VARIABLE
-  data=data[!is.na(data[,1]),]
-  
-  # RANDOMIZE DATA
-  if (randomize) {
-    random_index = sample(1:nrow(data), nrow(data))
-    data = data[random_index, ]
-  }
+  data1 = create_data(data0,rv,feats_to_use,ignored_rows,randomize,standardize)
+  data = data1[,-1]
   
   # Variable Selection Routine based on SHAP variable importance
   
@@ -99,46 +72,17 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
         
         for (j in 1:MC_runs) {
           
-          # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS, then binarize response if requested
-          if (loggy==TRUE) {
-            
-            for (z in 1:nrow(temp_data)){
-              if (temp_data[z,1]==rc_val) {
-                temp_data[z,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
-                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
-              } else if (binarize) {
-                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
-              }
-              
-              if (temp_data[z,1]==lc_val) {
-                temp_data[z,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
-                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
-              } else if (binarize) {
-                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
-              }
-            }
-          } else {
-            
-            for (z in 1:nrow(temp_data)){
-              if (temp_data[z,1]==rc_val) {
-                temp_data[z,1]=(runif(1, min = rc_lowval, max = rc_upval))
-                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
-              } else if (binarize) {
-                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
-              }
-              
-              if (temp_data[z,1]==lc_val) {
-                temp_data[z,1]=(runif(1, min = lc_lowval, max = lc_upval))
-                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
-              } else if (binarize) {
-                ifelse(test = temp_data[z, 1] >= crit_value, yes = 1, no = 0)
-              }
+          MC_data = MC_subbin(temp_data,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval)
+          
+          if (binarize) {
+            for (j in 1:nrow(MC_data)) {
+              MC_data[j, 1] = ifelse(test = MC_data[j, 1] >= crit_value, yes = 1, no = 0)
             }
           }
           
-          train_ind = sample(seq_len(nrow(temp_data)), size = smp_size)
-          train = temp_data[train_ind, ]
-          test = temp_data[-train_ind, ]
+          train_ind = sample(seq_len(nrow(MC_data)), size = smp_size)
+          train = MC_data[train_ind, ]
+          test = MC_data[-train_ind, ]
           
           temp_model = xgboost(data = as.matrix(train[,-1]), label=train[,1], params=params, early_stopping_rounds=20, nrounds=nrounds, verbose=0)
           

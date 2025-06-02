@@ -54,6 +54,14 @@ ui = fluidPage(
       width: 80px;
       height: 35px;
     }
+    #num_preds {
+      width: 100px;
+      height: 40px;
+    }
+    #conf_bound {
+      width: 100px;
+      height: 40px;
+    }
     #lc_val {
       width: 100px;
       height: 35px;

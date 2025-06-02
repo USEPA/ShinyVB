@@ -1,45 +1,18 @@
-xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
-                      xgb_standardize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
+xgb_selection = function(data0,seed,rv,feats_to_use,ignored_rows,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
+                      standardize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
                       max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db) {
   
   set.seed(as.integer(seed))
   
   selector = "SHAP"
-  feat_data=xgb_select_data[,feats_to_use]
+  feat_data=data0[,feats_to_use]
   
   if(xgb_booster == "-") {
     xgb_booster = "gbtree"
   }
 
-  if (xgb_standardize==TRUE) {
-    
-    for (i in 1:nrow(feat_data)) {
-      for (j in 1:ncol(feat_data)) {
-        if (is.numeric(feat_data[i,j])==TRUE) {
-          
-          range = (max(na.omit(feat_data[,j])) - min(na.omit(feat_data[,j])))
-          
-          if (range == 0) {
-            feat_data[i,j] = 0
-          } else {
-            feat_data[i,j]=(feat_data[i,j] - min(na.omit(feat_data[,j]))) / range
-          }
-        }
-      }
-    }
-  }
-  
-  data = data.frame(cbind(xgb_select_data[,rv],feat_data))
-  colnames(data) = c(colnames(xgb_select_data)[rv],feats_to_use)
-  
-  # REMOVE NA'S FROM RESPONSE VARIABLE
-  data=data[!is.na(data[,1]),]
-  
-  # RANDOMIZE DATA
-  if (randomize==TRUE) {
-    random_index = sample(1:nrow(data), nrow(data))
-    data = data[random_index, ]
-  }
+  data1 = create_data(data0,rv,feats_to_use,ignored_rows,randomize,standardize)
+  data = data1[,-1]
   
   # Variable Selection Routine based on SHAP variable importance
   
@@ -95,34 +68,11 @@ xgb_selection = function(xgb_select_data,seed,rv,feats_to_use,lc_val,rc_val,lc_l
         
         for (j in 1:MC_runs) {
           
-          # SUBSTITUTE random value FOR RESPONSE VARIABLE NON-DETECTS
-          if (loggy==TRUE) {
-            
-            for (z in 1:nrow(temp_data)){
-              if (temp_data[z,1]==rc_val) {
-                temp_data[z,1]=log10(runif(1, min = rc_lowval, max = rc_upval))
-              }
-              
-              if (temp_data[z,1]==lc_val) {
-                temp_data[z,1]=log10(runif(1, min = lc_lowval, max = lc_upval))
-              }
-            }
-          } else {
-            
-            for (z in 1:nrow(temp_data)){
-              if (temp_data[z,1]==rc_val) {
-                temp_data[z,1]=(runif(1, min = rc_lowval, max = rc_upval))
-              }
-              
-              if (temp_data[z,1]==lc_val) {
-                temp_data[z,1]=(runif(1, min = lc_lowval, max = lc_upval))
-              }
-            }
-          }
+          MC_data = MC_subbin(temp_data,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval,rc_upval)
           
-          train_ind = sample(seq_len(nrow(temp_data)), size = smp_size)
-          train = temp_data[train_ind, ]
-          test = temp_data[-train_ind, ]
+          train_ind = sample(seq_len(nrow(MC_data)), size = smp_size)
+          train = MC_data[train_ind, ]
+          test = MC_data[-train_ind, ]
           
           temp_model = xgboost(data = as.matrix(train[,-1]), label=train[,1], params=params, early_stopping_rounds=20, nrounds=nrounds, verbose=0)
           

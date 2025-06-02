@@ -1,5 +1,5 @@
-xgbcl_pred_fold_errors = function(train_data,
-                                test_data,
+xgbcl_pred_fold_errors = function(trainData,
+                                testData,
                                 rv,
                                 feats_to_use,
                                 eval_metric,
@@ -45,73 +45,20 @@ xgbcl_pred_fold_errors = function(train_data,
       
       
       for (i in 1:MC_runs) {
-
-        # SUBSTITUTE random value FOR RESPONSE VARIABLE non-values and then binarize
-        if (loggy == TRUE) {
+        
+        train_data = MC_subbin(trainData, loggy, lc_val, lc_lowval, lc_upval, rc_val, rc_lowval, rc_upval)
+        
+        test_data = MC_subbin(testData, loggy, lc_val, lc_lowval, lc_upval, rc_val, rc_lowval, rc_upval)
+        
+        if (binarize) {
           for (j in 1:nrow(train_data)) {
-            if (train_data[j, 2] == rc_val) {
-              train_data[j, 2] = log10(runif(1, min = rc_lowval, max = rc_upval))
-              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
-            }
-            
-            if (train_data[j, 2] == lc_val) {
-              train_data[j, 2] = log10(runif(1, min = lc_lowval, max = lc_upval))
-              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
-            }
-          }
-          
-          for (j in 1:nrow(test_data)) {
-            if (test_data[j, 2] == rc_val) {
-              test_data[j, 2] = log10(runif(1, min = rc_lowval, max = rc_upval))
-              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
-            }
-            
-            if (test_data[j, 2] == lc_val) {
-              test_data[j, 2] = log10(runif(1, min = lc_lowval, max = lc_upval))
-              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
-            }
-          }
-        } else {
-          for (j in 1:nrow(train_data)) {
-            if (train_data[j, 2] == rc_val) {
-              train_data[j, 2] = (runif(1, min = rc_lowval, max = rc_upval))
-              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
-            }
-            
-            if (train_data[j, 2] == lc_val) {
-              train_data[j, 2] = (runif(1, min = lc_lowval, max = lc_upval))
-              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = train_data[j, 2] >= crit_value, yes = 1, no = 0)
-            }
+            train_data[j, 1] = ifelse(test = train_data[j, 1] >= crit_value, yes = 1, no = 0)
           }
           for (j in 1:nrow(test_data)) {
-            if (test_data[j, 2] == rc_val) {
-              test_data[j, 2] = (runif(1, min = rc_lowval, max = rc_upval))
-              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
-            }
-            
-            if (test_data[j, 2] == lc_val) {
-              test_data[j, 2] = (runif(1, min = lc_lowval, max = lc_upval))
-              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
-            } else if (binarize) {
-              ifelse(test = test_data[j, 2] >= crit_value, yes = 1, no = 0)
-            }
+            test_data[j, 1] = ifelse(test = test_data[j, 1] >= crit_value, yes = 1, no = 0)
           }
         }
-        
+
         temp_preds[,2*i-1] = test_data[,2]
         
         # Prepare data for XGBoost
