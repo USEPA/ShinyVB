@@ -19,8 +19,8 @@ xgb_pred_fold_errors = function(train_data,
                                 min_child_weight,
                                 subsamp,
                                 colsamp,
-                                nrounds) {
-  
+                                nrounds,
+                                MC_subbin) {
   withProgress(
     message = 'HP Prediction Progress',
     detail = paste("MC runs:", x = 1,"/",MC_runs,"; Fold: ",y=1,"/",tot_folds),
@@ -34,7 +34,6 @@ xgb_pred_fold_errors = function(train_data,
       temp_shapes = data.frame(temp_shapes)
       temp_shapes[,1] = feats_to_use
       
-      
       for (i in 1:MC_runs) {
         
         trainData = MC_subbin(train_data,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval,rc_upval)
@@ -43,12 +42,10 @@ xgb_pred_fold_errors = function(train_data,
         temp_preds[,2*i-1] = testData[,1]
         
         # Prepare data for XGBoost
-        X_train0 = trainData[,-1]
-        X_train = as.matrix(X_train0[,-1])
+        X_train = as.matrix(train_data[,-1])
         y_train = trainData[,1]
-        
-        X_test0 = test_data[,-1]
-        X_test = as.matrix(X_test0[,-1])
+
+        X_test = as.matrix(test_data[,-1])
         y_test = test_data[,1]
         
         params = list(
@@ -61,19 +58,19 @@ xgb_pred_fold_errors = function(train_data,
         )
         
         #train a model
-        model = xgboost(data = X_train,label=y_train, params=params, early_stopping_rounds=10, nrounds=nrounds, verbose=0)
+        train_model = xgboost(data = X_train,label=y_train, params=params, early_stopping_rounds=10, nrounds=nrounds, verbose=0)
         
-        preds = predict(model, X_test)
+        preds = predict(train_model, X_test)
         temp_preds[,2*i] = round(preds,3)
         
-        shap_values = shap.values(xgb_model = model, X_train = X_train)
+        shap_values = shap.values(train_model, X_train = X_train)
         mean_shaps = shap_values$mean_shap_score
         shap_names = names(mean_shaps)
-        shap_temp = data.frame(cbind(shap_names,mean_shaps))
+        shap_temp = data.frame(cbind(shap_names,mean_shaps),row.names=NULL)
         
         for (c in 1:nrow(temp_shapes)) {
-          current_cove = temp_shapes[c,1]
-          temp_shapes[c,i+1] = as.numeric(shap_temp[shap_temp[,1] == current_cove,2])
+          current_feat = temp_shapes[c,1]
+          temp_shapes[c,i+1] = as.numeric(shap_temp[shap_temp[,1] == current_feat,2])
         }
         
         incProgress(1/(MC_runs*tot_folds), detail = paste("MC run: ",i,"/",MC_runs,"; Fold: ",fold_num,"/",tot_folds))
@@ -89,9 +86,7 @@ xgb_pred_fold_errors = function(train_data,
   pred_mean_values = rowMeans(even_columns)
   fold_preds = cbind(obs_mean_values,pred_mean_values)
   
-  temp_shapes = data.frame(temp_shapes[,-1])
-  
-  MC_shapes = rowMeans(temp_shapes)
+  MC_shapes = rowMeans(temp_shapes[,-1])
   
   return(list(fold_preds,MC_shapes))
 }

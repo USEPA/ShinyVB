@@ -14,7 +14,8 @@ xgb_pso = function(pso_data,
                    max_iter,
                    swarm_size,
                    member_exp,
-                   ss_exp) {
+                   ss_exp,
+                   MC_subbin) {
   
   pso_results = matrix(NA, nrow = MC_runs, ncol = 7)
 

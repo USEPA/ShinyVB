@@ -41,7 +41,7 @@ ModelingPanel = sidebarLayout(
                    column(5, numericInput("rc_upval", label='Upper', value = 10000)),
                    column(2)),
           fluidRow(column(6, numericInput("train_pct",  label="% Training", value = 75, min=1,max=100,step=1)),
-                   column(6, numericInput("MC_runs",  label="Monte Carlo Runs", value = 10, min=1,max=10000,step=1))),
+                   column(6, numericInput("MC_runs",  label="Monte Carlo Runs", value = 2, min=2,max=10000,step=1))),
           fluidRow(column(6, numericInput("num_folds",  label="CV Folds", value = 5, min=2,max=20,step=1)),
                    column(6, numericInput("model_seed",  label="Rnd Seed", value = 1234, min=1,step=1))),
           fluidRow(column(12,switchInput("loggy", label="Log10 Response?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
@@ -76,7 +76,7 @@ ModelingPanel = sidebarLayout(
                    column(7,actionButton("XGBCL_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
           fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
           fluidRow(column(6,align="left",actionButton("run_XGBCL_select", "Feature Selection", style = 'width:130px; padding:2px; vertical-align: -32px')),
-                   column(6, div(style = "display: inline-block;",numericInput("testcl_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05)))),
+                   column(6, div(style = "display: inline-block;",numericInput("testcl_weight", label = "Test Weight", value = 0.20, min = 0, max=1, step=0.05)))),
           # fluidRow(column(12,align="right",actionButton("XGBCL_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
           fluidRow(column(6,actionButton("run_pred_XGBCL", "Predictions", style = 'width:100px; padding:2px;')),
@@ -99,7 +99,7 @@ ModelingPanel = sidebarLayout(
       
       bs_append (
         title = "XGBoost", content= card(
-          fluidRow(column(12, switchInput("XGB_standardize", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+          fluidRow(column(12, switchInput("XGB_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
           fluidRow(column(5,actionButton("XGB_params", "HP Values", style = 'background-color:#eee; width:90px; padding:2px;')),
                    column(7,actionButton("XGB_optimize_HP", "HP Optimization", style = 'background-color:#eee; width:130px; padding:2px;'))),
           fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),

@@ -30,13 +30,37 @@ xgbcl_pred_fold_errors = function(trainData,
                                 binarize,
                                 crit_value) {
   
+  MC_subbin = function(data,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval,rc_upval) {
+    
+    if (loggy) {
+      for (j in 1:nrow(data)) {
+        if (data[j, 1] == lc_val) {
+          data[j, 1] = log10(runif(1, min = lc_lowval, max = lc_upval))
+        }
+        if (data[j, 1] == rc_val) {
+          data[j, 1] = log10(runif(1, min = rc_lowval, max = rc_upval))
+        }
+      }
+    } else {
+      for (j in 1:nrow(data)) {
+        if (data[j, 1] == lc_val) {
+          data[j, 1] = (runif(1, min = lc_lowval, max = lc_upval))
+        }
+        if (data[j, 1] == rc_val) {
+          data[j, 1] = (runif(1, min = rc_lowval, max = rc_upval))
+        }
+      }
+    }
+    MC_data = data
+  }
+  
   withProgress(
     message = 'HP Prediction Progress',
     detail = paste("MC runs:", x = 1,"/",MC_runs,"; Fold: ",y=1,"/",tot_folds),
     value = (fold_num/tot_folds-1/tot_folds),
     {
       
-      temp_preds = matrix(0, nrow = nrow(test_data), ncol = 2*MC_runs)
+      temp_preds = matrix(0, nrow = nrow(testData), ncol = 2*MC_runs)
       temp_preds = data.frame(temp_preds)
       
       temp_shapes = matrix(0, nrow = length(feats_to_use), ncol = MC_runs+1)
@@ -59,16 +83,14 @@ xgbcl_pred_fold_errors = function(trainData,
           }
         }
 
-        temp_preds[,2*i-1] = test_data[,2]
+        temp_preds[,2*i-1] = test_data[,1]
         
         # Prepare data for XGBoost
-        X_train0 = train_data[,-1]
-        X_train = as.matrix(X_train0[,-1])
-        y_train = train_data[,2]
-        
-        X_test0 = test_data[,-1]
-        X_test = as.matrix(X_test0[,-1])
-        y_test = test_data[,2]
+        X_train = as.matrix(train_data[,-1])
+        y_train = train_data[,1]
+
+        X_test = as.matrix(test_data[,-1])
+        y_test = test_data[,1]
         
         # Set up XGBoost parameters
         

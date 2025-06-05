@@ -1,8 +1,8 @@
 xgb_selection = function(data0,seed,rv,feats_to_use,ignored_rows,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                       standardize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
-                      max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db) {
+                      max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db,MC_subbin,create_data) {
   
-  set.seed(as.integer(seed))
+  set.seed(seed)
   
   selector = "SHAP"
   feat_data=data0[,feats_to_use]

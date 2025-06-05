@@ -1,7 +1,72 @@
-xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
+xgbcl_selection = function(data0,seed,rv,feats_to_use,ignored_rows,crit_value,eval_metric,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                       standardize,binarize,xgb_tree_method,xgb_booster,normalize_type,sample_type,rate_drop,skip_drop,eta,gamma,
                       max_depth,min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db) {
   
+  MC_subbin = function(data,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval,rc_upval) {
+    
+    if (loggy) {
+      for (j in 1:nrow(data)) {
+        if (data[j, 1] == lc_val) {
+          data[j, 1] = log10(runif(1, min = lc_lowval, max = lc_upval))
+        }
+        if (data[j, 1] == rc_val) {
+          data[j, 1] = log10(runif(1, min = rc_lowval, max = rc_upval))
+        }
+      }
+    } else {
+      for (j in 1:nrow(data)) {
+        if (data[j, 1] == lc_val) {
+          data[j, 1] = (runif(1, min = lc_lowval, max = lc_upval))
+        }
+        if (data[j, 1] == rc_val) {
+          data[j, 1] = (runif(1, min = rc_lowval, max = rc_upval))
+        }
+      }
+    }
+    data
+  }
+  
+  create_data = function(data,rv,feats_to_use,ignored_rows,randomize,standardize) {
+    
+    if (is.null(ignored_rows)) {
+      data = data
+    } else {
+      data = data[-ignored_rows,]
+    }
+    
+    data = data[!is.na(data[,rv]),]
+    
+    var_list = c(1,rv,which(colnames(data) %in% feats_to_use))
+    data1 = data[,var_list]
+    colnames(data1) = c(colnames(data)[1],"Response",feats_to_use)
+    
+    if (randomize) {
+      random_index = sample(1:nrow(data1), nrow(data1))
+      data1 = data1[random_index, ]
+    }
+    
+    if (standardize) {
+      
+      for (i in 1:nrow(data1)) {
+        for (j in 3:ncol(data1)) {
+          if (is.numeric(data1[i,j])) {
+            
+            range = (max(na.omit(data1[,j])) - min(na.omit(data1[,j])))
+            
+            if (range == 0) {
+              data1[i,j] = 0
+            } else if (range < 1) {
+              data1[i,j]= (1 + (data1[i,j] - min(na.omit(data1[,j])))) / (range+1)
+            } else {
+              data1[i,j]=(data1[i,j] - min(na.omit(data1[,j]))) / range
+            }
+          }
+        }
+      }
+    }
+    data1
+  }
+
   set.seed(seed)
   
   selector = "SHAP"
@@ -70,13 +135,13 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
         gain_train = matrix(0,nrow=ncol(temp_data)-1,ncol=MC_runs+1)
         shap_train = matrix(0,nrow=ncol(temp_data)-1,ncol=MC_runs+1)
         
-        for (j in 1:MC_runs) {
+        for (m in 1:MC_runs) {
           
           MC_data = MC_subbin(temp_data,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval)
           
           if (binarize) {
-            for (j in 1:nrow(MC_data)) {
-              MC_data[j, 1] = ifelse(test = MC_data[j, 1] >= crit_value, yes = 1, no = 0)
+            for (c in 1:nrow(MC_data)) {
+              MC_data[c, 1] = ifelse(test = MC_data[c, 1] >= crit_value, yes = 1, no = 0)
             }
           }
           
@@ -103,8 +168,8 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
           LLfit = -sumLLfit
           LLpred = -sumLLpred
           
-          LL_temp_train[j,1]= LLfit
-          LL_temp_test[j,1]= LLpred
+          LL_temp_train[m,1]= LLfit
+          LL_temp_test[m,1]= LLpred
 
           # Recording Gain
           
@@ -119,9 +184,9 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
             feat_name = gain_train[f,1]
             
             if (feat_name %in% gain_temp$Feature) {
-              gain_train[f,j+1] = as.numeric(unlist(subset(gain_temp, gain_temp$Feature == feat_name, select = "Gain")))
+              gain_train[f,m+1] = as.numeric(unlist(subset(gain_temp, gain_temp$Feature == feat_name, select = "Gain")))
             } else {
-              gain_train[f,j+1] = 0.0000
+              gain_train[f,m+1] = 0.0000
             }
           }
           
@@ -137,10 +202,10 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
           
           for (c in 1:nrow(shap_train)) {
             current_feat = shap_train[c,1]
-            shap_train[c,j+1] = shap_temp[shap_temp[,1] == current_feat,2]
+            shap_train[c,m+1] = shap_temp[shap_temp[,1] == current_feat,2]
           }
           
-          incProgress(1/(remaining*MC_runs),detail = paste0("Features remaining:",ncol(train)-1,"; Current iteration:",j,"/",MC_runs))
+          incProgress(1/(remaining*MC_runs),detail = paste0("Features remaining:",ncol(train)-1,"; Current iteration:",m,"/",MC_runs))
           
         } #END the MC/Iterations Loop
         
@@ -184,7 +249,6 @@ xgbcl_selection = function(data0,seed,rv,feats_to_use,crit_value,eval_metric,lc_
         Iteration_results[i,5] = round(lowest_shap,5)
         Iteration_results[i,6] = round(LL_mean_train,4)
         Iteration_results[i,7] = round(LL_mean_test,4)
-        #Iteration_results[i,8] = round(test_weight*LL_mean_test+(1-test_weight)*LL_mean_train,4)
         
         # Drop lowest SHAP or Gain
         

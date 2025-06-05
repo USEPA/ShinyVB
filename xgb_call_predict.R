@@ -22,7 +22,9 @@ xgb_call_predict = function(data0,
                        min_child_weight,
                        subsamp,
                        colsamp,
-                       nrounds) {
+                       nrounds,
+                       MC_subbin,
+                       create_data) {
   
   set.seed(seed)
   
@@ -72,7 +74,8 @@ xgb_call_predict = function(data0,
       min_child_weight,
       subsamp,
       colsamp,
-      nrounds
+      nrounds,
+      MC_subbin
     )
     
     prediction_results1 = cbind(testData0[,1],prediction_fold_result[[1]],testData[,2:ncol(testData)])

@@ -9,6 +9,15 @@ ui = fluidPage(
   
   useShinyjs(),
   
+  tags$script(HTML("
+    Shiny.addCustomMessageHandler('disableData', function(message) {
+        $('#shinyVB li:eq(2)').addClass('disabled');
+      });
+      
+    Shiny.addCustomMessageHandler('disableModeling', function(message) {
+        $('#shinyVB li:eq(3)').addClass('disabled');
+      });")),
+  
   tags$head(tags$style(HTML('
     .selectize-input {white-space: nowrap}
     #send_plot+ div>.selectize-dropdown{width: 100px !important;}
@@ -175,6 +184,10 @@ ui = fluidPage(
        position: fixed;
        top: 45%;
        left: 45%;
+    }
+    .navbar-nav li.disabled {
+        pointer-events: none;
+        opacity: 0.5;
     }
     .btn-default:hover {
        background-color: #2c3e50;

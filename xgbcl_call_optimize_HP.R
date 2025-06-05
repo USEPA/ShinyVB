@@ -52,6 +52,8 @@ xgbcl_call_optimize_HP = function(current_data,
         if (is.numeric(std_feat_data[i, j])) {
           if (max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j])) == 0) {
             std_feat_data[i, j] = 0
+          } else if (max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j])) < 1) {
+            std_feat_data[i, j] = (1+(std_feat_data[i, j] - min(na.omit(std_feat_data[, j])))) / (1+(max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j]))))
           } else {
             std_feat_data[i, j] = (std_feat_data[i, j] - min(na.omit(std_feat_data[, j]))) / (max(na.omit(std_feat_data[, j])) - min(na.omit(std_feat_data[, j])))
           }

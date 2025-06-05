@@ -2,7 +2,6 @@ raincloud = function(data,date_format_string) {
   
   data = data.frame(data)
   
-  print(data)
   data[,2] = as.numeric(data[,2])
   
   name = colnames(data)[2]

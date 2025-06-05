@@ -18,6 +18,30 @@ xgbcl_pso = function(pso_data,
                    binarize,
                    crit_value) {
   
+  MC_subbin = function(data,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval,rc_upval) {
+    
+    if (loggy) {
+      for (j in 1:nrow(data)) {
+        if (data[j, 1] == lc_val) {
+          data[j, 1] = log10(runif(1, min = lc_lowval, max = lc_upval))
+        }
+        if (data[j, 1] == rc_val) {
+          data[j, 1] = log10(runif(1, min = rc_lowval, max = rc_upval))
+        }
+      }
+    } else {
+      for (j in 1:nrow(data)) {
+        if (data[j, 1] == lc_val) {
+          data[j, 1] = (runif(1, min = lc_lowval, max = lc_upval))
+        }
+        if (data[j, 1] == rc_val) {
+          data[j, 1] = (runif(1, min = rc_lowval, max = rc_upval))
+        }
+      }
+    }
+    data
+  }
+  
   pso_results = matrix(NA, nrow = MC_runs, ncol = 7)
 
   withProgress(
@@ -31,7 +55,7 @@ xgbcl_pso = function(pso_data,
         MC_data = MC_subbin(pso_data,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval,rc_upval)
         
         
-        if (LG_binarize) {
+        if (binarize) {
           for (j in 1:nrow(MC_data)) {
             MC_data[j, 1] = ifelse(test = MC_data[j, 1] >= crit_value, yes = 1, no = 0)
           }

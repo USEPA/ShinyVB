@@ -51,8 +51,9 @@ renderpreddata = function(data,
           )
         )
       ) %>%
-        formatStyle(1, backgroundColor = 'lightgray') %>%
-        formatStyle(2, backgroundColor = "#b0bed9") %>%
+        formatStyle(columns = 1:2, backgroundColor = "lightgray") %>%
+        formatStyle(columns = 3:(ncol(data)-3), backgroundColor = "#aaeeaa") %>%
+        formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
         formatRound(columns = 2:ncol(data), digits = sig_digies) %>%
         formatDate(1, date_format_string)
     })
@@ -87,8 +88,9 @@ renderpreddata = function(data,
           )
         )
       ) %>%
-        formatStyle(1, backgroundColor = 'lightgray') %>%
-        formatStyle(2, backgroundColor = "#b0bed9") %>%
+        formatStyle(columns = 1:2, backgroundColor = "lightgray") %>%
+        formatStyle(columns = 3:(ncol(data)-3), backgroundColor = "#aaeeaa") %>%
+        formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
         formatRound(columns = 1:ncol(data),digits = sig_digies)
     })
   } else if (date_format_string == "Character") {
@@ -121,8 +123,9 @@ renderpreddata = function(data,
           )
         )
       ) %>%
-        formatStyle(1, backgroundColor = 'lightgray') %>%
-        formatStyle(2, backgroundColor = "#b0bed9") %>%
+        formatStyle(columns = 1:2, backgroundColor = "lightgray") %>%
+        formatStyle(columns = 3:(ncol(data)-3), backgroundColor = "#aaeeaa") %>%
+        formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
         formatRound(columns = 2:ncol(data),digits = sig_digies)
     })
   }
