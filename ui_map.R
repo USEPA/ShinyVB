@@ -13,7 +13,10 @@ MapPanel = sidebarLayout(
                               fluidRow(column(6,h5(HTML("<i>Zoom Level >= 11</i>"))),
                                        column(6,h5(HTML("<i>Zoom Level >= 13</i>")))),
                               fluidRow(column(6, switchInput("show_stations", label="Show Stations?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small")),
-                                       column(6, switchInput("show_shorelines", label="Show Beaches?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small")))),
+                                       column(6, switchInput("show_shorelines", label="Show Beaches?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
+                              fluidRow(
+                                column(12,tags$h5("Monitoring stations and beach shorelines are only shown in the visible area of the map. If you pan to a different area, deselect then reselect
+                                                  the 'Show' buttons.")))),
 
   
   mainPanel = mainPanel(id="mapmainpanel",width=9,

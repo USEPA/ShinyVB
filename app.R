@@ -175,15 +175,6 @@ source("xgbcl_pso.R")
 
 server= function(input,output,session) {
 
-  disable_condition = reactiveVal(FALSE)
-  
-  observeEvent(disable_condition(), {
-    if (disable_condition()) {
-      session$sendCustomMessage(type = 'disableData', message = NULL)
-      session$sendCustomMessage(type = 'disableModeling', message = NULL)
-    }
-  })
-
   # Code to show what libraries are in use by the project
   # funcs = 
   #   list.files(here::here(), pattern ="\\.R$", recursive = TRUE, full.names = TRUE) %>%
@@ -424,6 +415,7 @@ server= function(input,output,session) {
   EN_model_PCA = reactiveVal(FALSE)
   EN_standardize = reactiveVal(TRUE)
   
+  # Parameters needed for Prediction Tab
   final_model_PCA = reactiveVal(FALSE)
   feature_mismatch = reactiveVal(FALSE)
   standard_mismatch = reactiveVal(FALSE)
@@ -559,7 +551,7 @@ server= function(input,output,session) {
   
   output$bo_text = renderUI({
     HTML("To determine site orientation, click once anywhere on the shoreline, then again on another point on the shoreline. 
-      A third click, <b>made in the water</b>, calculates/saves the site orientation. A fourth click starts the process over.
+      A third click, <b>made in the water</b>, calculates/saves the site orientation. A fourth click re-starts the process.
          <br><br><i>Note: A newly-calculated orientation replaces the previous one.</i>")
   })
   
@@ -1025,9 +1017,11 @@ server= function(input,output,session) {
         updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
         updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
         
+        session$sendCustomMessage(type = 'enableTabs', message = list(action = 'enable'))
+        
       } else if (temp_env$save_list$type == "Prediction") {
         
-        disable_condition(TRUE)
+        session$sendCustomMessage(type = 'disableTabs', message = list(action = 'disable'))
         updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Prediction')
       }
       
@@ -4922,17 +4916,17 @@ server= function(input,output,session) {
       } else if (input$model_choice == "XGB_Classifier") {
         
         if (final_model_PCA()) {
-          predictions = predict(model, newdata = pred_pca_data, type="response")
+          predictions = predict(model, newdata = as.matrix(pred_pca_data, type="response"))
         } else {
-          predictions = predict(model, newdata = pred_feat_data, type="response")
+          predictions = predict(model, newdata = as.matrix(pred_feat_data, type="response"))
         }
         
       } else if (input$model_choice == "XGBoost") {
         
         if (final_model_PCA()) {
-          predictions = predict(model, newdata = pred_pca_data)
+          predictions = predict(model, newdata = as.matrix(pred_pca_data))
         } else {
-          predictions = predict(model, newdata = pred_feat_data)
+          predictions = predict(model, newdata = as.matrix(pred_feat_data))
         }
         
       } else if (input$model_choice == "Elastic_Net") {
@@ -4961,7 +4955,7 @@ server= function(input,output,session) {
         upper_bound = round(predictions + crit_value,3)
         lower_bound = round(predictions - crit_value,3)
         
-        if (input$model_choice == "LG_model" || input$model_choice == "XGBCL_model") {
+        if (input$model_choice == "Logistic_Regression" || input$model_choice == "XGB_Classifier") {
           upper_bound[upper_bound > 1] = 1
           lower_bound[lower_bound < 0] = 0
         }

@@ -25,86 +25,16 @@ ui = fluidPage(
   
   tags$style(HTML("
   
-    .tabbable > .nav > li > a {
-      background-color: lightgray;
-      color:black;
-    }
-    .tabbable > .nav > li[class=active] > a {
-      background-color: #2c3e50 !important;
-      color:white !important;
-    }
-    .bslib-card .card-body {
-       overflow:hidden;
-    }
-    .shiny-notification {
-       position: fixed;
-       top: 45%;
-       left: 45%;
-    }
+    .tabbable > .nav > li > a                  {background-color: lightgray;  color:black}
+    
+    .tabbable > .nav > li[class=active]    > a {background-color: #2c3e50; color:white}
+
     .btn-default {
-       margin: 2px 2px !important;
-       font-size: 14px !important;
-       color: black !important;
-       background-color: #bbbbbb !important;
-       border-color: #2c3e50 !important;
-       text-align: center !important;
-    }
-    .tab-pane {
-      height: calc(100vh - 120px) !important;
-    }
-    .navbar-nav li.disabled {
-        pointer-events: none;
-        opacity: 0.5;
-    }
-    .btn-default:hover {
-       background-color: #2c3e50 !important;
-       color: #18bc9c !important;
-    }
-    .btn.checkbtn.btn-custom.active {
-        background-color: #2c3e50;
-        color: white;
-        border-color: green;
-    }
-    .btn.checkbtn.btn-custom {
-       background-color: #cccccc;
-       color: #111111;
+       margin: 2px 2px;
+       font-size: 14px;
+       color: gray;
        border-color: #2c3e50;
-    }
-    .panel-heading:hover {
-      background-color: #cccccc;
-      color: #18bc9c;
-    }
-    .panel-body {
-      background-color: #ecf0f1;
-    }
-    .shiny-input-panel {
-        margin: 0px 0px;
-        padding: 0px 0px;
-        border: 0px solid #e3e3e3;
-        background-color: #ecf0f1;
-    }
-    .shiny-input-container {
-        margin-top: 2px;
-        margin-bottom: 2px;
-    }
-    .selectize-input {
-      width: 110px;
-    }
-    .btn-default.btn-file {
-      height: 42px;
-      width: 80px !important;
-      padding: 6px;
-    }
-    .shiny-download-link {
-        display: flex;
-        justify-content: center; /* Centers horizontally */
-        align-items: center; /* Centers vertically */
-        height: 40px;
-        text-align: center;
-        padding: 0;
-      }
-    .modal-footer {
-      text-align: center;
+       text-align: center;
     }
     .align-center {
       display: flex;
@@ -112,7 +42,7 @@ ui = fluidPage(
     }
     .progress-message, .progress-detail {
       float: left; 
-      clear: left;
+      clear: left
     }
     #sig_digies {
       width: 75px;
@@ -210,6 +140,9 @@ ui = fluidPage(
       width: 120px;
       height: 35px;
     }
+    .tab-pane {
+      height: calc(100vh - 120px) !important;
+    }
     #iso_ndim {
       width: 70px;
     }
@@ -236,6 +169,52 @@ ui = fluidPage(
       width: 100px;
       height: 35px;
     }
+    .bslib-card .card-body {
+       overflow:hidden;
+    }
+    .shiny-notification {
+       position: fixed;
+       top: 45%;
+       left: 45%;
+    }
+    .navbar-nav li.disabled {
+        pointer-events: none;
+        opacity: 0.5;
+    }
+    .btn-default:hover {
+       background-color: #2c3e50;
+       color: #18bc9c;
+    }
+    .btn.checkbtn.btn-custom.active {
+        background-color: #2c3e50;
+        color: white;
+        border-color: green;
+    }
+    .btn.checkbtn.btn-custom {
+       background-color: #cccccc;
+       color: #111111;
+       border-color: #2c3e50;
+    }
+    .panel-heading:hover {
+      background-color: #cccccc;
+      color: #18bc9c;
+    }
+    .panel-body {
+      background-color: #ecf0f1;
+    }
+    .shiny-input-panel {
+        margin: 0px 0px;
+        padding: 0px 0px;
+        border: 0px solid #e3e3e3;
+        background-color: #ecf0f1;
+    }
+    .shiny-input-container {
+        margin-top: 2px;
+        margin-bottom: 2px;
+    }
+    .selectize-input {
+      width: 110px;
+    }
     #LG_eval {
       width: 125px;
       height: 40px;
@@ -243,20 +222,29 @@ ui = fluidPage(
     #XGBCL_eval {
       width: 125px;
     }
+    .btn-default.btn-file {
+      height: 42px;
+      width: 80px !important;
+      padding: 6px;
+    }
+    .shiny-download-link {
+      height: 35px;
+      padding: 5px;
+    }
+    .modal-footer {
+      text-align: center;
+    }
+                  
   ")),
   
-  tags$script(HTML(
-      "Shiny.addCustomMessageHandler('disableTabs', function(message) {
-        if (message.action === 'disable') {
-          $('#shinyVB li a:contains(\"Map\")').parent().addClass('disabled');
-          $('#shinyVB li a:contains(\"Data\")').parent().addClass('disabled');
-          $('#shinyVB li a:contains(\"Modeling\")').parent().addClass('disabled');}});" ,
+  tags$script(HTML("
+    Shiny.addCustomMessageHandler('disableData', function(message) {
+        $('#shinyVB li:contains(\"Data\")').addClass('disabled');
+      });
       
-      "Shiny.addCustomMessageHandler('enableTabs', function(message) {
-        if (message.action === 'enable') {
-          $('#shinyVB li a:contains(\"Map\")').parent().removeClass('disabled');
-          $('#shinyVB li a:contains(\"Data\")').parent().removeClass('disabled');
-          $('#shinyVB li a:contains(\"Modeling\")').parent().removeClass('disabled');}});"))),
+    Shiny.addCustomMessageHandler('disableModeling', function(message) {
+        $('#shinyVB li:contains(\"Modeling\")').addClass('disabled');
+      });"))),
   
   navbarPage(
     title = "Virtual Beach",
