@@ -1,6 +1,7 @@
 renderpreddata = function(data,
                           date_format_string,
                           feat_props,
+                          current_page,
                           output) {
   
   data = data.frame(data)
@@ -14,6 +15,8 @@ renderpreddata = function(data,
       sig_digies = 3
     }
   }
+  
+  PL = 20
   
   sig_digies = c(sig_digies,3,3,3)
   
@@ -37,7 +40,8 @@ renderpreddata = function(data,
           autoWidth = F,
           dom='ltBp',
           paging = TRUE,
-          pageLength = 20,
+          pageLength = PL,
+          displayStart = current_page * PL - PL,
           scrollX = TRUE,
           scrollY = TRUE,
           buttons = c('copy', 'csv', 'excel'),
@@ -74,7 +78,8 @@ renderpreddata = function(data,
           autoWidth = F,
           dom='ltBp',
           paging = TRUE,
-          pageLength = 20,
+          pageLength = PL,
+          displayStart = current_page * PL - PL,
           scrollX = TRUE,
           scrollY = TRUE,
           buttons = c('copy', 'csv', 'excel'),
@@ -109,7 +114,8 @@ renderpreddata = function(data,
           autoWidth = F,
           dom='ltBp',
           paging = TRUE,
-          pageLength = 20,
+          pageLength = PL,
+          displayStart = current_page * PL - PL,
           scrollX = TRUE,
           scrollY = TRUE,
           buttons = c('copy', 'csv', 'excel'),

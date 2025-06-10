@@ -134,7 +134,7 @@ xgb_pso = function(pso_data,
                             best_params[6],
                             round(best_params[7],0))
         
-        print(pso_results)
+        # print(pso_results)
         
         incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
       }

@@ -13,7 +13,7 @@ PredictionPanel = sidebarLayout(
   
   numericInput("num_preds", label='Number of Predictions', value = 2,min=2,max=1000,step=1),
   numericInput("conf_bound", label='Confidence Bound', value = 0.95,min=0.1,max=0.99,step=0.01),
-  actionButton("make_preds", "Make Predictions", style = 'width:130px; padding:6px;'),
+  actionButton("make_preds", "Make Predictions", class = "btn-default custom-btn", style = 'width:130px; padding:6px;'),
   fluidRow(column(12,textOutput("pca_model_text"))),
   fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;")),
   div(fileInput("pred_file", "Import Data File", buttonLabel = "Browse",accept = c("text/csv",

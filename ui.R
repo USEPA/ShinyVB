@@ -1,15 +1,15 @@
 source("bs_multi.R")
-source("ui_prediction.R")
-source("ui_modeling.R")
-source("ui_data.R")
 source("ui_map.R")
+source("ui_data.R")
+source("ui_modeling.R")
+source("ui_prediction.R")
 
-# Define UI
 ui = fluidPage(
-  
+
   useShinyjs(),
 
   tags$head(
+    
   tags$style(HTML('
     .selectize-input {white-space: nowrap}
     #send_plot+ div>.selectize-dropdown{width: 100px !important;}
@@ -41,13 +41,11 @@ ui = fluidPage(
        top: 45%;
        left: 45%;
     }
-    .btn-default {
-       margin: 2px 2px !important;
-       font-size: 14px !important;
-       color: black !important;
-       background-color: #bbbbbb !important;
-       border-color: #2c3e50 !important;
-       text-align: center !important;
+    #XGBCL_optim_hp .dataTables_wrapper .dataTables_scroll {
+      width: 70% !important;
+    }
+    #XGB_optim_hp .dataTables_wrapper .dataTables_scroll {
+      width: 70% !important;
     }
     .tab-pane {
       height: calc(100vh - 120px) !important;
@@ -56,19 +54,55 @@ ui = fluidPage(
         pointer-events: none;
         opacity: 0.5;
     }
+    .btn-default {
+       color: black !important;
+       background-color: #A9A9A9 !important;
+       border-color: #D3D3D3 !important;
+       text-align: center !important;
+    }
     .btn-default:hover {
        background-color: #2c3e50 !important;
        color: #18bc9c !important;
     }
     .btn.checkbtn.btn-custom.active {
-        background-color: #2c3e50;
-        color: white;
-        border-color: green;
+      background-color: #2c3e50;
+      color: white;
+      border-color: green;
     }
     .btn.checkbtn.btn-custom {
-       background-color: #cccccc;
-       color: #111111;
-       border-color: #2c3e50;
+      background-color: #cccccc;
+      color: #111111;
+      border-color: #2c3e50;
+    }
+    .custom-btn {
+       margin: 2px 2px !important;
+       font-size: 14px !important;
+       color: white !important;
+       background-color: #5A6E5A !important;
+       border-color: #D3D3D3 !important;
+       text-align: center !important;
+    }
+    .custom-btn:disabled {
+        color: #8B0000 !important;
+    }
+    .custom-btn:hover {
+       background-color: #2c3e50 !important;
+       color: #18bc9c !important;
+    }
+    .custom2-btn {
+       margin: 2px 2px !important;
+       font-size: 14px !important;
+       color: black !important;
+       background-color: #E0F7FA !important;
+       border-color: #D3D3D3 !important;
+       text-align: center !important;
+    }
+    .custom2-btn:disabled {
+        color: #8B0000 !important;
+    }
+    .custom2-btn:hover {
+       background-color: #2c3e50 !important;
+       color: #18bc9c !important;
     }
     .panel-heading:hover {
       background-color: #cccccc;
@@ -96,13 +130,13 @@ ui = fluidPage(
       padding: 6px;
     }
     .shiny-download-link {
-        display: flex;
-        justify-content: center; /* Centers horizontally */
-        align-items: center; /* Centers vertically */
-        height: 40px;
-        text-align: center;
-        padding: 0;
-      }
+      display: flex;
+      justify-content: center; /* Centers horizontally */
+      align-items: center; /* Centers vertically */
+      height: 40px;
+      text-align: center;
+      padding: 0;
+    }
     .modal-footer {
       text-align: center;
     }
@@ -136,7 +170,7 @@ ui = fluidPage(
     #lc_val {
       width: 100px;
       height: 35px;
-        }
+    }
     #rc_val {
       width: 100px;
       height: 35px;
@@ -144,7 +178,7 @@ ui = fluidPage(
     #lc_replace {
       width: 90px;
       height: 35px;
-        }
+    }
     #rc_replace {
       width: 90px;
       height: 35px;
@@ -166,10 +200,6 @@ ui = fluidPage(
       width: 90px;
       height: 35px;
     }
-    #data_seed {
-      width: 100px;
-      height: 35px;
-    }
     #model_seed {
       width: 100px;
       height: 35px;
@@ -177,7 +207,7 @@ ui = fluidPage(
     #EN_stand {
       width: 120px;
       height: 35px;
-        }
+    }
     #EN_dec_crit {
       width: 120px;
       height: 35px;
@@ -256,7 +286,8 @@ ui = fluidPage(
         if (message.action === 'enable') {
           $('#shinyVB li a:contains(\"Map\")').parent().removeClass('disabled');
           $('#shinyVB li a:contains(\"Data\")').parent().removeClass('disabled');
-          $('#shinyVB li a:contains(\"Modeling\")').parent().removeClass('disabled');}});"))),
+          $('#shinyVB li a:contains(\"Modeling\")').parent().removeClass('disabled');}});"))
+  ),
   
   navbarPage(
     title = "Virtual Beach",

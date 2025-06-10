@@ -5,7 +5,7 @@ DataPanel = sidebarLayout(
     tags$style(type = "text/css", "#datasidepanel {height: calc(100vh - 70px) !important; width: 385px !important;}"),
     
     fluidRow(column(6,inputPanel(selectInput("IDasDate",label = "ID/Date Format",selected ="MDY",choices = c("MDY","YMD","MDYHM","Numeric","Character")))),
-             column(6,disabled(actionButton("restore", "Restore Inputs", style='width: 120px; padding:8px; vertical-align: -33px;')))),
+             column(6,disabled(actionButton("restore", "Restore Inputs", class = "btn-default custom-btn", style='width: 120px; padding:8px; vertical-align: -33px;')))),
     fluidRow(column(12,radioButtons(inline=T,"sep","Separator",choices = c(Comma = ",",Semicolon = ";",Space = " ",Tab = "\t"),selected = ","))),
     
     div(fileInput("file1", "Select your data file", buttonLabel = "Browse",accept = c("text/csv",
@@ -15,8 +15,8 @@ DataPanel = sidebarLayout(
              column(6,numericInput("rc_val", "Right-Censored", value=9999))),
     fluidRow(column(6,disabled(inputPanel(selectInput("set_column_props",label = "Column Properties",selected ="-",choices = c("-"))))),
              column(6,class="align-center",radioButtons(inline=T,"select_choice","Table Selection",choices = c(Features="Features",Rows="Rows"),selected = "Features"))),
-    fluidRow(column(6,disabled(actionButton("ignore_rows", "Disable Selected Rows", style='padding: 6px;'))),
-             column(6,disabled(actionButton("enable_rows", "Enable Selected Rows", style='padding: 6px;')))),
+    fluidRow(column(6,disabled(actionButton("ignore_rows", "Disable Selected Rows", class = "btn-default custom-btn",  style='padding: 6px;'))),
+             column(6,disabled(actionButton("enable_rows", "Enable Selected Rows", class = "btn-default custom-btn",  style='padding: 6px;')))),
 
     
     bs_accordion(id="plotting") %>%
@@ -25,10 +25,10 @@ DataPanel = sidebarLayout(
       
       bs_append (title="Feature Processing", content = card(
             
-        fluidRow(column(12,disabled(actionButton("corr_check", "Correlations", style='width: 120px;')))),
-        fluidRow(column(6,disabled(actionButton("pca_check", "PCA", style='width: 110px; vertical-align: -38px;'))),
+        fluidRow(column(12,disabled(actionButton("corr_check", "Correlations",class = "btn-default custom2-btn", style = 'width:125px !important; padding:3px !important;')))),
+        fluidRow(column(6,disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",  style='width: 110px; vertical-align: -38px;'))),
                  column(6,class="align-center", numericInput("num_axes", "# PCA Axes", value=2, min=2,max=20,step=1))),
-        fluidRow(column(6,disabled(actionButton("run_iso_forest","Outliers: IsoForest", style='width: 150px; align: left; vertical-align: -38px;'))),
+        fluidRow(column(6,disabled(actionButton("run_iso_forest","Outliers: IsoForest", class = "btn-default custom-btn",  style='width: 150px; align: left; vertical-align: -38px;'))),
                  column(6,numericInput("iso_ndim", "IF Dimensions", value=2, min=1,max=10,step=1))))) %>%
       
       bs_append (title="Plotting", content = card(
@@ -62,7 +62,7 @@ DataPanel = sidebarLayout(
         
         fluidRow(column(12,textInput("O_name", label=NULL,value = "OComp"))),
 
-        fluidRow(column(12,actionButton("create", "Create A/O Components", style='width:185px; padding:5px;'))))) %>%
+        fluidRow(column(12,actionButton("create", "Create A/O Components", class = "btn-default custom-btn",  style='width:185px; padding:5px;'))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
     

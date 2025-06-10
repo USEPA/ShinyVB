@@ -62,8 +62,8 @@ ModelingPanel = sidebarLayout(
             fluidRow(column(12, switchInput("LG_binarize", label="Binarize Response?", labelWidth=125, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))),
             fluidRow(column(5,numericInput("LG_binarize_crit_value", label = "Threshold", value = 2,step=0.25)),
                      column(7,selectInput("LG_eval",label = "Evaluation Metric",selectize=FALSE,selected ="deviance",choices = c("deviance","auc")))),
-            fluidRow(column(6,actionButton("run_pred_LG", "Predictions", style = 'width:100px !important; padding:2px !important;')),
-                     column(6,actionButton("run_fitted_LG", "Fitting", style = 'width:100px !important; padding:2px !important;'))))) %>%
+            fluidRow(column(6,actionButton("run_pred_LG", "Predictions", class = "btn-default custom-btn",  style = 'width:100px !important; padding:2px !important;')),
+                     column(6,actionButton("run_fitted_LG", "Fitting", class = "btn-default custom-btn",  style = 'width:100px !important; padding:2px !important;'))))) %>%
       
       bs_append (
         title = "XGB Classifier",
@@ -72,15 +72,15 @@ ModelingPanel = sidebarLayout(
           fluidRow(column(12, switchInput("XGBCL_binarize", label="Binarize Response?", labelWidth=125, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))),
           fluidRow(column(6,numericInput("XGBCL_binarize_crit_value", label = "Threshold", value = 2,step=0.25)),
                    column(6,selectInput("XGBCL_eval",label = "Evaluation Metric",selected ="logloss",choices = c("logloss","auc")))),
-          fluidRow(column(5,actionButton("XGBCL_params", "HP Values", style = 'background-color:#fcfaee !important; width:90px !important; padding:2px !important;')),
-                   column(7,actionButton("XGBCL_optimize_HP", "HP Optimization", style = 'background-color:#fcfaee !important; width:130px !important; padding:2px !important;'))),
+          fluidRow(column(5,actionButton("XGBCL_params", "HP Values",class = "btn-default custom2-btn", style = 'width:90px !important; padding:2px !important;')),
+                   column(7,actionButton("XGBCL_optimize_HP", "HP Optimization",class = "btn-default custom2-btn", style = 'width:130px !important; padding:2px !important;'))),
           fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
-          fluidRow(column(6,align="left",actionButton("run_XGBCL_select", "Feature Selection", style = 'width:130px !important; padding:2px !important; vertical-align: -32px !important;')),
+          fluidRow(column(6,align="left",actionButton("run_XGBCL_select", "Feature Selection", class = "btn-default custom-btn", style = 'width:130px !important; padding:2px !important; vertical-align: -32px !important;')),
                    column(6, div(style = "display: inline-block;",numericInput("testcl_weight", label = "Test Weight", value = 0.20, min = 0, max=1, step=0.05)))),
           # fluidRow(column(12,align="right",actionButton("XGBCL_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
-          fluidRow(column(6,actionButton("run_pred_XGBCL", "Predictions", style = 'width:100px !important; padding:2px !important;')),
-                  column(6,actionButton("run_fit_XGBCL", "Fitting", style = 'width:100px !important; padding:2px !important;'))))) %>%
+          fluidRow(column(6,actionButton("run_pred_XGBCL", "Predictions", class = "btn-default custom-btn",  style = 'width:100px !important; padding:2px !important;')),
+                  column(6,actionButton("run_fit_XGBCL", "Fitting", class = "btn-default custom-btn",  style = 'width:100px !important; padding:2px !important;'))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
 
@@ -94,21 +94,21 @@ ModelingPanel = sidebarLayout(
         title = "Elastic Net",
         content = card(
           fluidRow(column(12, switchInput("EN_standard", label="Standardize Features?", labelWidth=125, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))),
-          fluidRow(column(6,actionButton("EN_pred", "Predictions", style = 'width:100px !important; padding:4px !important;')),
-                  column(6,actionButton("EN_fit", "Fitting", style = 'width:100px !important; padding:4px !important;'))))) %>%
+          fluidRow(column(6,actionButton("EN_pred", "Predictions", class = "btn-default custom-btn",  style = 'width:100px !important; padding:4px !important;')),
+                  column(6,actionButton("EN_fit", "Fitting", class = "btn-default custom-btn",  style = 'width:100px !important; padding:4px !important;'))))) %>%
       
       bs_append (
         title = "XGBoost", content= card(
           fluidRow(column(12, switchInput("XGB_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
-          fluidRow(column(5,actionButton("XGB_params", "HP Values", style = 'background-color:#fcfaee !important; width:90px !important; padding:2px !important;')),
-                   column(7,actionButton("XGB_optimize_HP", "HP Optimization", style = 'background-color:#fcfaee !important; width:130px !important; padding:2px !important;'))),
+          fluidRow(column(5,actionButton("XGB_params", "HP Values",class = "btn-default custom2-btn", style = 'width:90px !important; padding:2px !important;')),
+                   column(7,actionButton("XGB_optimize_HP", "HP Optimization",class = "btn-default custom2-btn", style = 'width:130px !important; padding:2px !important;'))),
           fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
-          fluidRow(column(6,align="left",actionButton("run_XGB_select", "Feature Selection", style = 'width:130px !important; padding:2px !important; vertical-align: -32px !important;')),
+          fluidRow(column(6,align="left",actionButton("run_XGB_select", "Feature Selection", class = "btn-default custom-btn", style = 'width:130px !important; padding:2px !important; vertical-align: -32px !important;')),
                    column(6, div(style = "display: inline-block;",numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05)))),
           # fluidRow(column(12,align="right",actionButton("XGB_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
           fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
-          fluidRow(column(6,actionButton("run_XGB_predict", "Predictions", style = 'width:100px !important; padding:2px !important;')),
-                   column(6,align="left",actionButton("XGB_final_fitting", "Fitting", style = 'width:100px !important; padding:2px !important;'))))) %>%
+          fluidRow(column(6,actionButton("run_XGB_predict", "Predictions", class = "btn-default custom-btn",  style = 'width:100px !important; padding:2px !important;')),
+                   column(6,align="left",actionButton("XGB_final_fitting", class = "btn-default custom-btn",  "Fitting", style = 'width:100px !important; padding:2px !important;'))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
   
@@ -141,8 +141,6 @@ ModelingPanel = sidebarLayout(
                                                     uiOutput("LG_confuse_text")))),
                 tabPanel("XGBCL: Feat Select",fluidRow(column(9,DT::dataTableOutput('XGBCL_select'))),
                          tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
-                tabPanel("XGBCL: HP Optim",fluidRow(column(9,DT::dataTableOutput('XGBCL_optim_hp'))),
-                         tags$style(type = "text/css", "#xgbcloptimhp {height: calc(100vh - 70px) !important;}")),
                 tabPanel("XGBCL: Predict",
                          navset_pill_list(widths = c(2,10), well=F,
                                           nav_panel("Results Table",DT::dataTableOutput('XGBCL_predictions'),
@@ -161,8 +159,7 @@ ModelingPanel = sidebarLayout(
                                                     tags$style(type = "text/css", "#XGBCLfits {height: calc(100vh - 70px) !important;}")),
                                           nav_panel("HP Values",fluidRow(column(10,DT::dataTableOutput('XGBCL_used_hp'))),
                                                     tags$style(type = "text/css", "#xgbclusedhp {height: calc(100vh - 70px) !important;}")),
-                                          nav_panel("SHAP Values",fluidRow(column(6,DT::dataTableOutput('XGBCL_shapes'))),
-                                                    tags$style(type = "text/css", "#XGBCLshapes {height: calc(100vh - 70px) !important;}")),
+                                          nav_panel("SHAP Values",fluidRow(column(6,DT::dataTableOutput('XGBCL_shapes')))),
                                           nav_panel("Prob Dens Plot",plotOutput("XGBCL_scatplot", height="700px",width="100%"),
                                                     fluidRow(column(2,numericInput("XGBCL_dec_crit", label = "Decision Criterion", value = 0.5, min = 0, max=1, step=0.01))),
                                                     fluidRow(column(7,DT::dataTableOutput('XGBCL_confuse'))),
@@ -195,8 +192,6 @@ ModelingPanel = sidebarLayout(
                                           nav_panel("Residual Scatter", plotlyOutput("EN_resid_scatplot", height="800px",width="100%")))),
                 tabPanel("XGB: Feat Select",fluidRow(column(9,DT::dataTableOutput('XGB_select'))),
                          tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
-                tabPanel("XGB: HP Optim",fluidRow(column(9,DT::dataTableOutput('XGB_optim_hp'))),
-                         tags$style(type = "text/css", "#xgboptimhp {height: calc(100vh - 70px) !important;}")),
                 tabPanel("XGB: Predict",
                          navset_pill_list(widths = c(2,10), well=F,
                                           nav_panel("Results Table",DT::dataTableOutput('XGB_predictions'),

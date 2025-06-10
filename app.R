@@ -11,6 +11,7 @@ library(glmnetUtils)
 library(grDevices)
 library(grid)
 library(hash)
+library(iml)
 library(ipc)
 library(isotree)
 library(leaflet)
@@ -19,6 +20,7 @@ library(Matrix)
 library(methods)
 library(missForest)
 library(openxlsx)
+library(pdp)
 library(plotly)
 library(plyr)
 library(promises)
@@ -149,6 +151,8 @@ create_data = function(data,rv,feats_to_use,ignored_rows,randomize,standardize) 
   created_data = data1
 }
 
+source("ui.R")
+
 source("createAO.R")
 source("confusion.R")
 source("lineplot.R")
@@ -159,12 +163,10 @@ source("renderPCAdata.R")
 source("renderpreddata.R")
 source("scatter.R")
 source("scatter_confuse.R")
-source("ui.R")
 source("xgb_call_predict.R")
 source("xgb_feature_selection.R")
 source("xgb_pred_errors.R")
 source("xgb_pso.R")
-source("xgbcl_call_optimize_HP.R")
 source("xgbcl_call_predict.R")
 source("xgbcl_feature_selection.R")
 source("xgbcl_pred_errors.R")
@@ -277,11 +279,14 @@ server= function(input,output,session) {
   pred_model_features = reactiveVal()
   response_var = reactiveVal(2)
   col_names = reactiveVal()
+  changed_model = reactiveVal(FALSE)
   models_created = reactiveVal()
   model_to_use = reactiveVal()
   feat_names = reactiveVal()
   feats_being_used = reactiveVal()
   fs_feats_used = reactiveVal()
+  PCA_scaling_mean = reactiveVal()
+  PCA_scaling_sd = reactiveVal()
   PCA_dataset = reactiveVal()
   PCA_summary_df = reactiveVal()
   PCA_coefficients = reactiveVal()
@@ -293,6 +298,8 @@ server= function(input,output,session) {
   redraw_rainplot = reactiveVal(FALSE)
   redraw_scatplot = reactiveVal(FALSE)
   redraw_lineplot = reactiveVal(FALSE)
+  current_data_page = reactiveVal(1)
+  current_pred_page = reactiveVal(1)
   
   # General non-reactive variables
   init_data = data.frame()
@@ -367,6 +374,7 @@ server= function(input,output,session) {
   XGBCL_pred_standardize = reactiveVal(FALSE)
   
   # XGBoost Classifier Other Results
+  refresh_XGBCL_Optim_HP = reactiveVal(FALSE)
   XGBCL_selection_results = reactiveVal()
   Optimal_CLHP = data.frame(max_depth = 2,eta = 0.05,subsample = 0.8,colsample_bytree = 0.8,min_child_weight = 3,gamma = 1,nrounds = 100)
   
@@ -378,6 +386,7 @@ server= function(input,output,session) {
   XGBCL_model = NULL
   XGBCL_model_PCA = reactiveVal(FALSE)
   XGBCL_standardize = reactiveVal(FALSE)
+  XGBCL_final_data = reactiveVal()
  
   # XGBoost Prediction Results
   XGB_pred_results = reactiveVal()
@@ -387,6 +396,7 @@ server= function(input,output,session) {
   XGB_pred_standardize = reactiveVal(FALSE)
   
   # XGBoost Other Results
+  refresh_XGB_Optim_HP = reactiveVal(FALSE)
   XGB_selection_results = reactiveVal()
   Optimal_HP = data.frame(max_depth = 2,eta = 0.05,subsample = 0.8,colsample_bytree = 0.8,min_child_weight = 3,gamma = 1,nrounds = 100)
   
@@ -398,6 +408,7 @@ server= function(input,output,session) {
   XGB_model = NULL
   XGB_model_PCA = reactiveVal(FALSE)
   XGB_standardize = reactiveVal(FALSE)
+  XGB_final_data = reactiveVal()
   
   # Elastic Net Prediction Results
   EN_pred_results = reactiveVal()
@@ -584,6 +595,8 @@ server= function(input,output,session) {
       saved_num_axes = input$num_axes,
       init_column_props = init_column_props,
       column_props = column_props,
+      PCA_scaling_mean = reactiveVal(),
+      PCA_scaling_sd = reactiveVal(),
       PCA_dataset = PCA_dataset(),
       PCA_summary_df = PCA_summary_df(),
       PCA_coefficients = PCA_coefficients(),
@@ -676,6 +689,8 @@ server= function(input,output,session) {
       saved_num_axes = input$num_axes,
       init_column_props = init_column_props,
       column_props = column_props,
+      PCA_scaling_mean = reactiveVal(),
+      PCA_scaling_sd = reactiveVal(),
       PCA_dataset = PCA_dataset(),
       PCA_summary_df = PCA_summary_df(),
       PCA_coefficients = PCA_coefficients(),
@@ -768,6 +783,8 @@ server= function(input,output,session) {
       saved_num_axes = input$num_axes,
       init_column_props = init_column_props,
       column_props = column_props,
+      PCA_scaling_mean = reactiveVal(),
+      PCA_scaling_sd = reactiveVal(),
       PCA_dataset = PCA_dataset(),
       PCA_summary_df = PCA_summary_df(),
       PCA_coefficients = PCA_coefficients(),
@@ -872,6 +889,8 @@ server= function(input,output,session) {
       saved_num_axes = temp_env$save_list$saved_num_axes
       init_column_props <<- temp_env$save_list$init_column_props
       column_props <<- temp_env$save_list$column_props
+      PCA_scaling_mean(temp_env$save_list$PCA_scaling_mean)
+      PCA_scaling_sd(temp_env$save_list$PCA_scaling_sd)
       PCA_dataset(temp_env$save_list$PCA_dataset)
       PCA_summary_df(temp_env$save_list$PCA_summary_df)
       PCA_coefficients(temp_env$save_list$PCA_coefficients)
@@ -997,7 +1016,8 @@ server= function(input,output,session) {
           updateSelectInput(session,"direct",choices=c("-",col_names()))
           
           # Render the main data table
-          renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+          current_data_page(1)
+          renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
           
           output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,extensions='Buttons',selection=list(selected =
                                 list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
@@ -1010,6 +1030,7 @@ server= function(input,output,session) {
                                 initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
           
           updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
+          updateCheckboxGroupButtons(session,"feats_to_corr",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
           updateCheckboxGroupButtons(session,"pcax_to_use",choices=pca_axes(),selected=pcax_being_used(),size="xs",status = "custom")
           
         }
@@ -1041,15 +1062,30 @@ server= function(input,output,session) {
   
   observeEvent(input$corr_check, ignoreInit = T, {
     
+    showModal(modalDialog(title="Choose Features", card(
+    
+      checkboxGroupButtons(
+        inputId = "feats_to_corr",
+        label = "Features to Use: ",
+        choices = feat_names(),
+        size = "sm",
+        selected = feat_names(),
+        status = "custom"
+      )),
+      footer = div(align="center",actionButton("run_corr", "Generate Correlations"),modalButton('Close'))))
+  })
+  
+  observeEvent(input$run_corr, ignoreInit = T, {
+    
+    removeModal()
+    
     if (is.null(ignored_rows)) {
-      corr_data = current_data()
+      corr_data = current_data()[,input$feats_to_corr,drop = FALSE]
     } else {
-      corr_data = current_data()[-ignored_rows,]
+      corr_data = current_data()[,input$feats_to_corr,drop = FALSE][-ignored_rows,]
     }
     
-    cov_data = corr_data[,-c(id_var,response_var())]
-    
-    data_corrs = cor(cov_data,use="pairwise.complete.obs")
+    data_corrs = cor(corr_data,use="pairwise.complete.obs")
     
     output$corrplot = renderPlot({corrplot(data_corrs, addCoef.col = 'black', method="circle", cl.pos = 'n',is.corr = FALSE,
                 type="lower",col.lim = c(-1.4, 1.4),col = COL2('PRGn'), tl.col="black", tl.srt= 45)},height = 900, width = 900)
@@ -1084,6 +1120,10 @@ server= function(input,output,session) {
     
     # Run PCA on feature data
     pca_result = prcomp(feat_data, scale. = TRUE)
+    
+    PCA_scaling_mean(setNames(pca_result$center, colnames(feat_data)))
+    PCA_scaling_sd(setNames(pca_result$scale, colnames(feat_data)))
+    
     pca_summary = summary(pca_result)
     
     if (date_format_string == "Character") {
@@ -1110,6 +1150,7 @@ server= function(input,output,session) {
     PCA_summary_df(PCA_summary_df1)
     
     clear_modeling(TRUE)
+    changed_model(TRUE)
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = "PCA Results")
@@ -1156,9 +1197,14 @@ server= function(input,output,session) {
   
   observeEvent(input$data_cell_edit, ignoreInit = T, ignoreNULL = T, {
     
-    temp_data=current_data()
-    
     info = input$data_cell_edit
+    edited_row = info$row
+    current_page_rows = input$data_rows_current
+    current_page = floor(edited_row/length(current_page_rows)) + 1
+    current_data_page(current_page)
+
+    temp_data=current_data()
+
     i = info$row
     j = info$col + 1
     
@@ -1166,7 +1212,7 @@ server= function(input,output,session) {
     
     current_data(temp_data)
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
   })
   
   # Restore the original dataset
@@ -1203,7 +1249,9 @@ server= function(input,output,session) {
     updateSelectInput(session,"scatterx",selected="-",choices=c("-",col_names()))
     updateSelectInput(session,"scattery",selected="-",choices=c("-",col_names()))
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+    current_data_page(1)
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
     renderPCAdata(PCA_dataset(),date_format_string,output)
     
     clear_modeling(TRUE)
@@ -1284,6 +1332,7 @@ server= function(input,output,session) {
       models_created(NULL)
     
       clear_modeling(FALSE)
+      changed_model(TRUE)
       refresh_trigger(TRUE)
     }
   })
@@ -1325,6 +1374,7 @@ server= function(input,output,session) {
       column_props <<- col_props_temp
       ignored_rows <<- NULL
       PCA_dataset(NULL)
+      changed_model(TRUE)
       
       if (input$IDasDate == "YMD") {
         init_data[,1] = ymd(init_data[,1])
@@ -1386,7 +1436,9 @@ server= function(input,output,session) {
       updateSelectInput(session,"speed",choices=c("-",col_names()))
       updateSelectInput(session,"direct",choices=c("-",col_names()))
       
-      renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+      current_data_page(1)
+      
+      renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
       
       clear_modeling(TRUE)
       
@@ -1424,7 +1476,9 @@ server= function(input,output,session) {
     # .set(column_props,keys=input$set_column_props,values=c(input$sig_digies,values(column_props,keys=input$set_column_props)[2],
     #         values(column_props,keys=input$set_column_props)[3],values(column_props,keys=input$set_column_props)[4]))
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+    current_data_page(1)
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
     
   })
   
@@ -1455,7 +1509,9 @@ server= function(input,output,session) {
       updateNumericInput(session, "lc_replace",value = round(min(real_responses),3))
       updateNumericInput(session, "rc_replace",value = round(max(real_responses),3))
       
-      renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+      current_data_page(1)
+      
+      renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
       
       pca_axes_max(ncol(init_data)-2)
       pca_axes(NULL)
@@ -1463,6 +1519,7 @@ server= function(input,output,session) {
       PCA_dataset(NULL)
       
       clear_modeling(TRUE)
+      changed_model(TRUE)
       
       updateNumericInput(session, "num_axes",
                          value = pca_axes_max(),
@@ -1564,7 +1621,9 @@ server= function(input,output,session) {
       disable("enable_rows")
     }
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+    current_data_page(1)
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
   })
   
   observeEvent(input$ignore_rows, ignoreInit = T, {
@@ -1582,7 +1641,9 @@ server= function(input,output,session) {
       ignored_rows <<- unique(append(ignored_rows,add_in))
     }
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+    current_data_page(1)
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
   })
   
   observeEvent(input$enable_rows, ignoreInit = T, {
@@ -1600,7 +1661,9 @@ server= function(input,output,session) {
       ignored_rows <<- ignored_rows[!ignored_rows %in% add_back]
     }
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+    current_data_page(1)
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
   })
   
   # Plotting functions
@@ -1919,6 +1982,7 @@ server= function(input,output,session) {
 
         pca_axes_max(ncol(current_data())-2)
         PCA_dataset(NULL)
+        changed_model(TRUE)
         
         updateNumericInput(session, "num_axes",
                            value = pca_axes_max(),
@@ -1927,7 +1991,9 @@ server= function(input,output,session) {
 
         clear_modeling(TRUE)
         
-        renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,output)
+        current_data_page(1)
+        
+        renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
         
       } else {
         showModal(modalDialog(div("ERROR: BOTH new component columns must have different names 
@@ -1942,6 +2008,8 @@ server= function(input,output,session) {
   # Toggle between regular features and PCA datasets
   
   observeEvent(input$use_pca_data, ignoreInit = T, {
+    
+    changed_model(TRUE)
     
     if (input$use_pca_data) {
 
@@ -2026,6 +2094,9 @@ server= function(input,output,session) {
       updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
     }
     else {
+      
+      changed_model(TRUE)
+      
       feats_being_used(input$feats_to_use)
       
       pca_axes_max(length(input$feats_to_use))
@@ -2046,6 +2117,7 @@ server= function(input,output,session) {
       
       updateCheckboxGroupButtons(session,"pcax_to_use",choices=pca_axes(),selected=pcax_being_used(),size="xs",status = "custom")
     } else {
+      changed_model(TRUE)
       pcax_being_used(input$pcax_to_use)
     }
     
@@ -2541,7 +2613,12 @@ server= function(input,output,session) {
   
   # XGBCL HP Optimization
   
-  observeEvent(input$XGBCL_optimize_HP, ignoreInit = T, {
+  observeEvent(c(input$XGBCL_optimize_HP,refresh_XGBCL_Optim_HP()), ignoreInit = T, {
+    
+    output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(t(Optimal_CLHP),rownames=T,colnames=NULL,extensions='Buttons',selection=list(selected =
+                    list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
+                    scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                    initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
     
     showModal(modalDialog(title="HP Optimization", card(
       fluidRow(
@@ -2551,8 +2628,11 @@ server= function(input,output,session) {
       fluidRow(
         column(4,numericInput("membercl_exp", "Membership Weight", min=0.25, max=3, value=0.5, step = 0.25)),
         column(2),
-        column(4,numericInput("sscl_exp", "Sum of Squares Weight", min=0.25, max=3, value=1, step = 0.25)))),
+        column(4,numericInput("sscl_exp", "Sum of Squares Weight", min=0.25, max=3, value=1, step = 0.25))),
+      fluidRow(fluidRow(DT::dataTableOutput('XGBCL_optim_hp')))),
       footer = div(actionButton("run_XGBCL_optimize_HP", "Run"),modalButton('Close'))))
+    
+    refresh_XGBCL_Optim_HP(FALSE)
   })
   
   observeEvent(input$run_XGBCL_optimize_HP, ignoreInit = T, {
@@ -2569,20 +2649,24 @@ server= function(input,output,session) {
       req(iv$is_valid())
       
       if (input$use_pca_data) {
-        data = PCA_dataset()
+        data0 = PCA_dataset()
         rv=2
         feats_to_use = input$pcax_to_use
         ignored_rows = NULL
       } else {
-        data = current_data()
+        data0 = current_data()
         rv=response_var()
         feats_to_use = input$feats_to_use
       }
       
-      xgbcl_optim_HP_results = xgbcl_call_optimize_HP(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_val,input$rc_val,input$lc_lowval,
-                                      input$lc_upval,input$rc_lowval,input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$randomize,
-                                      input$XGBCL_standard,input$XGBCL_eval,input$psocl_max_iter,input$psocl_swarm_size,input$membercl_exp,
-                                      input$sscl_exp,input$XGBCL_binarize,input$XGBCL_binarize_crit_value)
+      set.seed(input$model_seed)
+      
+      data = create_data(data0,rv,feats_to_use,ignored_rows,input$randomize,input$XGBCL_standard)
+      dataset = data[,-1]
+      
+      xgbcl_optim_HP_results = xgbcl_pso(dataset,rv,feats_to_use,input$lc_val,input$rc_val,input$lc_lowval,input$lc_upval,input$rc_lowval,
+                        input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$XGBCL_eval,input$psocl_max_iter,
+                        input$psocl_swarm_size,input$membercl_exp,input$sscl_exp,input$XGBCL_binarize,input$XGBCL_binarize_crit_value,MC_subbin)
       
       xgbcl_optim_HP_results1 = data.frame(xgbcl_optim_HP_results)
       
@@ -2594,13 +2678,7 @@ server= function(input,output,session) {
       Optimal_CLHP$gamma <<- round(xgbcl_optim_HP_results1[6,1],1)
       Optimal_CLHP$nrounds <<- round(xgbcl_optim_HP_results1[7,1],0)
       
-      output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,extensions='Buttons',selection=list(selected =
-                list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
-                scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-      
-      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: HP Optim')
+      refresh_XGBCL_Optim_HP(TRUE)
     }
   })
 
@@ -3150,13 +3228,15 @@ server= function(input,output,session) {
       updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Fitting')
       
       # Fit final XGBCL_Model
-      final_XGBCL_data = MC_final_subbin(data1,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
-      
+      final_XGBCL_data = MC_final_subbin(data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
+
       if (input$XGBCL_binarize) {
         for (j in 1:nrow(final_XGBCL_data)) {
           final_XGBCL_data[j, 1] = ifelse(test = final_XGBCL_data[j, 1] >= crit_value, yes = 1, no = 0)
         }
       }
+      
+      XGBCL_final_data(final_XGBCL_data)
       
       if (xgbcl_booster_set() == "dart") {
         
@@ -3261,6 +3341,50 @@ server= function(input,output,session) {
       output$XGBCL_used_hp = NULL
       refresh_trigger(FALSE)
     }
+  })
+  
+  # Create PDP for a feature in the XGBCL model
+  
+  observeEvent(input$XGBCL_shapes_rows_selected, ignoreInit = T, {
+    
+    selected_index = input$XGBCL_shapes_rows_selected[1]
+    selected_feature = XGBCL_coeffs()[selected_index,1]
+    
+    used_data = na.omit(XGBCL_final_data())
+
+    train_data = as.data.frame(used_data[,-1])
+    response = as.numeric(used_data[,1])
+
+    predcl_fun = function(model, newdata) {
+       predictions = predict(model, newdata = as.matrix(newdata))
+       return(as.numeric(predictions))
+     }
+    
+     predictor.xgbcl = Predictor$new(
+       model = XGBCL_model,
+       data = train_data,
+       y = response,
+       predict.fun = predcl_fun
+     )
+
+     pdp_info =  FeatureEffect$new(
+       predictor.xgbcl,
+       selected_feature,
+       method = "pdp",
+       grid.size = 25
+     )
+    
+    print(pdp_info$plot())
+    
+    output$XGBCL_pdp_plot = renderPlot({plot(pdp_info$plot())})
+    
+    showModal(modalDialog(
+      title = paste("PDP for", selected_feature),
+      size = "l",
+      plotOutput("XGBCL_pdp_plot"),
+      easyClose = TRUE,
+      footer = NULL
+    ))
   })
 
   # XGB Feature Selection
@@ -3434,7 +3558,12 @@ server= function(input,output,session) {
   
   # XGB HP optimization
   
-  observeEvent(input$XGB_optimize_HP, ignoreInit = T, {
+  observeEvent(c(input$XGB_optimize_HP,refresh_XGB_Optim_HP()), ignoreInit = T, {
+    
+    output$XGB_optim_hp = DT::renderDataTable(server=T,{data = datatable(t(Optimal_HP),rownames=T,colnames=NULL,extensions='Buttons',selection=list(selected =
+                    list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
+                    scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                    initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
     
     showModal(modalDialog(title="HP Optimization", card(
       fluidRow(
@@ -3446,8 +3575,11 @@ server= function(input,output,session) {
       fluidRow(
         column(4,numericInput("member_exp", "Membership Weight", min=0.25, max=3, value=0.5, step = 0.25)),
         column(2),
-        column(4,numericInput("ss_exp", "Sum of Squares Weight", min=0.25, max=3, value=1, step = 0.25)))),
+        column(4,numericInput("ss_exp", "Sum of Squares Weight", min=0.25, max=3, value=1, step = 0.25))),
+      fluidRow(fluidRow(DT::dataTableOutput('XGB_optim_hp')))),
       footer = div(actionButton("run_XGB_optimize_HP", "Run"),modalButton('Close'))))#,actionButton("stop_xgb_HP_and_errors", "Cancel the Calculation"#))
+    
+    refresh_XGB_Optim_HP(FALSE)
   })
   
   observeEvent(input$run_XGB_optimize_HP, ignoreInit = T, {
@@ -3483,13 +3615,7 @@ server= function(input,output,session) {
     Optimal_HP$gamma <<- round(xgb_optim_HP_results1[6,1],1)
     Optimal_HP$nrounds <<- round(xgb_optim_HP_results1[7,1],0)
     
-    output$XGB_optim_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_HP,rownames=F,extensions='Buttons',selection=list(selected =
-                list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
-                scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: HP Optim')
+    refresh_XGB_Optim_HP(TRUE)
   })
   
   # XGB HP settings
@@ -3873,8 +3999,9 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Fitting')
     
     # Fit final XGB_Model
-    
     final_XGB_data = MC_final_subbin(data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
+    
+    XGB_final_data(final_XGB_data)
     
     if (xgb_booster_set() == "dart") {
       
@@ -4000,6 +4127,50 @@ server= function(input,output,session) {
       output$XGB_used_hp = NULL
       refresh_trigger(FALSE)
     }
+  })
+  
+  # Create PDP for a feature in the XGB model
+  
+  observeEvent(input$XGB_shapes_rows_selected, ignoreInit = T, {
+    
+    selected_index = input$XGB_shapes_rows_selected[1]
+    selected_feature = XGB_coeffs()[selected_index,1]
+    
+    used_data = na.omit(XGB_final_data())
+    
+    train_data = as.data.frame(used_data[,-1])
+    response = as.numeric(used_data[,1])
+    
+    predcl_fun = function(model, newdata) {
+      predictions = predict(model, newdata = as.matrix(newdata))
+      return(as.numeric(predictions))
+    }
+    
+    predictor.xgb = Predictor$new(
+      model = XGB_model,
+      data = train_data,
+      y = response,
+      predict.fun = predcl_fun
+    )
+    
+    pdp_info =  FeatureEffect$new(
+      predictor.xgb,
+      selected_feature,
+      method = "pdp",
+      grid.size = 25
+    )
+    
+    print(pdp_info$plot())
+    
+    output$XGB_pdp_plot = renderPlot({plot(pdp_info$plot())})
+    
+    showModal(modalDialog(
+      title = paste("PDP for", selected_feature),
+      size = "l",
+      plotOutput("XGB_pdp_plot"),
+      easyClose = TRUE,
+      footer = NULL
+    ))
   })
   
   # Elastic Net predictions
@@ -4361,7 +4532,6 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'EN: Fitting')
     
     # Fit final EN_Model
-    
     final_EN_data = MC_final_subbin(trainData,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
     
     # determine best alpha and lambda
@@ -4792,8 +4962,9 @@ server= function(input,output,session) {
       
       colnames(temp_data) = c(iv_name,rv_name,model_features,"Prediction","Lower_Bound","Upper_Bound")
       
-      if (is.null(pred_data())) {
+      if (is.null(pred_data()) || changed_model()) {
         pred_data(temp_data)
+        changed_model(FALSE)
       }
       
       pred_residuals(resids)
@@ -4853,16 +5024,21 @@ server= function(input,output,session) {
   
   observeEvent(input$pd_data_cell_edit, ignoreInit = T, ignoreNULL = T, {
     
-    data=pred_data()
-    
     info = input$pd_data_cell_edit
+    edited_row = info$row
+    current_page_rows = input$pd_data_rows_current
+    current_page = floor(edited_row/length(current_page_rows)) + 1
+    current_pred_page(current_page)
+    
+    data=pred_data()
+
     i = info$row
     j = info$col + 1
     
-    data = editData(data,input$pd_data_cell_edit, "pd_data", rownames = FALSE)
+    data = editData(data,input$pd_data_cell_edit,"pd_data",rownames = FALSE)
     
     pred_data(data)
-    renderpreddata(pred_data(),date_format_string,column_props,output)
+    renderpreddata(pred_data(),date_format_string,column_props,current_pred_page(),output)
   })
   
   # Make predictions using selected model
@@ -4898,7 +5074,11 @@ server= function(input,output,session) {
       
       if (final_model_PCA()) {
         
-        part1 = as.matrix(pred_feat_data)
+        matched_mean = PCA_scaling_mean()[colnames(pred_feat_data)]
+        matched_sd = PCA_scaling_sd()[colnames(pred_feat_data)]
+        scaled_pred_data = scale(pred_feat_data, center = matched_mean, scale = matched_sd)
+        
+        part1 = as.matrix(scaled_pred_data)
         part2 = as.matrix(PCA_coefficients() %>% select(any_of(model_PCA_axes())))
         
         pred_pca_data = data.frame(part1 %*% part2)
@@ -4908,33 +5088,33 @@ server= function(input,output,session) {
       if (input$model_choice == "Logistic_Regression") {
         
         if (final_model_PCA()) {
-          predictions = predict(model, newx = as.matrix(pred_pca_data), type = "response")
+          predictions = predict(model, newx = as.matrix(pred_pca_data), type = "response", scale = LG_standardize())
         } else {
-          predictions = predict(model, newx = as.matrix(pred_feat_data), type = "response")
+          predictions = predict(model, newx = as.matrix(pred_feat_data), type = "response", scale = LG_standardize())
         }
         
       } else if (input$model_choice == "XGB_Classifier") {
         
         if (final_model_PCA()) {
-          predictions = predict(model, newdata = as.matrix(pred_pca_data, type="response"))
+          predictions = predict(model, newdata = as.matrix(pred_pca_data, type="response", scale = XGBCL_standardize()))
         } else {
-          predictions = predict(model, newdata = as.matrix(pred_feat_data, type="response"))
+          predictions = predict(model, newdata = as.matrix(pred_feat_data, type="response", scale = XGBCL_standardize()))
         }
         
       } else if (input$model_choice == "XGBoost") {
         
         if (final_model_PCA()) {
-          predictions = predict(model, newdata = as.matrix(pred_pca_data))
+          predictions = predict(model, newdata = as.matrix(pred_pca_data), scale = XGB_standardize())
         } else {
-          predictions = predict(model, newdata = as.matrix(pred_feat_data))
+          predictions = predict(model, newdata = as.matrix(pred_feat_data), scale = XGB_standardize())
         }
         
       } else if (input$model_choice == "Elastic_Net") {
         
         if (final_model_PCA()) {
-          predictions = predict(model, newx = as.matrix(pred_pca_data))
+          predictions = predict(model, newx = as.matrix(pred_pca_data), scale = EN_standardize())
         } else {
-          predictions = predict(model, newx = as.matrix(pred_feat_data))
+          predictions = predict(model, newx = as.matrix(pred_feat_data), scale = EN_standardize())
         }
         
       }
