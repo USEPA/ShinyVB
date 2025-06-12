@@ -14,7 +14,7 @@ DataPanel = sidebarLayout(
     fluidRow(column(6,numericInput("lc_val", "Left-Censored", value=-9999)),
              column(6,numericInput("rc_val", "Right-Censored", value=9999))),
     fluidRow(column(6,disabled(inputPanel(selectInput("set_column_props",label = "Column Properties",selected ="-",choices = c("-"))))),
-             column(6,class="align-center",radioButtons(inline=T,"select_choice","Table Selection",choices = c(Features="Features",Rows="Rows"),selected = "Features"))),
+             column(6,class="align-center",radioButtons(inline=F,"select_choice","",choices = c(Change_Response="Change_Response",Edit_Cells="Edit_Cells"),selected = "Change_Response"))),
     fluidRow(column(6,disabled(actionButton("ignore_rows", "Disable Selected Rows", class = "btn-default custom-btn",  style='padding: 6px;'))),
              column(6,disabled(actionButton("enable_rows", "Enable Selected Rows", class = "btn-default custom-btn",  style='padding: 6px;')))),
 

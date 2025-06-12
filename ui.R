@@ -276,18 +276,28 @@ ui = fluidPage(
   ")),
   
   tags$script(HTML(
-      "Shiny.addCustomMessageHandler('disableTabs', function(message) {
+    "Shiny.addCustomMessageHandler('disableTabs', function(message) {
         if (message.action === 'disable') {
           $('#shinyVB li a:contains(\"Map\")').parent().addClass('disabled');
           $('#shinyVB li a:contains(\"Data\")').parent().addClass('disabled');
-          $('#shinyVB li a:contains(\"Modeling\")').parent().addClass('disabled');}});" ,
-      
-      "Shiny.addCustomMessageHandler('enableTabs', function(message) {
+          $('#shinyVB li a:contains(\"Modeling\")').parent().addClass('disabled');}});",
+    
+    "Shiny.addCustomMessageHandler('enableTabs', function(message) {
         if (message.action === 'enable') {
           $('#shinyVB li a:contains(\"Map\")').parent().removeClass('disabled');
           $('#shinyVB li a:contains(\"Data\")').parent().removeClass('disabled');
-          $('#shinyVB li a:contains(\"Modeling\")').parent().removeClass('disabled');}});"))
-  ),
+          $('#shinyVB li a:contains(\"Modeling\")').parent().removeClass('disabled');}});",
+    
+    "$(document).ready(function() {
+      $('#data').on('focus', 'input[type=number]', function() {
+        $(this).attr('type', 'text');
+      });});",
+    
+    "$(document).ready(function() {
+      $('#pd_data').on('focus', 'input[type=number]', function() {
+        $(this).attr('type', 'text');
+      });
+    });"))),
   
   navbarPage(
     title = "Virtual Beach",

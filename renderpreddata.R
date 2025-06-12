@@ -46,17 +46,23 @@ renderpreddata = function(data,
           scrollY = TRUE,
           buttons = c('copy', 'csv', 'excel'),
           columnDefs = list(list(
-            targets = '_all', className = 'dt-center'
+            targets = '_all', className = 'dt-center',
+            createdCell = JS(
+              "function(td, cellData, rowData, row, col) {",
+              "$(td).css({'min-width': '75px'});",
+              "}"
+            )
           )),
           initComplete = JS(
             "function(settings, json) {",
             "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+            "Shiny.setInputValue('tableRendered', 'pd_data', {priority: 'event'});",
             "}"
           )
         )
       ) %>%
-        formatStyle(columns = 1:2, backgroundColor = "lightgray") %>%
-        formatStyle(columns = 3:(ncol(data)-3), backgroundColor = "#aaeeaa") %>%
+        formatStyle(columns = 1:2, backgroundColor = "#b0bed9") %>%
+        formatStyle(columns = 3:(ncol(data)-3),backgroundColor = styleEqual(-999, "red", default = "#aaeeaa")) %>%
         formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
         formatRound(columns = 2:ncol(data), digits = sig_digies) %>%
         formatDate(1, date_format_string)
@@ -84,17 +90,23 @@ renderpreddata = function(data,
           scrollY = TRUE,
           buttons = c('copy', 'csv', 'excel'),
           columnDefs = list(list(
-            targets = '_all', className = 'dt-center'
+            targets = '_all', className = 'dt-center',
+            createdCell = JS(
+              "function(td, cellData, rowData, row, col) {",
+              "$(td).css({'min-width': '75px'});",
+              "}"
+            )
           )),
           initComplete = JS(
             "function(settings, json) {",
             "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+            "Shiny.setInputValue('tableRendered', 'pd_data', {priority: 'event'});",
             "}"
           )
         )
       ) %>%
-        formatStyle(columns = 1:2, backgroundColor = "lightgray") %>%
-        formatStyle(columns = 3:(ncol(data)-3), backgroundColor = "#aaeeaa") %>%
+        formatStyle(columns = 1:2, backgroundColor = "#b0bed9") %>%
+        formatStyle(columns = 3:(ncol(data)-3),backgroundColor = styleEqual(-999, "red", default = "#aaeeaa")) %>%
         formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
         formatRound(columns = 1:ncol(data),digits = sig_digies)
     })
@@ -120,17 +132,23 @@ renderpreddata = function(data,
           scrollY = TRUE,
           buttons = c('copy', 'csv', 'excel'),
           columnDefs = list(list(
-            targets = '_all', className = 'dt-center'
+            targets = '_all', className = 'dt-center',
+            createdCell = JS(
+              "function(td, cellData, rowData, row, col) {",
+              "$(td).css({'min-width': '75px'});",
+              "}"
+            )
           )),
           initComplete = JS(
             "function(settings, json) {",
             "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+            "Shiny.setInputValue('tableRendered', 'pd_data', {priority: 'event'});",
             "}"
           )
         )
       ) %>%
-        formatStyle(columns = 1:2, backgroundColor = "lightgray") %>%
-        formatStyle(columns = 3:(ncol(data)-3), backgroundColor = "#aaeeaa") %>%
+        formatStyle(columns = 1:2, backgroundColor = "#b0bed9") %>%
+        formatStyle(columns = 3:(ncol(data)-3),backgroundColor = styleEqual(-999, "red", default = "#aaeeaa")) %>%
         formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
         formatRound(columns = 2:ncol(data),digits = sig_digies)
     })

@@ -25,7 +25,7 @@ renderdata = function(data,
     sig_digies = append(sig_digies, values(feat_props, keys = col_names[i])[1])
   }
   
-  if (select_choice == "Features") {
+  if (select_choice == "Change_Response") {
     
     if (date_format_string != "Numeric" && date_format_string != "Character") {
       
@@ -43,7 +43,7 @@ renderdata = function(data,
             target = "column",
             mode = "single"
           ),
-          editable = T,
+          editable = F,
           options = list(
             autoWidth = F,
             dom='ltBp',
@@ -59,6 +59,7 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
@@ -81,7 +82,7 @@ renderdata = function(data,
             target = "column",
             mode = "single"
           ),
-          editable = T,
+          editable = F,
           options = list(
             autoWidth = F,
             dom='ltBp',
@@ -97,6 +98,7 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
@@ -117,7 +119,7 @@ renderdata = function(data,
             target = "column",
             mode = "single"
           ),
-          editable = T,
+          editable = F,
           options = list(
             autoWidth = F,
             dom='ltBp',
@@ -133,6 +135,7 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
@@ -175,6 +178,7 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
@@ -213,6 +217,7 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
@@ -249,6 +254,7 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
