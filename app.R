@@ -87,8 +87,10 @@ server= function(input,output,session) {
   add_validation_rules(iv)
   iv$enable()
   
-  # Render leaflet map
+  # Create a temporary SQL database
+  temp_db = dbConnect(RSQLite::SQLite(), ":memory:")
   
+  # Render leaflet map
   output$map = renderLeaflet({
     leaflet() |> 
       addTiles() |> 
@@ -96,11 +98,9 @@ server= function(input,output,session) {
   })
   
   # Compute beach orientation based on map clicks
-  
   observeEvent(input$map_click,  ignoreInit = T, {map_click(input$map_click,map_clicks,bo)})
   
   # Add/Remove shoreline markers
-  
   observeEvent(input$show_shorelines, ignoreInit = T, {
     
     if (input$show_shorelines) {
@@ -152,7 +152,6 @@ server= function(input,output,session) {
   })
   
   # Add/Remove monitoring station markers
-  
   observeEvent(input$show_stations, ignoreInit = T, {
     
     if (input$show_stations) {
@@ -196,7 +195,6 @@ server= function(input,output,session) {
   })
   
   # Other map stuff
-  
   observeEvent(input$map_marker_click, ignoreInit = T, {
     
     marker = input$map_marker_click
@@ -226,8 +224,7 @@ server= function(input,output,session) {
   
   output$beach_orient = renderText({bo()})
   
-  # Save Project file from Data Tab
-  
+  # Save Project file from Data tab
   output$save_project = downloadHandler(filename = function() {paste("Project_File.RData")}, content = function(file) {
     
     save_list = list(
@@ -320,8 +317,7 @@ server= function(input,output,session) {
     save(save_list, file = file)
     })
   
-  # Save Project file from Modeling Tab
-  
+  # Save Project file from Modeling tab
   output$save_project2 = downloadHandler(filename = function() {paste("Project_File.RData")}, content = function(file) {
     
     save_list = list(
@@ -414,8 +410,7 @@ server= function(input,output,session) {
     save(save_list, file = file)
   })
 
-  # Load Saved Workspace
-  
+  # Load saved Workspace
   observeEvent(c(input$load_project,input$load_project2,input$load_prediction), ignoreInit = T, {
 
     req(!is.null(input$load_project) | !is.null(input$load_project2) | !is.null(input$load_prediction))
@@ -622,7 +617,6 @@ server= function(input,output,session) {
   })
   
   # Create a feature correlation matrix
-  
   observeEvent(input$corr_check, ignoreInit = T, {
     
     showModal(modalDialog(title="Choose Features", card(
@@ -639,7 +633,6 @@ server= function(input,output,session) {
   })
   
   observeEvent(input$run_corr, ignoreInit = T, {
-    
     removeModal()
     
     if (is.null(ignored_rows)) {
@@ -658,7 +651,6 @@ server= function(input,output,session) {
   })
   
   # Create PCA dataset for later analysis
-  
   observeEvent(input$pca_check, ignoreInit = T, {
     
     data = current_data()
@@ -721,7 +713,6 @@ server= function(input,output,session) {
   })
   
   observeEvent(c(PCA_dataset(),refresh_trigger()), ignoreInit = TRUE, {
-    
     if (!is.null(PCA_dataset())) {
       
       output$PCA_coeffs = DT::renderDataTable(server = T, {data = datatable(PCA_coefficients(),rownames = F,selection =
@@ -756,8 +747,21 @@ server= function(input,output,session) {
 
   })
   
-  # Provide dataset cell value editing
+  # Toggling dataset manipulation options
+  observeEvent(input$select_choice, ignoreInit = T, {
+    
+    if (input$select_choice == "D/E_Rows") {
+      enable("ignore_rows")
+      enable("enable_rows")
+    } else {
+      disable("ignore_rows")
+      disable("enable_rows")
+    }
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+  })
   
+  # Provide dataset cell editing
   observeEvent(input$data_cell_edit, ignoreInit = T, ignoreNULL = T, {
     
     info = input$data_cell_edit
@@ -773,8 +777,90 @@ server= function(input,output,session) {
     renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
   })
   
-  # Restore the original dataset
+  # Change the response variable
+  observeEvent(input$data_columns_selected, ignoreInit = T, {
+    
+    if (input$select_choice == "Change_Response") {
+      
+      if ((input$data_columns_selected+1) != response_var() && input$data_columns_selected != 0) {
+        
+        response_var(input$data_columns_selected + 1)
+        
+        # Filter the response variable to exclude left and right-censored tags
+        exclude_values = c(input$lc_val, input$rc_val)
+        
+        real_responses = na.omit(current_data()[!current_data()[,response_var()] %in% exclude_values,response_var()])
+        
+        updateNumericInput(session, "LG_binarize_crit_value",value = round(median(real_responses),2),
+                           min=min(real_responses),max=max(real_responses))
+        updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(real_responses),2),
+                           min=min(real_responses),max=max(real_responses))
+        
+        iv$remove_rules("LG_binarize_crit_value")
+        iv$remove_rules("XGBCL_binarize_crit_value")
+        
+        iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
+        iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
+        
+        updateNumericInput(session, "lc_replace",value = round(min(real_responses),3))
+        updateNumericInput(session, "rc_replace",value = round(max(real_responses),3))
+        
+        renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+        
+        pca_axes_max(ncol(init_data)-2)
+        pca_axes(NULL)
+        pcax_being_used(NULL)
+        PCA_dataset(NULL)
+        
+        clear_modeling(TRUE)
+        changed_model(TRUE)
+        
+        updateNumericInput(session, "num_axes",
+                           value = pca_axes_max(),
+                           max = pca_axes_max())
+      }
+    } else {
+      return()
+    }
+  })
   
+  # Enabling/disabling rows
+  observeEvent(input$ignore_rows, ignoreInit = T, {
+    
+    if (input$data_tabs == "Data Table") {
+      add_in = input$data_rows_selected[-1]
+    }
+    if (input$data_tabs == "IsoForest Outliers") {
+      add_in = input$iso_outliers_rows_selected
+    }
+    
+    if(identical(unique(append(ignored_rows,add_in)),integer(0))) {
+      ignored_rows <<- NULL
+    } else {
+      ignored_rows <<- unique(append(ignored_rows,add_in))
+    }
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+  })
+  
+  observeEvent(input$enable_rows, ignoreInit = T, {
+    
+    if (input$data_tabs == "Data Table") {
+      add_back = input$data_rows_selected[-1]
+    }
+    if (input$data_tabs == "IsoForest Outliers") {
+      add_back = input$iso_outliers_rows_selected
+    }
+    
+    if(identical(ignored_rows[!ignored_rows %in% add_back],integer(0))) {
+      ignored_rows <<- NULL
+    } else {
+      ignored_rows <<- ignored_rows[!ignored_rows %in% add_back]
+    }
+    
+    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+  })
+  
+  # Restore the original dataset
   observeEvent(input$restore, ignoreInit = T, {
     
     response_var(2)
@@ -820,7 +906,6 @@ server= function(input,output,session) {
   })
   
   # Clear all modeling results
-  
   observeEvent(clear_modeling(), ignoreInit = T, {
     
     if (clear_modeling()) {
@@ -896,7 +981,6 @@ server= function(input,output,session) {
   })
   
   # Upload excel/csv data file
-  
   observeEvent(input$file1, ignoreInit = T, {
     
     ext = tools::file_ext(input$file1$name)
@@ -1007,7 +1091,6 @@ server= function(input,output,session) {
   })
   
   # Input column properties into the hash table
-  
   observeEvent(input$set_column_props, ignoreInit = T,  {
     
     if (input$set_column_props != "-") {
@@ -1037,57 +1120,8 @@ server= function(input,output,session) {
     renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
     
   })
-  
-  # Change the response variable
-  
-  observeEvent(input$data_columns_selected, ignoreInit = T, {
-    
-    if (input$select_choice == "Change_Response") {
-      
-      if ((input$data_columns_selected+1) != response_var() && input$data_columns_selected != 0) {
-        
-        response_var(input$data_columns_selected + 1)
-        
-        # Filter the response variable to exclude left and right-censored tags
-        exclude_values = c(input$lc_val, input$rc_val)
-        
-        real_responses = na.omit(current_data()[!current_data()[,response_var()] %in% exclude_values,response_var()])
-        
-        updateNumericInput(session, "LG_binarize_crit_value",value = round(median(real_responses),2),
-                           min=min(real_responses),max=max(real_responses))
-        updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(real_responses),2),
-                           min=min(real_responses),max=max(real_responses))
-        
-        iv$remove_rules("LG_binarize_crit_value")
-        iv$remove_rules("XGBCL_binarize_crit_value")
-        
-        iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
-        iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
-        
-        updateNumericInput(session, "lc_replace",value = round(min(real_responses),3))
-        updateNumericInput(session, "rc_replace",value = round(max(real_responses),3))
-        
-        renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
-        
-        pca_axes_max(ncol(init_data)-2)
-        pca_axes(NULL)
-        pcax_being_used(NULL)
-        PCA_dataset(NULL)
-        
-        clear_modeling(TRUE)
-        changed_model(TRUE)
-        
-        updateNumericInput(session, "num_axes",
-                           value = pca_axes_max(),
-                           max = pca_axes_max())
-      }
-    } else {
-      return()
-    }
-  })
-  
+
   # Isolation Forest analysis for outlier detection
-  
   observeEvent(input$run_iso_forest, ignoreInit = T, {
     
     req(iv$is_valid())
@@ -1168,7 +1202,6 @@ server= function(input,output,session) {
   })
   
   # Keep track of the current page in the data table
-  
   observeEvent(input$data_state, ignoreInit=T, {
 
     x = input$data_state$start
@@ -1181,58 +1214,7 @@ server= function(input,output,session) {
     }
   })
 
-  # Selection of dataset rows for enabling/disabling
-  
-  observeEvent(input$select_choice, ignoreInit = T, {
-    
-    if (input$select_choice == "Edit_Cells") {
-      enable("ignore_rows")
-      enable("enable_rows")
-    } else if (input$select_choice == "Change_Response") {
-      disable("ignore_rows")
-      disable("enable_rows")
-    }
-    
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
-  })
-  
-  observeEvent(input$ignore_rows, ignoreInit = T, {
-    
-    if (input$data_tabs == "Data Table") {
-      add_in = input$data_rows_selected[-1]
-    }
-    if (input$data_tabs == "IsoForest Outliers") {
-      add_in = input$iso_outliers_rows_selected
-    }
-    
-    if(identical(unique(append(ignored_rows,add_in)),integer(0))) {
-      ignored_rows <<- NULL
-    } else {
-      ignored_rows <<- unique(append(ignored_rows,add_in))
-    }
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
-  })
-  
-  observeEvent(input$enable_rows, ignoreInit = T, {
-    
-    if (input$data_tabs == "Data Table") {
-      add_back = input$data_rows_selected[-1]
-    }
-    if (input$data_tabs == "IsoForest Outliers") {
-      add_back = input$iso_outliers_rows_selected
-    }
-    
-    if(identical(ignored_rows[!ignored_rows %in% add_back],integer(0))) {
-      ignored_rows <<- NULL
-    } else {
-      ignored_rows <<- ignored_rows[!ignored_rows %in% add_back]
-    }
-    
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
-  })
-  
   # Plotting functions
-  
   observeEvent(input$cens_choice, ignoreInit = T, {
     
     if (input$rainplot == colnames(current_data())[response_var()] && last_plot() == "raincloud") {
@@ -1501,7 +1483,6 @@ server= function(input,output,session) {
   })
   
   # Create wind/wave/current A/O components
-  
   observeEvent(input$create, ignoreInit = T, {
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
@@ -1569,7 +1550,6 @@ server= function(input,output,session) {
   })
   
   # Toggle between regular features and PCA datasets
-  
   observeEvent(input$use_pca_data, ignoreInit = T, {
     
     changed_model(TRUE)
@@ -1590,7 +1570,6 @@ server= function(input,output,session) {
   })
   
   # Perform book-keeping functions when the "Modeling" tab is selected
-  
   observeEvent(input$shinyVB, ignoreInit = T, {
     
     if (input$shinyVB == "Modeling") {
@@ -1647,7 +1626,6 @@ server= function(input,output,session) {
   })
   
   # Catch the selection of less than two features/PCA axes
-  
   observeEvent(input$feats_to_use, ignoreInit = T, {
     
     if (length(input$feats_to_use) < 2) {
@@ -1687,7 +1665,6 @@ server= function(input,output,session) {
   })
   
   # Clear output based on non-reactive variables
-  
   observeEvent(refresh_trigger(), ignoreInit = TRUE, {
       output$XGBCL_optim_hp = NULL
       output$XGB_optim_hp = NULL
@@ -1695,7 +1672,6 @@ server= function(input,output,session) {
   })
   
   # LGR predictions
-  
   observeEvent(input$LG_pred_dc, ignoreInit = T, {
     
     if (nrow(LG_pred_scat_dat()) != 0) {
@@ -1731,6 +1707,7 @@ server= function(input,output,session) {
       
       MC_runs = input$MC_runs
       crit_value = input$LG_binarize_crit_value
+      LG_pred_thresh(crit_value)
       
       data1 = create_data(data0,rv,feats_to_use,ignored_rows,input$randomize,FALSE)
       data = data1[,-1]
@@ -1946,7 +1923,6 @@ server= function(input,output,session) {
   })
   
   # LGR fitting
-  
   observeEvent(input$LG_fit_dc, ignoreInit = T, {
     
     if (nrow(LG_scat_dat()) != 0) {
@@ -1967,6 +1943,9 @@ server= function(input,output,session) {
       
       req(iv$is_valid())
       
+      updateNumericInput(session, "num_preds",value = 2)
+      changed_model(TRUE)
+      
       if (input$use_pca_data) {
         data0 = PCA_dataset()
         rv=2
@@ -1982,6 +1961,7 @@ server= function(input,output,session) {
       
       set.seed(input$model_seed)
       crit_value = input$LG_binarize_crit_value
+      LG_thresh(crit_value)
       MC_runs = input$MC_runs
       
       data1 = create_data(data0,rv,feats_to_use,ignored_rows,input$randomize,FALSE)
@@ -2174,8 +2154,7 @@ server= function(input,output,session) {
     }
   })
   
-  # XGBCL HP Optimization
-  
+  # XGBCL HP optimization
   observeEvent(c(input$XGBCL_optimize_HP,refresh_XGBCL_Optim_HP()), ignoreInit = T, {
     
     output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(t(Optimal_CLHP),rownames=T,colnames=NULL,extensions='Buttons',selection=list(selected =
@@ -2246,7 +2225,6 @@ server= function(input,output,session) {
   })
 
   # XGBCL set HP values
-  
   observeEvent(input$XGBCL_params, ignoreInit = T, {
     
     showModal(modalDialog(title="XGBCL Hyperparameters",easyClose=F,card(
@@ -2325,7 +2303,6 @@ server= function(input,output,session) {
   })
   
   # XGBCL feature selection
-  
   observeEvent(input$run_XGBCL_select, ignoreInit = T, {
 
     response_data = as.numeric(current_data()[,response_var()])
@@ -2508,12 +2485,10 @@ server= function(input,output,session) {
     }
   })
   
-  # XGBCL Predictions
-  
+  # XGBCL predictions
   observeEvent(input$XGBCL_pred_dc, ignoreInit = T, {
     
     if (nrow(XGBCL_pred_scat_dat()) != 0) {
-      
       refresh_trigger(TRUE)
     }
   })
@@ -2530,6 +2505,8 @@ server= function(input,output,session) {
     } else {
       
       req(iv$is_valid())
+      
+      XGBCL_pred_thresh(input$XGBCL_binarize_crit_value)
       
       if (input$use_pca_data) {
         data = PCA_dataset()
@@ -2636,8 +2613,7 @@ server= function(input,output,session) {
     }
   })
   
-  # XGBCL Fitting
-  
+  # XGBCL fitting
   observeEvent(input$XGBCL_dec_crit, ignoreInit = T, {
     
     if (nrow(XGBCL_scat_dat()) != 0) {
@@ -2658,6 +2634,9 @@ server= function(input,output,session) {
       
       req(iv$is_valid())
       
+      updateNumericInput(session, "num_preds",value = 2)
+      changed_model(TRUE)
+      
       if (input$use_pca_data) {
         data0 = PCA_dataset()
         rv=2
@@ -2672,6 +2651,7 @@ server= function(input,output,session) {
       }
       
       crit_value = input$XGBCL_binarize_crit_value
+      XGBCL_thresh(crit_value)
       MC_runs = input$MC_runs
       
       data1 = create_data(data0,rv,feats_to_use,ignored_rows,input$randomize,input$XGBCL_standard)
@@ -2908,7 +2888,6 @@ server= function(input,output,session) {
   })
   
   # Create PDP for a feature in the XGBCL model
-  
   observeEvent(input$XGBCL_shapes_rows_selected, ignoreInit = T, {
     
     selected_index = input$XGBCL_shapes_rows_selected[1]
@@ -2949,8 +2928,7 @@ server= function(input,output,session) {
     ))
   })
 
-  # XGB Feature Selection
-  
+  # XGB feature Selection
   observeEvent(input$run_XGB_select, ignoreInit = T, {
 
     if(running())
@@ -3119,7 +3097,6 @@ server= function(input,output,session) {
   })
   
   # XGB HP optimization
-  
   observeEvent(c(input$XGB_optimize_HP,refresh_XGB_Optim_HP()), ignoreInit = T, {
     
     output$XGB_optim_hp = DT::renderDataTable(server=T,{data = datatable(t(Optimal_HP),rownames=T,colnames=NULL,extensions='Buttons',selection=list(selected =
@@ -3181,7 +3158,6 @@ server= function(input,output,session) {
   })
   
   # XGB HP settings
-  
   observeEvent(input$XGB_params, ignoreInit = T, {
     
     showModal(modalDialog(title="XGB Hyperparameters",easyClose=F,card(
@@ -3262,7 +3238,6 @@ server= function(input,output,session) {
   })
   
   # XGB predictions
-  
   observeEvent(input$XGB_pred_stand, ignoreInit = T, {
     
     if (nrow(XGB_pred_scat_dat()) != 0) {
@@ -3417,7 +3392,6 @@ server= function(input,output,session) {
   })
     
   # XGB fitting
-  
   observeEvent(input$XGB_stand, ignoreInit = T, {
     
     if (nrow(XGB_scat_dat()) != 0) {
@@ -3441,6 +3415,9 @@ server= function(input,output,session) {
   observeEvent(input$XGB_final_fitting, ignoreInit = T, {
     
     req(iv$is_valid())
+    
+    updateNumericInput(session, "num_preds",value = 2)
+    changed_model(TRUE)
     
     if (input$use_pca_data) {
       data0 = PCA_dataset()
@@ -3692,7 +3669,6 @@ server= function(input,output,session) {
   })
   
   # Create PDP for a feature in the XGB model
-  
   observeEvent(input$XGB_shapes_rows_selected, ignoreInit = T, {
     
     selected_index = input$XGB_shapes_rows_selected[1]
@@ -3736,7 +3712,6 @@ server= function(input,output,session) {
   })
   
   # Elastic Net predictions
-  
   observeEvent(input$EN_pred_stand, ignoreInit = TRUE, {
     
     if (nrow(EN_pred_scat_dat()) != 0) {
@@ -3980,7 +3955,6 @@ server= function(input,output,session) {
   })
   
   # Elastic Net fitting
-  
   observeEvent(input$EN_stand, ignoreInit = TRUE, {
     
     if (nrow(EN_scat_dat()) != 0) {
@@ -4005,6 +3979,9 @@ server= function(input,output,session) {
   observeEvent(input$EN_fit, ignoreInit = TRUE, {
     
     req(iv$is_valid())
+    
+    updateNumericInput(session, "num_preds",value = 2)
+    changed_model(TRUE)
     
     if (input$use_pca_data) {
       data0 = PCA_dataset()
@@ -4194,7 +4171,6 @@ server= function(input,output,session) {
   })
   
   # Perform book-keeping functions when the "Prediction" tab is selected
-  
   observeEvent(input$shinyVB, ignoreInit = T, {
     
     if (input$shinyVB == "Prediction") {
@@ -4229,7 +4205,6 @@ server= function(input,output,session) {
   })
   
   # Save Prediction file from Prediction Tab
-  
   output$save_prediction = downloadHandler(filename = function() {paste("Prediction_File.RData")}, content = function(file) {
     
     save_list = list(
@@ -4322,8 +4297,7 @@ server= function(input,output,session) {
     save(save_list, file = file)
   })
   
-  # Keep track of the page in the prediction data table
-  
+  # Keep track of the current page in the prediction data table
   observeEvent(input$pd_data_state, {
     x = input$pd_data_state$start
     y = input$pd_data_state$length
@@ -4335,8 +4309,7 @@ server= function(input,output,session) {
     }
   })
   
-  # Upload excel/csv data file for the prediction tab
-  
+  # Upload excel/csv data file into prediction data table
   observeEvent(input$pred_file, ignoreInit = T, {
     
     ext = tools::file_ext(input$pred_file$name)
@@ -4353,9 +4326,9 @@ server= function(input,output,session) {
                             easyClose = F,footer = div(modalButton('Close'))))
       return()
       
-    } else if (ncol(pred_file_data) != length(pred_model_features())+2) {
+    } else if (ncol(pred_file_data) < length(pred_model_features())+2) {
       
-      showModal(modalDialog(paste("Columns in imported file must equal the number of features in the predictive model plus 2."),
+      showModal(modalDialog(paste("Not enough columns in the imported file."),
                             easyClose = F,footer = div(modalButton('Close'))))
       
       return()
@@ -4368,10 +4341,12 @@ server= function(input,output,session) {
       
     } else {
       
-      temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = ncol(pred_file_data)+3))
+      num_feats = length(pred_model_features())
+      
+      temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = num_feats+5))
       
       for (i in 1:nrow(pred_file_data)) {
-        temp_data[i,] = cbind(pred_file_data[i,],-999,-999,-999)
+        temp_data[i,] = cbind(pred_file_data[i,1:(num_feats+2)],-999,-999,-999)
       }
       
       for (i in 1:nrow(temp_data)) {
@@ -4393,20 +4368,31 @@ server= function(input,output,session) {
     }
   })
   
-  # Load the selected model for use in prediction
-  
+  # Load a model for prediction
   observeEvent(input$model_choice, ignoreInit = T, {
     
     if (input$model_choice == "None") {
       output$pd_data = NULL
       output$resid_text = NULL
+      output$model_text = NULL
     } else {
       
       feature_mismatch(FALSE)
       standard_mismatch(FALSE)
+      thresh_mismatch(FALSE)
       no_resids(FALSE)
       
       if (input$model_choice == "Logistic_Regression") {
+        
+        output$model_text <- renderUI({
+          threshold = LG_thresh()
+          
+          HTML(paste0(
+            "<div style='font-size: 20px; font-weight: bold;'>Model: Logistic Regression</div>",
+            "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
+            "<div>Critical Threshold: ", threshold, "</div>"
+          ))
+        })
         
         model_to_use(LG_model)
         
@@ -4424,9 +4410,13 @@ server= function(input,output,session) {
           } else if (!identical(model_PCA_axes(),colnames(LG_pred_results())[4:ncol(LG_pred_results())])) {
             feature_mismatch(TRUE)
             resids = NULL
+          } else if (LG_pred_thresh() != LG_thresh()) {
+            thresh_mismatch(TRUE)
+            resids = NULL
           } else {
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
+            thresh_mismatch(FALSE)
             no_resids(FALSE)
           }
           
@@ -4444,20 +4434,34 @@ server= function(input,output,session) {
           } else if (!identical(model_features,colnames(LG_pred_results())[4:ncol(LG_pred_results())])) {
             feature_mismatch(TRUE)
             resids = NULL
+          } else if (LG_pred_thresh() != LG_thresh()) {
+            thresh_mismatch(TRUE)
+            resids = NULL
           } else {
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
+            thresh_mismatch(FALSE)
             no_resids(FALSE)
           }
         }
         
-        if (!is.null(LG_pred_results()) && !feature_mismatch() && !standard_mismatch() && !no_resids()) {
+        if (!is.null(LG_pred_results()) && !feature_mismatch() && !standard_mismatch() && !thresh_mismatch() && !no_resids()) {
           resids = ((LG_pred_results()[,2] - LG_pred_results()[,3])^2)^0.5
         } else {
           resids = NULL
         }
         
       } else if (input$model_choice == "XGB_Classifier") {
+        
+        output$model_text = renderUI({
+          threshold = XGBCL_thresh()
+          
+          HTML(paste0(
+            "<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost Classifier</div>",
+            "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
+            "<div>Critical Threshold: ", threshold, "</div>"
+          ))
+        })
         
         model_to_use(XGBCL_model)
         
@@ -4475,9 +4479,13 @@ server= function(input,output,session) {
           } else if (!identical(model_PCA_axes(),colnames(XGBCL_pred_results())[4:ncol(XGBCL_pred_results())])) {
             feature_mismatch(TRUE)
             resids = NULL
+          } else if (XGBCL_pred_thresh() != XGBCL_thresh()) {
+            thresh_mismatch(TRUE)
+            resids = NULL
           } else {
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
+            thresh_mismatch(FALSE)
             no_resids(FALSE)
           }
           
@@ -4495,20 +4503,27 @@ server= function(input,output,session) {
           } else if (!identical(model_features,colnames(XGBCL_pred_results())[4:ncol(XGBCL_pred_results())])) {
             feature_mismatch(TRUE)
             resids = NULL
+          } else if (XGBCL_pred_thresh() != XGBCL_thresh()) {
+            thresh_mismatch(TRUE)
+            resids = NULL
           } else {
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
+            thresh_mismatch(FALSE)
             no_resids(FALSE)
           }
         }
         
-        if (!is.null(XGBCL_pred_results()) && !feature_mismatch() && !standard_mismatch() && !no_resids()) {
+        if (!is.null(XGBCL_pred_results()) && !feature_mismatch() && !standard_mismatch() && !thresh_mismatch() && !no_resids()) {
           resids = ((XGBCL_pred_results()[,2] - XGBCL_pred_results()[,3])^2)^0.5
         } else {
           resids = NULL
         }
         
       } else if (input$model_choice == "XGBoost") {
+        
+        output$model_text = renderUI({HTML("<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost</div>
+            <div style='font-style: italic;'>Predictions: Response Variable Units</div>")})
         
         model_to_use(XGB_model)
         
@@ -4560,6 +4575,9 @@ server= function(input,output,session) {
         }
         
       } else if (input$model_choice == "Elastic_Net") {
+        
+        output$model_text = renderUI({HTML("<div style='font-size: 20px; font-weight: bold;'>Model: Elastic Net</div>
+            <div style='font-style: italic;'>Predictions: Response Variable Units</div>")})
         
         model_to_use(EN_model)
         
@@ -4644,15 +4662,17 @@ server= function(input,output,session) {
       pred_model_features(model_features)
       
       if (no_resids()) {
-        output$resid_text = renderText({HTML("NOTE: There are no prediction residuals. Run a prediction model to generate them if you desire confidence interval calculations.")})
+        output$resid_text = renderText({HTML("NOTE: There are no available prediction residuals. Run a prediction model to generate them if you want confidence interval calculations.")})
       } else if (standard_mismatch()) {
         output$resid_text = renderText({HTML("NOTE: Prediction and Fitted models have different feature standardizations. The prediction residuals cannot be used.")})
       } else if (feature_mismatch()) {
-        output$resid_text = renderText({HTML("NOTE: Prediction and Fitted models have different Features. The prediction residuals cannot be used.")})
+        output$resid_text = renderText({HTML("NOTE: Prediction and Fitted models have different features. The prediction residuals cannot be used.")})
+      } else if (thresh_mismatch()) {
+        output$resid_text = renderText({HTML("NOTE: Prediction and Fitted models have different critical value thresholds. The prediction residuals cannot be used.")})
       } else if (is.null(resids)) {
-        output$resid_text = renderText({HTML("NOTE: There are no prediction residuals. Run a prediction model to generate them if you desire confidence interval calculations.")})
-      }else {
-        output$resid_text = renderText({HTML("SUCCESS: Prediction residuals will be used for confidence interval calculations.")})
+        output$resid_text = renderText({HTML("NOTE: There are no available prediction residuals. Run a prediction model to generate them if you want confidence interval calculations.")})
+      } else {
+        output$resid_text = renderText({HTML("SUCCESS: Prediction residuals are available and will be used for confidence interval calculations.")})
       }
       
       current_pred_page(1)
@@ -4662,7 +4682,6 @@ server= function(input,output,session) {
   })
   
   # Change the number of desired predictions
-  
   observeEvent(input$num_preds, ignoreInit = T, {
     
     req(iv$is_valid())
@@ -4696,7 +4715,6 @@ server= function(input,output,session) {
   })
   
   # Provide prediction dataset cell value editing
-  
   observeEvent(input$pd_data_cell_edit, ignoreInit = T, ignoreNULL = T, {
     
     info = input$pd_data_cell_edit
@@ -4713,7 +4731,6 @@ server= function(input,output,session) {
   })
   
   # Make predictions using selected model
-  
   observeEvent (input$make_preds, ignoreInit = T, {
     
     req(iv$is_valid())
@@ -4832,7 +4849,6 @@ server= function(input,output,session) {
   })
   
   # Disconnect the opened SQLite database
-  
   session$onSessionEnded(function() {
     dbDisconnect(temp_db)
   })

@@ -6,7 +6,7 @@ DataPanel = sidebarLayout(
     
     fluidRow(column(6,inputPanel(selectInput("IDasDate",label = "ID/Date Format",selected ="MDY",choices = c("MDY","YMD","MDYHM","Numeric","Character")))),
              column(6,disabled(actionButton("restore", "Restore Inputs", class = "btn-default custom-btn", style='width: 120px; padding:8px; vertical-align: -33px;')))),
-    fluidRow(column(12,radioButtons(inline=T,"sep","Separator",choices = c(Comma = ",",Semicolon = ";",Space = " ",Tab = "\t"),selected = ","))),
+    fluidRow(column(12,radioButtons(inline=T,"sep","Separator",choices = c("Comma" = ",","Semicolon" = ";","Space" = " ","Tab" = "\t"),selected = ","))),
     
     div(fileInput("file1", "Select your data file", buttonLabel = "Browse",accept = c("text/csv",
                   "text/comma-separated-values,text/plain",".csv",".xlsx")), style="font-size:80%; font-family:Arial; width: 350px;"),
@@ -14,7 +14,8 @@ DataPanel = sidebarLayout(
     fluidRow(column(6,numericInput("lc_val", "Left-Censored", value=-9999)),
              column(6,numericInput("rc_val", "Right-Censored", value=9999))),
     fluidRow(column(6,disabled(inputPanel(selectInput("set_column_props",label = "Column Properties",selected ="-",choices = c("-"))))),
-             column(6,class="align-center",radioButtons(inline=F,"select_choice","",choices = c(Change_Response="Change_Response",Edit_Cells="Edit_Cells"),selected = "Change_Response"))),
+             column(6,radioButtons(inline=F,"select_choice",label="",choices = c("Change Response"="Change_Response","Edit Cells"="Edit_Cells",
+                              "[Dis/En]able Rows" = "D/E_Rows"),selected = "Change_Response"))),
     fluidRow(column(6,disabled(actionButton("ignore_rows", "Disable Selected Rows", class = "btn-default custom-btn",  style='padding: 6px;'))),
              column(6,disabled(actionButton("enable_rows", "Enable Selected Rows", class = "btn-default custom-btn",  style='padding: 6px;')))),
 

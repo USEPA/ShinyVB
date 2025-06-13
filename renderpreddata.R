@@ -8,6 +8,9 @@ renderpreddata = function(data,
   sig_digies = c()
   col_names = colnames(data)
   
+  begin_disable = ncol(data)-3
+  end_disable = ncol(data)-1
+  
   for (i in 1:(ncol(data)-3)) {
     if (colnames(data)[i] %in% keys(feat_props)) {
       sig_digies = append(sig_digies, values(feat_props, keys = col_names[i])[1])
@@ -30,12 +33,8 @@ renderpreddata = function(data,
         data,
         rownames = F,
         extensions = 'Buttons',
-        selection = list(
-          selected = list(rows = NULL, cols = 1),
-          target = "column",
-          mode = "single"
-        ),
-        editable = T,
+        selection = "none",
+        editable = list(target = "cell", disable = list(columns = c(begin_disable:end_disable))),
         options = list(
           autoWidth = F,
           dom='ltBp',
@@ -62,7 +61,8 @@ renderpreddata = function(data,
         )
       ) %>%
         formatStyle(columns = 1:2, backgroundColor = "#b0bed9") %>%
-        formatStyle(columns = 3:(ncol(data)-3),backgroundColor = styleEqual(-999, "red", default = "#aaeeaa")) %>%
+        formatStyle(columns = 3:(ncol(data)-3),color = styleEqual(-999, "white", default = "black"),
+                    backgroundColor = styleEqual(-999, "#BA0C2F", default = "#aaeeaa")) %>%
         formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
         formatRound(columns = 2:ncol(data), digits = sig_digies) %>%
         formatDate(1, date_format_string)
@@ -74,12 +74,8 @@ renderpreddata = function(data,
         data,
         rownames = F,
         extensions = 'Buttons',
-        selection = list(
-          selected = list(rows = NULL, cols = 1),
-          target = "column",
-          mode = "single"
-        ),
-        editable = T,
+        selection = "none",
+        editable = list(target = "cell", disable = list(columns = c(begin_disable:end_disable))),
         options = list(
           autoWidth = F,
           dom='ltBp',
@@ -106,7 +102,8 @@ renderpreddata = function(data,
         )
       ) %>%
         formatStyle(columns = 1:2, backgroundColor = "#b0bed9") %>%
-        formatStyle(columns = 3:(ncol(data)-3),backgroundColor = styleEqual(-999, "red", default = "#aaeeaa")) %>%
+        formatStyle(columns = 3:(ncol(data)-3),color = styleEqual(-999, "white", default = "black"),
+                    backgroundColor = styleEqual(-999, "#BA0C2F", default = "#aaeeaa")) %>%
         formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
         formatRound(columns = 1:ncol(data),digits = sig_digies)
     })
@@ -116,12 +113,8 @@ renderpreddata = function(data,
         data,
         rownames = F,
         extensions = 'Buttons',
-        selection = list(
-          selected = list(rows = NULL, cols = 1),
-          target = "column",
-          mode = "single"
-        ),
-        editable = T,
+        selection = "none",
+        editable = list(target = "cell", disable = list(columns = c(begin_disable:end_disable))),
         options = list(
           autoWidth = F,
           dom='ltBp',
@@ -148,7 +141,8 @@ renderpreddata = function(data,
         )
       ) %>%
         formatStyle(columns = 1:2, backgroundColor = "#b0bed9") %>%
-        formatStyle(columns = 3:(ncol(data)-3),backgroundColor = styleEqual(-999, "red", default = "#aaeeaa")) %>%
+        formatStyle(columns = 3:(ncol(data)-3),color = styleEqual(-999, "white", default = "black"),
+                    backgroundColor = styleEqual(-999, "#BA0C2F", default = "#aaeeaa")) %>%
         formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
         formatRound(columns = 2:ncol(data),digits = sig_digies)
     })

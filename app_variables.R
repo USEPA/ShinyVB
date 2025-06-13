@@ -8,9 +8,6 @@ map_clicks = reactiveValues(points = data.frame())
 station_data = data.frame(read.csv("stations.csv"))
 shoreline_data = data.frame(read.csv("shorelines.csv"))
 
-# Create a temporary SQL database
-temp_db = dbConnect(RSQLite::SQLite(), ":memory:")
-
 # General reactive variables
 refresh_trigger = reactiveVal(FALSE)
 prediction_trigger = reactiveVal(FALSE)
@@ -99,8 +96,9 @@ LG_pred_coeffs = reactiveVal()
 LG_pred_confuse_results = reactiveVal()
 LG_pred_scat_dat = reactiveVal()
 LG_pred_standardize = reactiveVal(TRUE)
+LG_pred_thresh = reactiveVal()
 
-# Logistic Regression Results
+# Logistic Regression Fitting Results
 LG_results = reactiveVal()
 LG_coeffs = reactiveVal()
 LG_confuse_results = reactiveVal()
@@ -108,6 +106,7 @@ LG_scat_dat = reactiveVal()
 LG_model = NULL
 LG_model_PCA = reactiveVal(FALSE)
 LG_standardize = reactiveVal(TRUE)
+LG_thresh = reactiveVal()
 
 # XGBoost Classifier Prediction Results
 XGBCL_pred_results = reactiveVal()
@@ -115,13 +114,14 @@ XGBCL_pred_coeffs = reactiveVal()
 XGBCL_pred_confuse_results = reactiveVal()
 XGBCL_pred_scat_dat = reactiveVal()
 XGBCL_pred_standardize = reactiveVal(FALSE)
+XGBCL_pred_thresh = reactiveVal()
 
 # XGBoost Classifier Other Results
 refresh_XGBCL_Optim_HP = reactiveVal(FALSE)
 XGBCL_selection_results = reactiveVal()
 Optimal_CLHP = data.frame(max_depth = 2,eta = 0.05,subsample = 0.8,colsample_bytree = 0.8,min_child_weight = 3,gamma = 1,nrounds = 100)
 
-# XGBoost Classifier Results
+# XGBoost Classifier Fitting Results
 XGBCL_results = reactiveVal()
 XGBCL_coeffs = reactiveVal()
 XGBCL_confuse_results = reactiveVal()
@@ -130,6 +130,7 @@ XGBCL_model = NULL
 XGBCL_model_PCA = reactiveVal(FALSE)
 XGBCL_standardize = reactiveVal(FALSE)
 XGBCL_final_data = reactiveVal()
+XGBCL_thresh = reactiveVal()
 
 # XGBoost Prediction Results
 XGB_pred_results = reactiveVal()
@@ -143,7 +144,7 @@ refresh_XGB_Optim_HP = reactiveVal(FALSE)
 XGB_selection_results = reactiveVal()
 Optimal_HP = data.frame(max_depth = 2,eta = 0.05,subsample = 0.8,colsample_bytree = 0.8,min_child_weight = 3,gamma = 1,nrounds = 100)
 
-# XGBoost Results
+# XGBoost Fitting Results
 XGB_results = reactiveVal()
 XGB_coeffs = reactiveVal()
 XGB_confuse_results = reactiveVal()
@@ -160,7 +161,7 @@ EN_pred_confuse_results = reactiveVal()
 EN_pred_scat_dat = reactiveVal()
 EN_pred_standardize = reactiveVal(TRUE)
 
-# Elastic Net Results
+# Elastic Net Fitting Results
 EN_results = reactiveVal()
 EN_coeffs = reactiveVal()
 EN_confuse_results = reactiveVal()
@@ -173,5 +174,6 @@ EN_standardize = reactiveVal(TRUE)
 final_model_PCA = reactiveVal(FALSE)
 feature_mismatch = reactiveVal(FALSE)
 standard_mismatch = reactiveVal(FALSE)
+thresh_mismatch = reactiveVal(FALSE)
 no_resids = reactiveVal(FALSE)
 model_PCA_axes = reactiveVal()
