@@ -527,7 +527,7 @@ server= function(input,output,session) {
       updateRadioButtons(session,"model_choice",selected="None",choices=c("None",models_created()))
       
       if (final_model_PCA()) {
-          output$pca_model_text = renderText({HTML("NOTE: PCA features being used.")})
+          output$pca_model_text = renderText({HTML("NOTE: PCA axes being used as features.")})
       } else {
           output$pca_model_text = NULL
       }
@@ -2372,7 +2372,7 @@ server= function(input,output,session) {
 
         xgbcl_selection(data,seed,rv,feats_to_use,ignored_rows,crit_value,eval_metric,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                         standardize,binarize,xgb_tree_method,xgb_booster,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
-                        min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db)
+                        min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db,MC_subbin,create_data)
 
       }, seed=TRUE)
 
@@ -4197,7 +4197,7 @@ server= function(input,output,session) {
       }
       
       if (final_model_PCA()) {
-        output$pca_model_text = renderText({HTML("NOTE: PCA features being used.")})
+        output$pca_model_text = renderText({HTML("NOTE: PCA axes being used as features.")})
       } else {
         output$pca_model_text = NULL
       }
@@ -4373,8 +4373,11 @@ server= function(input,output,session) {
     
     if (input$model_choice == "None") {
       output$pd_data = NULL
+      output$pd_feat_ranges = NULL
       output$resid_text = NULL
       output$model_text = NULL
+      output$pca_model_text = NULL
+      
     } else {
       
       feature_mismatch(FALSE)
@@ -4630,7 +4633,7 @@ server= function(input,output,session) {
       }
       
       if (final_model_PCA()) {
-        output$pca_model_text = renderText({HTML("NOTE: PCA features being used.")})
+        output$pca_model_text = renderText({HTML("NOTE: PCA axes being used as features.")})
       } else {
         output$pca_model_text = NULL
       }
@@ -4676,8 +4679,46 @@ server= function(input,output,session) {
       }
       
       current_pred_page(1)
+
+      selected_data = init_data[,model_features]
+      num_cols = length(model_features)
+
+      min_feats = apply(selected_data, 2, min, na.rm = TRUE)
+      max_feats = apply(selected_data, 2, max, na.rm = TRUE)
+      
+      feature_ranges = data.frame(matrix(NA, nrow = 2, ncol = num_cols+1))
+      feature_ranges[1,1] = "Minimum"
+      feature_ranges[2,1] = "Maximum"
+      feature_ranges[1, 2:(1 + num_cols)] = min_feats
+      feature_ranges[2, 2:(1 + num_cols)] = max_feats
+
+      colnames(feature_ranges) = c("Feature_Characteristic",model_features)
+      model_feature_ranges(feature_ranges)
       
       renderpreddata(pred_data(),date_format_string,column_props,current_pred_page(),output)
+      
+      output$pd_feat_ranges = DT::renderDataTable(server = T, {
+        datatable(
+          data.frame(feature_ranges),
+          rownames = F,
+          selection = "none",
+          editable = F,
+          options = list(
+            autoWidth = F,
+            dom='t',
+            paging = F,
+            pageLength = 5,
+            scrollX = TRUE,
+            scrollY = F,
+            columnDefs = list(list(targets = 0, width = "170px"),list(targets = '_all', className = 'dt-center')),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "}"
+            )
+          )
+        )
+      })
     }
   })
   

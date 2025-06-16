@@ -32,6 +32,13 @@ ui = fluidPage(
     #scattery+ div>.selectize-dropdown{width: 175px !important;}
     
     #scattery+ div>.selectize-input{width: 130px !important;padding: 3px;}
+  
+    #pd_feat_ranges th, #pd_feat_ranges td {
+      min-width: 60px !important;
+    }
+    #pd_data th, #pd_data td {
+      min-width: 60px !important;
+    }
     
     .highlighted-cell {
       background-color: #BA0C2F !important;
