@@ -762,7 +762,7 @@ server= function(input,output,session) {
   })
   
   # Provide dataset cell editing
-  observeEvent(input$data_cell_edit, ignoreInit = T, ignoreNULL = T, {
+  observeEvent(input$data_cell_edit, ignoreInit = T, {
     
     info = input$data_cell_edit
     temp_data=current_data()
@@ -4756,7 +4756,7 @@ server= function(input,output,session) {
   })
   
   # Provide prediction dataset cell value editing
-  observeEvent(input$pd_data_cell_edit, ignoreInit = T, ignoreNULL = T, {
+  observeEvent(input$pd_data_cell_edit, ignoreInit = T, {
     
     info = input$pd_data_cell_edit
     
