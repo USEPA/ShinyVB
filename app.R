@@ -619,11 +619,11 @@ server= function(input,output,session) {
   # Create a feature correlation matrix
   observeEvent(input$corr_check, ignoreInit = T, {
     
-    showModal(modalDialog(title="Choose Features", card(
+    showModal(modalDialog(title="Choose Features to Examine", card(
     
       checkboxGroupButtons(
         inputId = "feats_to_corr",
-        label = "Features to Use: ",
+        label = NULL,
         choices = feat_names(),
         size = "sm",
         selected = NULL,
@@ -4326,13 +4326,6 @@ server= function(input,output,session) {
                             easyClose = F,footer = div(modalButton('Close'))))
       return()
       
-    } else if (ncol(pred_file_data) < length(pred_model_features())+2) {
-      
-      showModal(modalDialog(paste("Not enough columns in the imported file."),
-                            easyClose = F,footer = div(modalButton('Close'))))
-      
-      return()
-      
     }  else if (nrow(pred_file_data) < 2) {
       
       showModal(modalDialog(paste("File must contain more than 1 data row."), easyClose = F,footer = div(modalButton('Close'))))
@@ -4341,23 +4334,35 @@ server= function(input,output,session) {
       
     } else {
       
-      num_feats = length(pred_model_features())
+      columns_to_grab = pred_model_features()
       
-      temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = num_feats+5))
+      temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = length(columns_to_grab)+5))
       
-      for (i in 1:nrow(pred_file_data)) {
-        temp_data[i,] = cbind(pred_file_data[i,1:(num_feats+2)],-999,-999,-999)
-      }
+      missing_columns = setdiff(columns_to_grab, colnames(pred_file_data))
       
-      for (i in 1:nrow(temp_data)) {
-        for (j in 1:ncol(temp_data)) {
-          if (is.na(temp_data[i,j])) {
-            temp_data[i,j] = -999
-          }
-        }
-      }
+      if (length(missing_columns) > 0) {
+        showModal(modalDialog(
+          title = "Error",
+          paste("The following required columns are missing in the imported prediction data:", paste(missing_columns, collapse = ", ")),
+          easyClose = TRUE
+        ))
+        
+      } else {
+
+        temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = length(columns_to_grab) + 5))
+        
+        temp_data[,1:2] = pred_file_data[,1:2, drop = FALSE]
+        temp_data[, 3:(2 + length(columns_to_grab))] = pred_file_data[, columns_to_grab, drop = FALSE]
+        
+        temp_data[, (ncol(temp_data)-2):ncol(temp_data)] <- -999
+        
+        colnames(temp_data) <- c(
+          colnames(current_data()[1]),
+          colnames(current_data()[response_var()]),
+          columns_to_grab,
+          "Prediction", "Lower_Bound", "Upper_Bound"
+        )
       
-      colnames(temp_data) = c(colnames(current_data()[1]),colnames(current_data()[response_var()]),pred_model_features(),"Prediction","Lower_Bound","Upper_Bound")
       pred_data(temp_data)
       
       updateNumericInput(session, "num_preds",value = nrow(pred_data()))
@@ -4365,6 +4370,8 @@ server= function(input,output,session) {
       current_pred_page(1)
       
       renderpreddata(pred_data(),date_format_string,column_props,current_pred_page(),output)
+      
+      }
     }
   })
   
@@ -4387,7 +4394,7 @@ server= function(input,output,session) {
       
       if (input$model_choice == "Logistic_Regression") {
         
-        output$model_text <- renderUI({
+        output$model_text = renderUI({
           threshold = LG_thresh()
           
           HTML(paste0(
@@ -4680,7 +4687,7 @@ server= function(input,output,session) {
       
       current_pred_page(1)
 
-      selected_data = init_data[,model_features]
+      selected_data = current_data()[,model_features]
       num_cols = length(model_features)
 
       min_feats = apply(selected_data, 2, min, na.rm = TRUE)
@@ -4689,8 +4696,8 @@ server= function(input,output,session) {
       feature_ranges = data.frame(matrix(NA, nrow = 2, ncol = num_cols+1))
       feature_ranges[1,1] = "Minimum"
       feature_ranges[2,1] = "Maximum"
-      feature_ranges[1, 2:(1 + num_cols)] = min_feats
-      feature_ranges[2, 2:(1 + num_cols)] = max_feats
+      feature_ranges[1, 2:(1 + num_cols)] = magnitude_round(min_feats)
+      feature_ranges[2, 2:(1 + num_cols)] = magnitude_round(max_feats)
 
       colnames(feature_ranges) = c("Feature_Characteristic",model_features)
       model_feature_ranges(feature_ranges)
@@ -4702,6 +4709,7 @@ server= function(input,output,session) {
           data.frame(feature_ranges),
           rownames = F,
           selection = "none",
+          colnames = c("Feature Characteristic",colnames(feature_ranges)[2:ncol(feature_ranges)]),
           editable = F,
           options = list(
             autoWidth = F,
@@ -4715,9 +4723,7 @@ server= function(input,output,session) {
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
               "}"
-            )
-          )
-        )
+            )))
       })
     }
   })

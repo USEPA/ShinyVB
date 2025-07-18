@@ -131,3 +131,17 @@ custom_xgb_loss = function(preds, dtrain, rw) {
   
   return(list(grad = grad, hess = hess))
 }
+
+magnitude_round = function(x) {
+  ifelse(abs(x) < 0.001, round(x, 6),
+         ifelse(abs(x) < 0.01, round(x, 5),
+                ifelse(abs(x) < 0.1, round(x, 4),
+                       ifelse(abs(x) < 1, round(x, 3),
+                              ifelse(abs(x) < 10, round(x, 2),
+                                     round(x, 1)
+                              )
+                       )
+                )
+         )
+  )
+}
