@@ -63,7 +63,7 @@ source("xgbcl_pred_errors.R")
 source("xgbcl_pso.R")
 
 server= function(input,output,session) {
-
+  
   # Code to show what libraries are in use by the project
   # funcs =
   #   list.files(here::here(), pattern ="\\.R$", recursive = TRUE, full.names = TRUE) %>%
@@ -269,6 +269,8 @@ server= function(input,output,session) {
       LG_model = LG_model,
       LG_standardize = LG_pred_standardize(),
       LG_model_PCA = LG_model_PCA(),
+      LG_final_features = LG_final_features(),
+      LG_pred_data = LG_pred_data(),
       
       XGBCL_pred_results = XGBCL_pred_results(),
       XGBCL_pred_coeffs = XGBCL_pred_coeffs(),
@@ -283,6 +285,9 @@ server= function(input,output,session) {
       XGBCL_model = XGBCL_model,
       XGBCL_standardize = XGBCL_standardize(),
       XGBCL_model_PCA = XGBCL_model_PCA(),
+      XGBCL_final_features = XGBCL_final_features(),
+      XGBCL_pred_data = XGBCL_pred_data(),
+      XGBCL_final_data = XGBCL_final_data(),
       Optimal_CLHP = Optimal_CLHP,
       
       XGB_pred_results = XGB_pred_results(),
@@ -298,6 +303,9 @@ server= function(input,output,session) {
       XGB_model = XGB_model,
       XGB_standardize = XGB_standardize(),
       XGB_model_PCA = XGB_model_PCA(),
+      XGB_final_features = XGB_final_features(),
+      XGB_pred_data = XGB_pred_data(),
+      XGB_final_data = XGB_final_data(),
       Optimal_HP = Optimal_HP,
       
       EN_pred_results = EN_pred_results(),
@@ -311,11 +319,13 @@ server= function(input,output,session) {
       EN_scat_dat = EN_scat_dat(),
       EN_model = EN_model,
       EN_standardize = EN_standardize(),
-      EN_model_PCA = EN_model_PCA()
+      EN_model_PCA = EN_model_PCA(),
+      EN_final_features = EN_final_features(),
+      EN_pred_data = EN_pred_data()
     )
     
     save(save_list, file = file)
-    })
+  })
   
   # Save Project file from Modeling tab
   output$save_project2 = downloadHandler(filename = function() {paste("Project_File.RData")}, content = function(file) {
@@ -362,6 +372,8 @@ server= function(input,output,session) {
       LG_model = LG_model,
       LG_standardize = LG_pred_standardize(),
       LG_model_PCA = LG_model_PCA(),
+      LG_final_features = LG_final_features(),
+      LG_pred_data = LG_pred_data(),
       
       XGBCL_pred_results = XGBCL_pred_results(),
       XGBCL_pred_coeffs = XGBCL_pred_coeffs(),
@@ -376,6 +388,9 @@ server= function(input,output,session) {
       XGBCL_model = XGBCL_model,
       XGBCL_standardize = XGBCL_standardize(),
       XGBCL_model_PCA = XGBCL_model_PCA(),
+      XGBCL_final_features = XGBCL_final_features(),
+      XGBCL_pred_data = XGBCL_pred_data(),
+      XGBCL_final_data = XGBCL_final_data(),
       Optimal_CLHP = Optimal_CLHP,
       
       XGB_pred_results = XGB_pred_results(),
@@ -391,6 +406,9 @@ server= function(input,output,session) {
       XGB_model = XGB_model,
       XGB_standardize = XGB_standardize(),
       XGB_model_PCA = XGB_model_PCA(),
+      XGB_final_features = XGB_final_features(),
+      XGB_pred_data = XGB_pred_data(),
+      XGB_final_data = XGB_final_data(),
       Optimal_HP = Optimal_HP,
       
       EN_pred_results = EN_pred_results(),
@@ -404,19 +422,21 @@ server= function(input,output,session) {
       EN_scat_dat = EN_scat_dat(),
       EN_model = EN_model,
       EN_standardize = EN_standardize(),
-      EN_model_PCA = EN_model_PCA()
+      EN_model_PCA = EN_model_PCA(),
+      EN_final_features = EN_final_features(),
+      EN_pred_data = EN_pred_data()
     )
     
     save(save_list, file = file)
   })
-
+  
   # Load saved Workspace
   observeEvent(c(input$load_project,input$load_project2,input$load_prediction), ignoreInit = T, {
-
+    
     req(!is.null(input$load_project) | !is.null(input$load_project2) | !is.null(input$load_prediction))
     
     if (!is.null(input$load_project)) {
-       load_element = input$load_project
+      load_element = input$load_project
     } else if (!is.null(input$load_project2)) {
       load_element = input$load_project2
     } else {
@@ -427,7 +447,7 @@ server= function(input,output,session) {
     load(load_element$datapath, envir = temp_env)
     
     if (temp_env$save_list$Version == "1.0.0" && exists("save_list", envir = temp_env)) {
-
+      
       temp_db <<- temp_env$save_list$temp_db
       bo(temp_env$save_list$bo)
       current_data(temp_env$save_list$current_data)
@@ -467,6 +487,8 @@ server= function(input,output,session) {
       LG_model <<- temp_env$save_list$LG_model
       LG_standardize(temp_env$save_list$LG_standardize)
       LG_model_PCA(temp_env$save_list$LG_model_PCA)
+      LG_final_features(temp_env$save_list$LG_final_features)
+      LG_pred_data(temp_env$save_list$LG_pred_data)
       
       XGBCL_pred_results(temp_env$save_list$XGBCL_pred_results)
       XGBCL_pred_coeffs(temp_env$save_list$XGBCL_pred_coeffs)
@@ -481,6 +503,9 @@ server= function(input,output,session) {
       XGBCL_model <<- temp_env$save_list$XGBCL_model
       XGBCL_standardize(temp_env$save_list$XGBCL_standardize)
       XGBCL_model_PCA(temp_env$save_list$XGBCL_model_PCA)
+      XGBCL_final_features(temp_env$save_list$XGBCL_final_features)
+      XGBCL_pred_data(temp_env$save_list$XGBCL_pred_data)
+      XGBCL_final_data(temp_env$save_list$XGBCL_final_data)
       Optimal_CLHP <<- temp_env$save_list$Optimal_CLHP
       
       XGB_pred_results(temp_env$save_list$XGB_pred_results)
@@ -496,6 +521,9 @@ server= function(input,output,session) {
       XGB_model <<- temp_env$save_list$XGB_model
       XGB_standardize(temp_env$save_list$XGB_standardize)
       XGB_model_PCA(temp_env$save_list$XGB_model_PCA)
+      XGB_final_features(temp_env$save_list$XGB_final_features)
+      XGB_pred_data(temp_env$save_list$XGB_pred_data)
+      XGB_final_data(temp_env$save_list$XGB_final_data)
       Optimal_HP <<- temp_env$save_list$Optimal_HP
       
       EN_pred_results(temp_env$save_list$EN_pred_results)
@@ -510,6 +538,8 @@ server= function(input,output,session) {
       EN_model <<- temp_env$save_list$EN_model
       EN_model_PCA(temp_env$save_list$EN_model_PCA)
       EN_standardize(temp_env$save_list$EN_standardize)
+      EN_final_features(temp_env$save_list$EN_final_features)
+      EN_pred_data(temp_env$save_list$EN_pred_data)
       
       names = c("Logistic_Regression","XGB_Classifier","XGBoost","Elastic_Net")
       created = list(LG_results(),XGBCL_results(),XGB_results(),EN_results())
@@ -527,9 +557,9 @@ server= function(input,output,session) {
       updateRadioButtons(session,"model_choice",selected="None",choices=c("None",models_created()))
       
       if (final_model_PCA()) {
-          output$pca_model_text = renderText({HTML("NOTE: PCA axes being used as features.")})
+        output$pca_model_text = renderText({HTML("NOTE: PCA axes being used as features.")})
       } else {
-          output$pca_model_text = NULL
+        output$pca_model_text = NULL
       }
       
       refresh_trigger(TRUE)
@@ -578,14 +608,14 @@ server= function(input,output,session) {
           renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
           
           output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,extensions='Buttons',selection=list(selected =
-                                list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
-                                scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                                               list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
+                                                                                                                                                                                                                                      scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                                                                      initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
           
           output$XGB_optim_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_HP,rownames=F,extensions='Buttons',selection=list(selected =
-                                list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
-                                scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                                           list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
+                                                                                                                                                                                                                                  scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                                                                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
           
           updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
           updateCheckboxGroupButtons(session,"feats_to_corr",choices=feat_names(),selected=NULL,size="xs",status = "custom")
@@ -620,7 +650,7 @@ server= function(input,output,session) {
   observeEvent(input$corr_check, ignoreInit = T, {
     
     showModal(modalDialog(title="Choose Features to Examine", card(
-    
+      
       checkboxGroupButtons(
         inputId = "feats_to_corr",
         label = NULL,
@@ -644,7 +674,7 @@ server= function(input,output,session) {
     data_corrs = cor(corr_data,use="pairwise.complete.obs")
     
     output$corrplot = renderPlot({corrplot(data_corrs, addCoef.col = 'black', method="circle", cl.pos = 'n',is.corr = FALSE,
-                type="lower",col.lim = c(-1.4, 1.4),col = COL2('PRGn'), tl.col="black", tl.srt= 45)},height = 900, width = 900)
+                                           type="lower",col.lim = c(-1.4, 1.4),col = COL2('PRGn'), tl.col="black", tl.srt= 45)},height = 900, width = 900)
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = "Correlations")
@@ -716,21 +746,21 @@ server= function(input,output,session) {
     if (!is.null(PCA_dataset())) {
       
       output$PCA_coeffs = DT::renderDataTable(server = T, {data = datatable(PCA_coefficients(),rownames = F,selection =
-                    list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                    list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                    className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                              list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                           "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$PCA_summary = DT::renderDataTable(server = T, {data = datatable(PCA_summary_df(),rownames = F,selection =
-                    list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                    list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                    className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                               list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                               list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                 className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                            "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       renderPCAdata(PCA_dataset(),date_format_string,output)
-    
+      
       refresh_trigger(FALSE)
-    
+      
     } else if (is.null(PCA_dataset())) {
       
       output$PCA_coeffs = NULL
@@ -741,10 +771,10 @@ server= function(input,output,session) {
   })
   
   observeEvent(pca_axes_max(), ignoreInit = T, {
-
+    
     iv$remove_rules("num_axes")
     iv$add_rule("num_axes", sv_between(2,pca_axes_max()))
-
+    
   })
   
   # Toggling dataset manipulation options
@@ -766,7 +796,7 @@ server= function(input,output,session) {
     
     info = input$data_cell_edit
     temp_data=current_data()
-
+    
     i = info$row
     j = info$col + 1
     
@@ -883,7 +913,7 @@ server= function(input,output,session) {
                        value = pca_axes_max(),
                        max = pca_axes_max()
     )
-
+    
     updateSelectInput(session,"speed",selected="-")
     updateSelectInput(session,"direct",selected="-")
     updateSelectInput(session,"select_choice",selected="Change_Response")
@@ -922,6 +952,8 @@ server= function(input,output,session) {
       LG_confuse_results(NULL)
       LG_scat_dat(NULL)
       LG_model <<- NULL
+      LG_final_features(NULL)
+      LG_pred_data(NULL)
       
       # XGBoost Classifier Prediction Results
       XGBCL_pred_results(NULL)
@@ -938,6 +970,9 @@ server= function(input,output,session) {
       XGBCL_confuse_results(NULL)
       XGBCL_scat_dat(NULL)
       XGBCL_model <<- NULL
+      XGBCL_final_data(NULL)
+      XGBCL_final_features(NULL)
+      XGBCL_pred_data(NULL)
       
       # XGBoost Prediction Results
       XGB_pred_results(NULL)
@@ -954,6 +989,9 @@ server= function(input,output,session) {
       XGB_confuse_results(NULL)
       XGB_scat_dat(NULL)
       XGB_model <<- NULL
+      XGB_final_data(NULL)
+      XGB_final_features(NULL)
+      XGB_pred_data(NULL)
       
       # Elastic Net Prediction Results
       EN_pred_results(NULL)
@@ -967,13 +1005,15 @@ server= function(input,output,session) {
       EN_confuse_results(NULL)
       EN_scat_dat(NULL)
       EN_model <<- NULL
+      EN_final_features(NULL)
+      EN_pred_data(NULL)
       
       # General Modeling Results
       model_to_use(NULL)
       pred_data(NULL)
       pred_residuals(NULL)
       models_created(NULL)
-    
+      
       clear_modeling(FALSE)
       changed_model(TRUE)
       refresh_trigger(TRUE)
@@ -1086,7 +1126,7 @@ server= function(input,output,session) {
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
-
+      
     }
   })
   
@@ -1098,9 +1138,9 @@ server= function(input,output,session) {
       showModal(modalDialog(title=paste0(input$set_column_props," Column Properties"),card(
         fluidRow(
           column(4,numericInput("sig_digies",  label="Significant Digits", value = values(column_props,keys=input$set_column_props)[1], min=0,max=12,step=1)))),
-          # column(3,numericInput("prop2",  label="Prop2", value = values(column_props,keys=input$col_props)[2], min=0,max=1,step=0.05)),
-          # column(3,textInput("prop3",  label="Prop3", value = values(column_props,keys=input$col_props)[3])),
-          # column(3,textInput("prop4",  label="Prop4", value = values(column_props,keys=input$col_props)[4])))),
+        # column(3,numericInput("prop2",  label="Prop2", value = values(column_props,keys=input$col_props)[2], min=0,max=1,step=0.05)),
+        # column(3,textInput("prop3",  label="Prop3", value = values(column_props,keys=input$col_props)[3])),
+        # column(3,textInput("prop4",  label="Prop4", value = values(column_props,keys=input$col_props)[4])))),
         footer = div(actionButton("props_close",'Close'))))
     }
   })
@@ -1120,7 +1160,7 @@ server= function(input,output,session) {
     renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
     
   })
-
+  
   # Isolation Forest analysis for outlier detection
   observeEvent(input$run_iso_forest, ignoreInit = T, {
     
@@ -1183,8 +1223,8 @@ server= function(input,output,session) {
       }
       
       isoforest = isolation.forest(iso_data,sample_size = samp_size,ntrees = 100,ndim = ndim,max_depth = ceiling(log2(samp_size)),
-                        prob_pick_pooled_gain = pooled_gain,min_gain = mingain,missing_action = miss_action,penalize_range = pen_range,
-                        standardize_data = std_data,scoring_metric = techs[[i]],output_score = TRUE)
+                                   prob_pick_pooled_gain = pooled_gain,min_gain = mingain,missing_action = miss_action,penalize_range = pen_range,
+                                   standardize_data = std_data,scoring_metric = techs[[i]],output_score = TRUE)
       
       iso_results[,i+1] = round(isoforest$scores,3)
     }
@@ -1192,9 +1232,9 @@ server= function(input,output,session) {
     iso_results[,6] = round((iso_results[,2] * iso_results[,3] * iso_results[,4] * iso_results[,5])^0.25 - 0.7071,3)
     
     output$iso_outliers = DT::renderDataTable(server = T, {data = datatable(iso_results,rownames = F,selection = list(selection = "multiple",
-                selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
-                buttons = c('copy', 'csv', 'excel'),pageLength = num_rows_per_page,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-                initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
+                                                                                                                      selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
+                                                                                                                                                                                                                    buttons = c('copy', 'csv', 'excel'),pageLength = num_rows_per_page,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                                                                                                                                                                                                                    initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = 'IsoForest Outliers')
@@ -1203,7 +1243,7 @@ server= function(input,output,session) {
   
   # Keep track of the current page in the data table
   observeEvent(input$data_state, ignoreInit=T, {
-
+    
     x = input$data_state$start
     y = input$data_state$length
     current_page = 1 + x/y
@@ -1213,7 +1253,7 @@ server= function(input,output,session) {
       renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
     }
   })
-
+  
   # Plotting functions
   observeEvent(input$cens_choice, ignoreInit = T, {
     
@@ -1240,7 +1280,7 @@ server= function(input,output,session) {
       return()
     }
   })
-
+  
   observeEvent(input$rc_replace, ignoreInit = T, {
     
     if (input$rainplot == colnames(current_data())[response_var()] && last_plot() == "raincloud") {
@@ -1318,7 +1358,7 @@ server= function(input,output,session) {
       last_plot("raincloud")
     }
   })
-
+  
   observeEvent(input$lineplot, ignoreInit = T, {
     
     if (input$lineplot != "-") {
@@ -1525,7 +1565,7 @@ server= function(input,output,session) {
         updateSelectInput(session,"lineplot",choices=c("-",new_column_names))
         updateSelectInput(session,"scatterx",selected=input$scatterx,choices=c("-",new_column_names))
         updateSelectInput(session,"scattery",selected=input$scattery,choices=c("-",new_column_names))
-
+        
         pca_axes_max(ncol(current_data())-2)
         PCA_dataset(NULL)
         changed_model(TRUE)
@@ -1534,7 +1574,7 @@ server= function(input,output,session) {
                            value = pca_axes_max(),
                            max = pca_axes_max()
         )
-
+        
         clear_modeling(TRUE)
         
         renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
@@ -1555,7 +1595,7 @@ server= function(input,output,session) {
     changed_model(TRUE)
     
     if (input$use_pca_data) {
-
+      
       shinyjs::disable("feats_to_use")
       shinyjs::enable("pcax_to_use")
       
@@ -1564,7 +1604,7 @@ server= function(input,output,session) {
       shinyjs::enable("feats_to_use")
       shinyjs::disable("pcax_to_use")
     }
-
+    
     # clear_modeling(TRUE)
     
   })
@@ -1630,7 +1670,7 @@ server= function(input,output,session) {
     
     if (length(input$feats_to_use) < 2) {
       showModal(modalDialog(paste("NOTE: Model pipelines require at least 2 Features."),
-        footer = div(modalButton('Close'))))
+                            footer = div(modalButton('Close'))))
       
       updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
     }
@@ -1666,9 +1706,9 @@ server= function(input,output,session) {
   
   # Clear output based on non-reactive variables
   observeEvent(refresh_trigger(), ignoreInit = TRUE, {
-      output$XGBCL_optim_hp = NULL
-      output$XGB_optim_hp = NULL
-      refresh_trigger(FALSE)
+    output$XGBCL_optim_hp = NULL
+    output$XGB_optim_hp = NULL
+    refresh_trigger(FALSE)
   })
   
   # LGR predictions
@@ -1744,7 +1784,7 @@ server= function(input,output,session) {
         
         colnames(train_data1) = colnames(train_data)
         colnames(test_data1) = colnames(test_data)
-
+        
         temp_preds = matrix(0, nrow = nrow(test_data1), ncol = 2*MC_runs)
         temp_preds = data.frame(temp_preds)
         
@@ -1761,10 +1801,10 @@ server= function(input,output,session) {
                        for (i in 1:MC_runs) {
                          
                          trainData = MC_subbin(train_data1, input$loggy, input$lc_val, input$lc_lowval, input$lc_upval, input$rc_val,
-                                    input$rc_lowval, input$rc_upval)
+                                               input$rc_lowval, input$rc_upval)
                          
                          testData = MC_subbin(test_data1, input$loggy, input$lc_val, input$lc_lowval, input$lc_upval, input$rc_val,
-                                   input$rc_lowval, input$rc_upval)
+                                              input$rc_lowval, input$rc_upval)
                          
                          if (input$LG_binarize) {
                            for (j in 1:nrow(trainData)) {
@@ -1865,16 +1905,16 @@ server= function(input,output,session) {
     if (!is.null(LG_pred_results())) {
       
       output$LG_preds = DT::renderDataTable(server = T, {data = datatable(LG_pred_results(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                  target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
-                  pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
-                  JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                          target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
+                                                                                                                                                                                                            pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                                                                                                                                                                                                              JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$LG_pred_coeffs = DT::renderDataTable(server = T, {data = datatable(LG_pred_coeffs(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                  target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
-                  paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                               target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                                paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                                                                                                                                                                                                                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
-
+      
       
       x_name = colnames(LG_pred_scat_dat())[[2]]
       y_name = colnames(LG_pred_scat_dat())[[3]]
@@ -1901,13 +1941,13 @@ server= function(input,output,session) {
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$LG_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                  list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
-                  options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                  columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                                   list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
+                                                                                 options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                                columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                   {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$LG_pred_confuse_text = renderText({paste0("Sensitivity = ",round(LG_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-                  round(LG_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_pred_confuse_results()$Accuracy,3))})
+                                                       round(LG_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_pred_confuse_results()$Accuracy,3))})
       
       refresh_trigger(FALSE)
       
@@ -1934,6 +1974,7 @@ server= function(input,output,session) {
     
     response_data = as.numeric(current_data()[,response_var()])
     response_data = response_data[!is.na(response_data)]
+    LG_pred_data(NULL)
     
     if (length(unique(response_data)) > 2 && input$LG_binarize == FALSE) {
       
@@ -1950,12 +1991,14 @@ server= function(input,output,session) {
         data0 = PCA_dataset()
         rv=2
         feats_to_use = input$pcax_to_use
+        LG_final_features(PCA_coefficients()[,1])
         ignored_rows = NULL
         LG_model_PCA(TRUE)
       } else {
         data0 = current_data()
         rv=response_var()
         feats_to_use = input$feats_to_use
+        LG_final_features(feats_to_use)
         LG_model_PCA(FALSE)
       }
       
@@ -1995,7 +2038,7 @@ server= function(input,output,session) {
           for (i in 1:MC_runs) {
             
             MC_data = MC_subbin(imp_data, input$loggy, input$lc_val, input$lc_lowval, input$lc_upval, input$rc_val,input$rc_lowval, input$rc_upval)
-
+            
             # Binarize Response
             
             if (input$LG_binarize) {
@@ -2019,7 +2062,7 @@ server= function(input,output,session) {
             
             fits = predict(model, newx = as.matrix(MC_data[,-1]), type = "response")
             temp_fits[,2*i] = round(fits,3)
-
+            
             tmp_coeffs = coef(model, s = lambda)
             coeffs = data.frame(name = tmp_coeffs@Dimnames[[1]][tmp_coeffs@i + 1], coefficient = round(tmp_coeffs@x,4))
             
@@ -2033,8 +2076,8 @@ server= function(input,output,session) {
             
             incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
           } #End the MC Runs
-      })
-
+        })
+      
       fitted_coeffs[,2] = round(rowMeans(temp_coeffs[,-1]),4)
       fitted_coeffs[,3] = round(exp(fitted_coeffs[,2]),4)
       
@@ -2068,7 +2111,7 @@ server= function(input,output,session) {
       
       # Fit final model
       final_LG_data = MC_final_subbin(imp_data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
-
+      
       # Binarize Response
       if (input$LG_binarize) {
         for (j in 1:nrow(final_LG_data)) {
@@ -2077,7 +2120,7 @@ server= function(input,output,session) {
       }
       
       optimized_LG_model = cva.glmnet(x=as.matrix(final_LG_data[,-1]),y=final_LG_data[,1],nfolds=input$num_folds,family="binomial",type.measure=input$LG_eval,
-                                 na.action="na.omit",standardize=input$LG_standard,intercept=TRUE)
+                                      na.action="na.omit",standardize=input$LG_standard,intercept=TRUE)
       
       final_alpha = get_model_params(optimized_LG_model)$alpha
       final_lambda = get_model_params(optimized_LG_model)$lambdaMin
@@ -2098,14 +2141,14 @@ server= function(input,output,session) {
     if (!is.null(LG_results())) {
       
       output$LG_fits = DT::renderDataTable(server = T, {data = datatable(LG_results(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                    target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
-                    pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
-                    JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                    target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
+                                                                                                                                                                                                      pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                                                                                                                                                                                                        JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$LG_coeffs = DT::renderDataTable(server = T, {data = datatable(LG_coeffs(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                    target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
-                    paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-                    initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                     target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                      paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                                                                                                                                                                                                      initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       x_name = colnames(LG_scat_dat())[[2]]
       y_name = colnames(LG_scat_dat())[[3]]
@@ -2120,7 +2163,7 @@ server= function(input,output,session) {
                                         theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
                                         theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
-
+      
       LG_confuse_results(confuse(LG_scat_dat()[,2:3],0.5,input$LG_fit_dc))
       
       confuse_table = matrix(0,nrow=1,ncol=4)
@@ -2133,13 +2176,13 @@ server= function(input,output,session) {
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$LG_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                  list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
-                  options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                  columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                              list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
+                                                                            options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                           columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                   {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$LG_confuse_text = renderText({paste0("Sensitivity = ",round(LG_confuse_results()$Sensitivity,3),"; Specificity = ",
-                  round(LG_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_confuse_results()$Accuracy,3))})
+                                                  round(LG_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_confuse_results()$Accuracy,3))})
       
       refresh_trigger(FALSE)
       
@@ -2158,9 +2201,9 @@ server= function(input,output,session) {
   observeEvent(c(input$XGBCL_optimize_HP,refresh_XGBCL_Optim_HP()), ignoreInit = T, {
     
     output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(t(Optimal_CLHP),rownames=T,colnames=NULL,extensions='Buttons',selection=list(selected =
-                    list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
-                    scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                    initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                                                          list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
+                                                                                                                                                                                                                                                 scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                                                                                 initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
     
     showModal(modalDialog(title="HP Optimization", card(
       fluidRow(
@@ -2207,8 +2250,8 @@ server= function(input,output,session) {
       dataset = data[,-1]
       
       xgbcl_optim_HP_results = xgbcl_pso(dataset,rv,feats_to_use,input$lc_val,input$rc_val,input$lc_lowval,input$lc_upval,input$rc_lowval,
-                        input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$XGBCL_eval,input$psocl_max_iter,
-                        input$psocl_swarm_size,input$membercl_exp,input$sscl_exp,input$XGBCL_binarize,input$XGBCL_binarize_crit_value,MC_subbin)
+                                         input$rc_upval,input$MC_runs,input$num_folds,input$loggy,input$XGBCL_eval,input$psocl_max_iter,
+                                         input$psocl_swarm_size,input$membercl_exp,input$sscl_exp,input$XGBCL_binarize,input$XGBCL_binarize_crit_value,MC_subbin)
       
       xgbcl_optim_HP_results1 = data.frame(xgbcl_optim_HP_results)
       
@@ -2223,7 +2266,7 @@ server= function(input,output,session) {
       refresh_XGBCL_Optim_HP(TRUE)
     }
   })
-
+  
   # XGBCL set HP values
   observeEvent(input$XGBCL_params, ignoreInit = T, {
     
@@ -2282,7 +2325,7 @@ server= function(input,output,session) {
     skipcl_drop_set(input$skipcl_drop)
     
     Optimal_HPCL <<- data.frame(max_depth = input$max_depthcl,eta = input$etacl,subsample = input$subsampcl,colsample_bytree = input$colsampcl,
-                              min_child_weight = input$min_child_weightcl,gamma = input$gammacl,nrounds = input$nroundscl)
+                                min_child_weight = input$min_child_weightcl,gamma = input$gammacl,nrounds = input$nroundscl)
     
     removeModal()
     
@@ -2304,22 +2347,22 @@ server= function(input,output,session) {
   
   # XGBCL feature selection
   observeEvent(input$run_XGBCL_select, ignoreInit = T, {
-
+    
     response_data = as.numeric(current_data()[,response_var()])
     response_data = response_data[!is.na(response_data)]
-
+    
     if (length(unique(response_data)) > 2 && input$XGBCL_binarize == FALSE) {
-
+      
       showModal(modalDialog(paste("Response Variable must be binarized for this analysis. Choose to 'Binarize' using the button above."),footer = modalButton("Close")))
-
+      
     } else {
-
+      
       if(running())
         return(NULL)
       running(TRUE)
-
+      
       req(iv$is_valid())
-
+      
       if (input$use_pca_data) {
         data = PCA_dataset()
         rv=2
@@ -2332,10 +2375,10 @@ server= function(input,output,session) {
         feats_to_use = input$feats_to_use
         fs_feats_used(feats_to_use)
       }
-
+      
       crit_value = input$XGBCL_binarize_crit_value
       eval_metric = input$XGBCL_eval
-
+      
       eta = etacl_set()
       gamma = gammacl_set()
       max_depth = max_depthcl_set()
@@ -2344,14 +2387,14 @@ server= function(input,output,session) {
       early_stop = early_stop_set()
       subsamp = subsampcl_set()
       colsamp = colsampcl_set()
-
+      
       xgb_tree_method = xgbcl_tree_method_set()
       xgb_booster = xgbcl_booster_set()
       dart_normalize_type = dartcl_normalize_type_set()
       dart_sample_type = dartcl_sample_type_set()
       rate_drop = ratecl_drop_set()
       skip_drop = skipcl_drop_set()
-
+      
       standardize = input$XGBCL_standard
       binarize = input$XGBCL_binarize
       lc_val = input$lc_val
@@ -2365,42 +2408,42 @@ server= function(input,output,session) {
       loggy = input$loggy
       randomize = input$randomize
       seed = input$model_seed
-
+      
       xgbcl_select_result(NULL)
-
+      
       xgbcl_select_calculation <<- future({
-
+        
         xgbcl_selection(data,seed,rv,feats_to_use,ignored_rows,crit_value,eval_metric,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                         standardize,binarize,xgb_tree_method,xgb_booster,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
                         min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db,MC_subbin,create_data)
-
+        
       }, seed=TRUE)
-
+      
       prom = xgbcl_select_calculation %...>% xgbcl_select_result
-
+      
       prom = catch(xgbcl_select_calculation,
                    function(e){
                      xgbcl_select_result(NULL)
                      showModal(modalDialog(paste0("XGBCL covariate filtering cancelled. No results generated."),footer = modalButton("Close")))
                    })
-
+      
       prom = finally(prom, function(){
         running(FALSE)
       })
-
+      
       xgbcl_selection_results = dbReadTable(temp_db, "xgbcl_selection_results")
       xgbcl_selection_results = xgbcl_selection_results[,-3]
       xgbcl_selection_results = xgbcl_selection_results[,-2]
-
+      
       weighted_mean = round(input$testcl_weight*as.numeric(xgbcl_selection_results[,5])+(1-input$testcl_weight)*as.numeric(xgbcl_selection_results[,4]),4)
       final_xgbcl_select_result = cbind(xgbcl_selection_results,weighted_mean)
       colnames(final_xgbcl_select_result) = c(colnames(xgbcl_selection_results),"Wght Mean LnLoss")
-
+      
       XGBCL_selection_results(final_xgbcl_select_result)
-
+      
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
       updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Feat Select')
-
+      
       #Return something other than the future so we don't block the UI
       NULL
     }
@@ -2412,9 +2455,9 @@ server= function(input,output,session) {
       
       output$XGBCL_select = DT::renderDataTable(server=T,{
         data = datatable(XGBCL_selection_results(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-          target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = num_rows_per_page,scrollX = F,
-          scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-          initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
+                                                                             target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = num_rows_per_page,scrollX = F,
+                                                                                                                                                           scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                           initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
           formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
         data$x$data[[1]] = as.numeric(data$x$data[[1]])
         data$x$data[[3]] = as.numeric(data$x$data[[3]])
@@ -2423,7 +2466,7 @@ server= function(input,output,session) {
         data$x$data[[6]] = as.numeric(data$x$data[[6]])
         data
       })
-    
+      
       refresh_trigger(FALSE)
       
     } else if (is.null(XGBCL_selection_results())) {
@@ -2449,8 +2492,8 @@ server= function(input,output,session) {
       
       XGBCL_selection_results(final_xgbcl_select_result)
       
-      }
-    })
+    }
+  })
   
   observeEvent(input$XGBCL_select_cancel, ignoreInit = T, {
     print("Stopping calculation...")
@@ -2553,26 +2596,26 @@ server= function(input,output,session) {
     if (!is.null(XGBCL_pred_results())) {
       
       output$XGBCL_predictions = DT::renderDataTable(server = T, {data = datatable(XGBCL_pred_results(),rownames = F,selection =
-              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions='Buttons',options = list(autoWidth = F,
-              paging = TRUE,pageLength = num_rows_per_page,dom="ltBp",buttons = c('copy', 'csv', 'excel'),scrollX = TRUE,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',
-              orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744',
+                                                                                     list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions='Buttons',options = list(autoWidth = F,
+                                                                                                                                                                                                                     paging = TRUE,pageLength = num_rows_per_page,dom="ltBp",buttons = c('copy', 'csv', 'excel'),scrollX = TRUE,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',
+                                                                                                                                                                                                                                                                                                                                                                      orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744',
               'color': '#fff'});","}")))})
       
       output$XGBCL_pred_shapes = DT::renderDataTable(server = T, {data = datatable(XGBCL_pred_coeffs(),rownames = F,selection =
-              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-              list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-              className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                     list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                                     list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                       className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                                  "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGBCL_pred_scatplot = renderPlot(ggplot(XGBCL_pred_scat_dat(), aes(x=XGBCL_pred_scat_dat()[,3], fill=as.factor(XGBCL_pred_scat_dat()[,2]))) +
-                      geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
-                      scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
-                      geom_vline(xintercept = input$XGBCL_pred_dc, linetype = "dashed", color = "darkgreen") +
-                      labs(x = "Predicted Probability", y = "Density", fill="OBS") +
-                      theme_bw() +
-                      theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
-                      theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
-                      theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+                                                geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
+                                                scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                                                geom_vline(xintercept = input$XGBCL_pred_dc, linetype = "dashed", color = "darkgreen") +
+                                                labs(x = "Predicted Probability", y = "Density", fill="OBS") +
+                                                theme_bw() +
+                                                theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                                                theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                                                theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
       XGBCL_pred_confuse_results(confuse(XGBCL_pred_scat_dat()[,2:3],0.5,input$XGBCL_pred_dc))
       
@@ -2586,23 +2629,23 @@ server= function(input,output,session) {
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$XGBCL_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-                      options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                      columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
+                                                                                    options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                                   columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                       {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGBCL_pred_confuse_text = renderText({paste0("Sensitivity = ",round(XGBCL_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-                      round(XGBCL_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_pred_confuse_results()$Accuracy,3))})
+                                                          round(XGBCL_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_pred_confuse_results()$Accuracy,3))})
       
       output$XGBCL_used_hp_pred = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-                      target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
-                      pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                      initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                        target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
+                                                                                                                                                                                                      pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                                      initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       refresh_trigger(FALSE)
       
     } else if (is.null(XGBCL_pred_results())) {
-
+      
       output$XGBCL_predictions = NULL
       output$XGBCL_pred_shapes = NULL
       output$XGBCL_pred_scatplot = NULL
@@ -2625,6 +2668,7 @@ server= function(input,output,session) {
     
     response_data = as.numeric(current_data()[,response_var()])
     response_data = response_data[!is.na(response_data)]
+    XGBCL_pred_data(NULL)
     
     if (length(unique(response_data)) > 2 && input$XGBCL_binarize == FALSE) {
       
@@ -2640,12 +2684,14 @@ server= function(input,output,session) {
       if (input$use_pca_data) {
         data0 = PCA_dataset()
         rv=2
+        XGBCL_final_features(PCA_coefficients()[,1])
         feats_to_use = input$pcax_to_use
         ignored_rows = NULL
         XGBCL_model_PCA(TRUE)
       } else {
         data0 = current_data()
         rv=response_var()
+        XGBCL_final_features(input$feats_to_use)
         feats_to_use = input$feats_to_use
         XGBCL_model_PCA(FALSE)
       }
@@ -2656,7 +2702,7 @@ server= function(input,output,session) {
       
       data1 = create_data(data0,rv,feats_to_use,ignored_rows,input$randomize,input$XGBCL_standard)
       data = data1[,-1]
-
+      
       withProgress(
         message = 'XGBCL Fitting Progress',
         detail = paste("MC runs:", x = 1,"/",MC_runs),
@@ -2737,7 +2783,7 @@ server= function(input,output,session) {
             incProgress(1/MC_runs, detail = paste("MC run: ",i,"/",MC_runs))
           }
         })
-
+      
       even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
       odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
       
@@ -2773,7 +2819,7 @@ server= function(input,output,session) {
       
       # Fit final XGBCL_Model
       final_XGBCL_data = MC_final_subbin(data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
-
+      
       if (input$XGBCL_binarize) {
         for (j in 1:nrow(final_XGBCL_data)) {
           final_XGBCL_data[j, 1] = ifelse(test = final_XGBCL_data[j, 1] >= crit_value, yes = 1, no = 0)
@@ -2822,23 +2868,23 @@ server= function(input,output,session) {
       updateRadioButtons(session,"model_choice",selected="None",choices=c("None",models_created()))
     }
   })
-      
+  
   observeEvent(c(XGBCL_results(),refresh_trigger()), ignoreInit = TRUE, {
     
     if (!is.null(XGBCL_results())) {
       
-        output$XGBCL_shapes = DT::renderDataTable(server = T, {data = datatable(XGBCL_coeffs(),rownames = F,selection =
-                  list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                  list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                  className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                  "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      output$XGBCL_shapes = DT::renderDataTable(server = T, {data = datatable(XGBCL_coeffs(),rownames = F,selection =
+                                                                                list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                                list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                  className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                             "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
-        output$XGBCL_fits = DT::renderDataTable(server = T, {data = datatable(XGBCL_results(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                  target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp", buttons = c('copy', 'csv', 'excel'),
-                  paging = T,pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
-                  JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      output$XGBCL_fits = DT::renderDataTable(server = T, {data = datatable(XGBCL_results(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
+                                                                                                                          target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp", buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                            paging = T,pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                                                                                                                                                                                                              JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
-        output$XGBCL_scatplot = renderPlot(ggplot(XGBCL_scat_dat(), aes(x=XGBCL_scat_dat()[,3], fill=as.factor(XGBCL_scat_dat()[,2]))) +
+      output$XGBCL_scatplot = renderPlot(ggplot(XGBCL_scat_dat(), aes(x=XGBCL_scat_dat()[,3], fill=as.factor(XGBCL_scat_dat()[,2]))) +
                                            geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
                                            scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
                                            geom_vline(xintercept = input$XGBCL_dec_crit, linetype = "dashed", color = "darkgreen") +
@@ -2848,33 +2894,33 @@ server= function(input,output,session) {
                                            theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
                                            theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
-        XGBCL_confuse_results(confuse(XGBCL_scat_dat()[,2:3],0.5,input$XGBCL_dec_crit))
-        
-        xgbcl_confuse_table = matrix(0,nrow=1,ncol=4)
+      XGBCL_confuse_results(confuse(XGBCL_scat_dat()[,2:3],0.5,input$XGBCL_dec_crit))
       
-        xgbcl_confuse_table[1,1] = XGBCL_confuse_results()$TP
-        xgbcl_confuse_table[1,2] = XGBCL_confuse_results()$TN
-        xgbcl_confuse_table[1,3] = XGBCL_confuse_results()$FP
-        xgbcl_confuse_table[1,4] = XGBCL_confuse_results()$FN
+      xgbcl_confuse_table = matrix(0,nrow=1,ncol=4)
       
-        colnames(xgbcl_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
+      xgbcl_confuse_table[1,1] = XGBCL_confuse_results()$TP
+      xgbcl_confuse_table[1,2] = XGBCL_confuse_results()$TN
+      xgbcl_confuse_table[1,3] = XGBCL_confuse_results()$FP
+      xgbcl_confuse_table[1,4] = XGBCL_confuse_results()$FN
       
-        output$XGBCL_confuse = DT::renderDataTable(server = T, {data = datatable(xgbcl_confuse_table,rownames = F,selection = 
-                    list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
-                    options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                    columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+      colnames(xgbcl_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
+      
+      output$XGBCL_confuse = DT::renderDataTable(server = T, {data = datatable(xgbcl_confuse_table,rownames = F,selection = 
+                                                                                 list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
+                                                                               options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                              columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                     {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
-        output$XGBCL_confuse_text = renderText({paste0("Sensitivity = ",round(XGBCL_confuse_results()$Sensitivity,3),"; Specificity = ",
-                    round(XGBCL_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_confuse_results()$Accuracy,3))})
+      output$XGBCL_confuse_text = renderText({paste0("Sensitivity = ",round(XGBCL_confuse_results()$Sensitivity,3),"; Specificity = ",
+                                                     round(XGBCL_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_confuse_results()$Accuracy,3))})
       
-        output$XGBCL_used_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-                    target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
-                    pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                    initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      output$XGBCL_used_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
+                                                                                                                   target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
+                                                                                                                                                                                                 pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                                 initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
-        refresh_trigger(FALSE)
-        
+      refresh_trigger(FALSE)
+      
     } else if (is.null(XGBCL_results())) {
       
       output$XGBCL_shapes = NULL
@@ -2894,28 +2940,28 @@ server= function(input,output,session) {
     selected_feature = XGBCL_coeffs()[selected_index,1]
     
     used_data = na.omit(XGBCL_final_data())
-
+    
     train_data = as.data.frame(used_data[,-1])
     response = as.numeric(used_data[,1])
-
-    predcl_fun = function(model, newdata) {
-       predictions = predict(model, newdata = as.matrix(newdata))
-       return(as.numeric(predictions))
-     }
     
-     predictor.xgbcl = Predictor$new(
-       model = XGBCL_model,
-       data = train_data,
-       y = response,
-       predict.fun = predcl_fun
-     )
-
-     pdp_info =  FeatureEffect$new(
-       predictor.xgbcl,
-       selected_feature,
-       method = "pdp",
-       grid.size = 25
-     )
+    predcl_fun = function(model, newdata) {
+      predictions = predict(model, newdata = as.matrix(newdata))
+      return(as.numeric(predictions))
+    }
+    
+    predictor.xgbcl = Predictor$new(
+      model = XGBCL_model,
+      data = train_data,
+      y = response,
+      predict.fun = predcl_fun
+    )
+    
+    pdp_info =  FeatureEffect$new(
+      predictor.xgbcl,
+      selected_feature,
+      method = "pdp",
+      grid.size = 25
+    )
     
     output$XGBCL_pdp_plot = renderPlot({plot(pdp_info$plot())})
     
@@ -2927,16 +2973,16 @@ server= function(input,output,session) {
       footer = NULL
     ))
   })
-
+  
   # XGB feature Selection
   observeEvent(input$run_XGB_select, ignoreInit = T, {
-
+    
     if(running())
       return(NULL)
     running(TRUE)
-
+    
     req(iv$is_valid())
-
+    
     if (input$use_pca_data) {
       data = PCA_dataset()
       rv=2
@@ -2949,7 +2995,7 @@ server= function(input,output,session) {
       feats_to_use = input$feats_to_use
       fs_feats_used(feats_to_use)
     }
-
+    
     eta = eta_set()
     gamma = gamma_set()
     max_depth = max_depth_set()
@@ -2958,14 +3004,14 @@ server= function(input,output,session) {
     early_stop = early_stop_set()
     subsamp = subsamp_set()
     colsamp = colsamp_set()
-
+    
     xgb_tree_method = xgb_tree_method_set()
     xgb_booster = xgb_booster_set()
     dart_normalize_type = dart_normalize_type_set()
     dart_sample_type = dart_sample_type_set()
     rate_drop = rate_drop_set()
     skip_drop = skip_drop_set()
-
+    
     standardize = input$XGB_standard
     lc_val = input$lc_val
     rc_val = input$rc_val
@@ -2978,42 +3024,42 @@ server= function(input,output,session) {
     loggy = input$loggy
     randomize = input$randomize
     seed = input$model_seed
-
+    
     xgb_select_result(NULL)
-
+    
     xgb_select_calculation <<- future({
-
+      
       xgb_selection(data,seed,rv,feats_to_use,ignored_rows,lc_val,rc_val,lc_lowval,lc_upval,rc_lowval,rc_upval,train_prop,MC_runs,loggy,randomize,
                     standardize,xgb_tree_method,xgb_booster,dart_normalize_type,dart_sample_type,rate_drop,skip_drop,eta,gamma,max_depth,
                     min_child_weight,subsamp,colsamp,nrounds,early_stop,temp_db,MC_subbin,create_data)
-
+      
     }, seed=TRUE)
-
+    
     prom = xgb_select_calculation %...>% xgb_select_result
-
+    
     prom = catch(xgb_select_calculation,
                  function(e){
                    xgb_select_result(NULL)
                    showModal(modalDialog(paste0("XGB covariate filtering cancelled. No results generated."),footer = modalButton("Close")))
                  })
-
+    
     prom = finally(prom, function(){
       running(FALSE)
     })
-
+    
     xgb_selection_results = dbReadTable(temp_db, "xgb_selection_results")
     xgb_selection_results = xgb_selection_results[,-3]
     xgb_selection_results = xgb_selection_results[,-2]
-
+    
     weighted_mean = round(input$test_weight*as.numeric(xgb_selection_results[,5])+(1-input$test_weight)*as.numeric(xgb_selection_results[,4]),4)
     final_xgb_select_result = cbind(xgb_selection_results,weighted_mean)
     colnames(final_xgb_select_result) = c(colnames(xgb_selection_results),"Weighted Mean RMSE")
-
+    
     XGB_selection_results(final_xgb_select_result)
-
+    
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Feat Select')
-
+    
     #Return something other than the future so we don't block the UI
     NULL
   })
@@ -3021,12 +3067,12 @@ server= function(input,output,session) {
   observeEvent(c(XGB_selection_results(),refresh_trigger()), ignoreInit = TRUE, {
     
     if (!is.null(XGB_selection_results())) {
-    
+      
       output$XGB_select = DT::renderDataTable(server=T,{
         data = datatable(XGB_selection_results(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-          target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = num_rows_per_page,scrollX = F,
-          scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-          initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
+                                                                           target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = num_rows_per_page,scrollX = F,
+                                                                                                                                                         scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                         initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
           formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
         data$x$data[[1]] = as.numeric(data$x$data[[1]])
         data$x$data[[3]] = as.numeric(data$x$data[[3]])
@@ -3035,7 +3081,7 @@ server= function(input,output,session) {
         data$x$data[[6]] = as.numeric(data$x$data[[6]])
         data
       })
-    
+      
       refresh_trigger(FALSE)
       
     } else if (is.null(XGB_selection_results())) {
@@ -3100,9 +3146,9 @@ server= function(input,output,session) {
   observeEvent(c(input$XGB_optimize_HP,refresh_XGB_Optim_HP()), ignoreInit = T, {
     
     output$XGB_optim_hp = DT::renderDataTable(server=T,{data = datatable(t(Optimal_HP),rownames=T,colnames=NULL,extensions='Buttons',selection=list(selected =
-                    list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
-                    scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                    initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                                                      list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
+                                                                                                                                                                                                                                             scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                                                                             initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
     
     showModal(modalDialog(title="HP Optimization", card(
       fluidRow(
@@ -3142,7 +3188,7 @@ server= function(input,output,session) {
     data = data1[,-1]
     
     xgb_optim_HP_results = xgb_pso(data,rv,feats_to_use,input$lc_val,input$lc_lowval,input$lc_upval,input$rc_val,input$rc_lowval,input$rc_upval,
-                            input$MC_runs,input$num_folds,input$loggy,input$XGB_hyper_metric,input$pso_max_iter,input$pso_swarm_size,input$member_exp,input$ss_exp,MC_subbin)
+                                   input$MC_runs,input$num_folds,input$loggy,input$XGB_hyper_metric,input$pso_max_iter,input$pso_swarm_size,input$member_exp,input$ss_exp,MC_subbin)
     
     xgb_optim_HP_results1 = data.frame(xgb_optim_HP_results)
     
@@ -3271,11 +3317,11 @@ server= function(input,output,session) {
       rv=response_var()
       feats_to_use = input$feats_to_use
     }
-
+    
     xgb_pred_results = xgb_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_val,input$rc_val,input$lc_lowval,
-                            input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
-                            input$XGB_standard,Optimal_HP$eta,Optimal_HP$gamma,Optimal_HP$max_depth,
-                            Optimal_HP$min_child_weight,Optimal_HP$subsamp,Optimal_HP$colsamp,Optimal_HP$nrounds,MC_subbin,create_data)
+                                        input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
+                                        input$XGB_standard,Optimal_HP$eta,Optimal_HP$gamma,Optimal_HP$max_depth,
+                                        Optimal_HP$min_child_weight,Optimal_HP$subsamp,Optimal_HP$colsamp,Optimal_HP$nrounds,MC_subbin,create_data)
     
     XGB_pred_results(xgb_pred_results[[1]])
     
@@ -3297,83 +3343,83 @@ server= function(input,output,session) {
     updateRadioButtons(session,"model_choice",selected="None",choices=c("None",models_created()))
     
   })
-    
+  
   observeEvent(c(XGB_pred_results(),refresh_trigger()), ignoreInit = TRUE, {
     
     if (!is.null(XGB_pred_results())) {
-    
+      
       xgb_pred_stepr = round((max(XGB_pred_results()[,2])-min(XGB_pred_results()[,2]))/40,2)
-    
+      
       updateNumericInput(session, "XGB_pred_stand",
-                       value = round(mean(XGB_pred_results()[,2]),2),
-                       max = round(max(XGB_pred_results()[,2]),2),
-                       min = round(min(XGB_pred_results()[,2]),2),
-                       step = xgb_pred_stepr
+                         value = round(mean(XGB_pred_results()[,2]),2),
+                         max = round(max(XGB_pred_results()[,2]),2),
+                         min = round(min(XGB_pred_results()[,2]),2),
+                         step = xgb_pred_stepr
       )
-    
+      
       xgb_pred_stepdc = round((max(XGB_pred_results()[,3])-min(XGB_pred_results()[,3]))/40,2)
-    
+      
       updateNumericInput(session, "XGB_pred_dc",
-                       value = round(mean(XGB_pred_results()[,3]),2),
-                       max = round(max(XGB_pred_results()[,3]),2),
-                       min = round(min(XGB_pred_results()[,3]),2),
-                       step = xgb_pred_stepdc
+                         value = round(mean(XGB_pred_results()[,3]),2),
+                         max = round(max(XGB_pred_results()[,3]),2),
+                         min = round(min(XGB_pred_results()[,3]),2),
+                         step = xgb_pred_stepdc
       )
-    
+      
       output$XGB_predictions = DT::renderDataTable(server = T, {data = datatable(XGB_pred_results(),rownames = F,selection =
-              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions='Buttons',options = list(autoWidth = F,
-              paging = TRUE,pageLength = num_rows_per_page,dom="ltBp",buttons = c('copy', 'csv', 'excel'),scrollX = TRUE,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',
-              orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744',
+                                                                                   list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions='Buttons',options = list(autoWidth = F,
+                                                                                                                                                                                                                   paging = TRUE,pageLength = num_rows_per_page,dom="ltBp",buttons = c('copy', 'csv', 'excel'),scrollX = TRUE,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',
+                                                                                                                                                                                                                                                                                                                                                                    orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744',
               'color': '#fff'});","}")))#{if (date_format_string != "Non-Date") formatDate(data,1,date_format_string) else .}
       })
-    
+      
       output$XGB_pred_shapes = DT::renderDataTable(server = T, {data = datatable(XGB_pred_coeffs(),rownames = F,selection =
-                        list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                        list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                        className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                        "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+                                                                                   list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                                   list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                     className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                                "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
       output$XGB_pred_scatplot = renderPlotly(scatter_confuse(XGB_pred_scat_dat(),input$XGB_pred_stand,input$XGB_pred_dc))
       
       XGB_confuse_results(confuse(XGB_pred_scat_dat()[,2:3],input$XGB_pred_stand,input$XGB_pred_dc))
-    
+      
       confuse_table = matrix(0,nrow=1,ncol=4)
-    
+      
       confuse_table[1,1] = XGB_confuse_results()$TP
       confuse_table[1,2] = XGB_confuse_results()$TN
       confuse_table[1,3] = XGB_confuse_results()$FP
       confuse_table[1,4] = XGB_confuse_results()$FN
-    
+      
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-    
+      
       output$XGB_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-                      options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                      columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                                    list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
+                                                                                  options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                                 columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                       {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+      
       output$XGB_pred_confuse_text = renderText({paste0("Sensitivity = ",round(XGB_confuse_results()$Sensitivity,3),"; Specificity = ",
-                      round(XGB_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_confuse_results()$Accuracy,3))})
-    
-
+                                                        round(XGB_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_confuse_results()$Accuracy,3))})
+      
+      
       resid_data = XGB_pred_scat_dat()[,c(1,3)] %>% mutate(Residuals = round(XGB_pred_scat_dat()[,2]-XGB_pred_scat_dat()[,3],3))
       output$XGB_pred_resid_scatplot = renderPlotly(scatter(resid_data))
-    
+      
       output$XGB_pred_lineplot = renderPlotly(plot_ly(XGB_pred_scat_dat(), x = ~XGB_pred_scat_dat()[,1], y = ~XGB_pred_scat_dat()[,2], name="Observations",
-                      type="scatter", mode = "lines",text = ~paste("<b>ID: </b>",XGB_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",
-                      XGB_pred_scat_dat()[,2],sep=""),hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5)) %>%
-                  add_trace(y = ~XGB_pred_scat_dat()[,3], name="Predictions", mode = 'lines',
-                      text = ~paste("<b>ID: </b>",XGB_pred_scat_dat()[,1],"<br><b>Predicted Value:</b> ",round(XGB_pred_scat_dat()[,3],3),sep=""),
-                      hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-                  layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",font=list(size=20)),
-                      range=c(min(0.99*min(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]),1.01*min(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3])),
-                      max(0.99*max(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]),1.01*max(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]))))))
-    
+                                                      type="scatter", mode = "lines",text = ~paste("<b>ID: </b>",XGB_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",
+                                                                                                   XGB_pred_scat_dat()[,2],sep=""),hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5)) %>%
+                                                add_trace(y = ~XGB_pred_scat_dat()[,3], name="Predictions", mode = 'lines',
+                                                          text = ~paste("<b>ID: </b>",XGB_pred_scat_dat()[,1],"<br><b>Predicted Value:</b> ",round(XGB_pred_scat_dat()[,3],3),sep=""),
+                                                          hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+                                                layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",font=list(size=20)),
+                                                                                                                             range=c(min(0.99*min(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]),1.01*min(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3])),
+                                                                                                                                     max(0.99*max(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]),1.01*max(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]))))))
+      
       output$XGB_used_hp_pred = DT::renderDataTable(server=T,{data = datatable(Optimal_HP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-                  target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
-                  pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+                                                                                                                    target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
+                                                                                                                                                                                                  pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
       refresh_trigger(FALSE)
       
     } else if (is.null(XGB_pred_results())) {
@@ -3390,7 +3436,7 @@ server= function(input,output,session) {
       refresh_trigger(FALSE)
     }
   })
-    
+  
   # XGB fitting
   observeEvent(input$XGB_stand, ignoreInit = T, {
     
@@ -3418,16 +3464,19 @@ server= function(input,output,session) {
     
     updateNumericInput(session, "num_preds",value = 2)
     changed_model(TRUE)
+    XGB_pred_data(NULL)
     
     if (input$use_pca_data) {
       data0 = PCA_dataset()
       rv=2
+      XGB_final_features(PCA_coefficients()[,1])
       feats_to_use = input$pcax_to_use
       ignored_rows = NULL
       XGB_model_PCA(TRUE)
     } else {
       data0 = current_data()
       rv=response_var()
+      XGB_final_features(input$feats_to_use)
       feats_to_use = input$feats_to_use
       XGB_model_PCA(FALSE)
     }
@@ -3525,7 +3574,7 @@ server= function(input,output,session) {
     xgb_results = xgb_results[order(xgb_results[,1]),]
     
     XGB_results(xgb_results)
-  
+    
     XGB_shapes = data.frame(cbind(temp_shapes[,1],format(round(XGB_shapes0,4),scientific=FALSE)))
     colnames(XGB_shapes) = c("Feature","Mean_SHAP")
     XGB_coeffs(XGB_shapes[order(XGB_shapes[,2],decreasing=TRUE),])
@@ -3572,7 +3621,7 @@ server= function(input,output,session) {
     }
     
     XGB_model <<- xgboost(data = as.matrix(final_XGB_data[,-1]),label=final_XGB_data[,1], params=params, early_stopping_rounds=early_stop_set(),
-                            nrounds=2000, verbose=0)
+                          nrounds=2000, verbose=0)
     
     XGB_standardize(input$XGB_standard)
     
@@ -3583,79 +3632,79 @@ server= function(input,output,session) {
   observeEvent(c(XGB_results(),refresh_trigger()), ignoreInit = TRUE, {
     
     if (!is.null(XGB_results())) {
-    
+      
       xgb_stepr = round((max(XGB_results()[,2])-min(XGB_results()[,2]))/40,2)
-    
+      
       updateNumericInput(session, "XGB_stand",
-                       value = round(mean(XGB_results()[,2]),2),
-                       max = round(max(XGB_results()[,2]),2),
-                       min = round(min(XGB_results()[,2]),2),
-                       step = xgb_stepr
+                         value = round(mean(XGB_results()[,2]),2),
+                         max = round(max(XGB_results()[,2]),2),
+                         min = round(min(XGB_results()[,2]),2),
+                         step = xgb_stepr
       )
-    
+      
       xgb_stepdc = round((max(XGB_results()[,3])-min(XGB_results()[,3]))/40,2)
-    
+      
       updateNumericInput(session, "XGB_dec_crit",
-                       value = round(mean(XGB_results()[,3]),2),
-                       max = round(max(XGB_results()[,3]),2),
-                       min = round(min(XGB_results()[,3]),2),
-                       step = xgb_stepdc
+                         value = round(mean(XGB_results()[,3]),2),
+                         max = round(max(XGB_results()[,3]),2),
+                         min = round(min(XGB_results()[,3]),2),
+                         step = xgb_stepdc
       )
-    
+      
       output$XGB_shapes = DT::renderDataTable(server = T, {data = datatable(XGB_coeffs(),rownames = F,selection =
-                  list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                  list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                  className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                  "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+                                                                              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                              list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                           "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
       output$XGB_fits = DT::renderDataTable(server = T, {data = datatable(XGB_results(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                  target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp", buttons = c('copy', 'csv', 'excel'),
-                  paging = T,pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
-                  JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-
+                                                                                                                      target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp", buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                        paging = T,pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                                                                                                                                                                                                          JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
       output$XGB_scatplot = renderPlotly(scatter_confuse(XGB_scat_dat(),input$XGB_stand,input$XGB_dec_crit))
-    
+      
       xgb_resid_data = XGB_scat_dat()[,c(1,3)] %>% mutate(Residuals = round(XGB_scat_dat()[,2]-XGB_scat_dat()[,3],3))
       output$XGB_resid_scatplot = renderPlotly(scatter(xgb_resid_data))
-    
+      
       output$XGB_lineplot = renderPlotly(plot_ly(XGB_scat_dat(), x = ~XGB_scat_dat()[,1], y = ~XGB_scat_dat()[,2], name="Observations", type="scatter", mode = "lines",
-                        text = ~paste("<b>ID: </b>",XGB_scat_dat()[,1],"<br><b>Observed Value:</b> ",XGB_scat_dat()[,2],sep=""),hoveron = 'points',hoverinfo='text',
-                        line = list(color = "#2c3e50", width = 1.5)) %>%
-                  add_trace(y = ~XGB_scat_dat()[,3], name="Fitted_Values", mode = 'lines',text = ~paste("<b>ID: </b>",XGB_scat_dat()[,1],"<br><b>Fitted Value:</b> ",
-                        round(XGB_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-                  layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fitted Values",font=list(size=20)),
-                        range=c(min(0.99*min(XGB_scat_dat()[,2],XGB_scat_dat()[,3]),1.01*min(XGB_scat_dat()[,2],XGB_scat_dat()[,3])),max(0.99*max(XGB_scat_dat()[,2],
-                        XGB_scat_dat()[,3]),1.01*max(XGB_scat_dat()[,2],XGB_scat_dat()[,3]))))))
+                                                 text = ~paste("<b>ID: </b>",XGB_scat_dat()[,1],"<br><b>Observed Value:</b> ",XGB_scat_dat()[,2],sep=""),hoveron = 'points',hoverinfo='text',
+                                                 line = list(color = "#2c3e50", width = 1.5)) %>%
+                                           add_trace(y = ~XGB_scat_dat()[,3], name="Fitted_Values", mode = 'lines',text = ~paste("<b>ID: </b>",XGB_scat_dat()[,1],"<br><b>Fitted Value:</b> ",
+                                                                                                                                 round(XGB_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+                                           layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fitted Values",font=list(size=20)),
+                                                                                                                        range=c(min(0.99*min(XGB_scat_dat()[,2],XGB_scat_dat()[,3]),1.01*min(XGB_scat_dat()[,2],XGB_scat_dat()[,3])),max(0.99*max(XGB_scat_dat()[,2],
+                                                                                                                                                                                                                                                  XGB_scat_dat()[,3]),1.01*max(XGB_scat_dat()[,2],XGB_scat_dat()[,3]))))))
       
       XGB_confuse_results(confuse(XGB_scat_dat()[,2:3],input$XGB_stand,input$XGB_dec_crit))
-
+      
       xgb_confuse_table = matrix(0,nrow=1,ncol=4)
-    
+      
       xgb_confuse_table[1,1] = XGB_confuse_results()$TP
       xgb_confuse_table[1,2] = XGB_confuse_results()$TN
       xgb_confuse_table[1,3] = XGB_confuse_results()$FP
       xgb_confuse_table[1,4] = XGB_confuse_results()$FN
-    
+      
       colnames(xgb_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-    
+      
       output$XGB_confuse = DT::renderDataTable(server = T, {data = datatable(xgb_confuse_table,rownames = F,selection = 
-                    list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
-                    options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                    columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                               list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
+                                                                             options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                            columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                     {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+      
       output$XGB_confuse_text = renderText({paste0("Sensitivity = ",round(XGB_confuse_results()$Sensitivity,3),"; Specificity = ",
-                    round(XGB_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_confuse_results()$Accuracy,3))})
-    
+                                                   round(XGB_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_confuse_results()$Accuracy,3))})
+      
       output$XGB_used_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_HP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-                    target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
-                    pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                    initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+                                                                                                               target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
+                                                                                                                                                                                             pageLength = 5,scrollX = F,scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                             initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
       refresh_trigger(FALSE)
       
     } else if (is.null(XGB_results())) {
-
+      
       output$XGB_shapes = NULL
       output$XGB_fits = NULL
       output$XGB_scatplot = NULL
@@ -3872,76 +3921,76 @@ server= function(input,output,session) {
   observeEvent(c(EN_pred_results(),refresh_trigger()), ignoreInit = TRUE, {
     
     if (!is.null(EN_pred_results())) {
-    
+      
       en_stepr = round((max(EN_pred_results()[,2])-min(EN_pred_results()[,2]))/40,2)
-    
+      
       updateNumericInput(session, "EN_pred_stand",
-                       value = round(mean(EN_pred_results()[,2]),2),
-                       max = round(max(EN_pred_results()[,2]),2),
-                       min = round(min(EN_pred_results()[,2]),2),
-                       step = en_stepr
+                         value = round(mean(EN_pred_results()[,2]),2),
+                         max = round(max(EN_pred_results()[,2]),2),
+                         min = round(min(EN_pred_results()[,2]),2),
+                         step = en_stepr
       )
-    
+      
       en_stepdc = round((max(EN_pred_results()[,3])-min(EN_pred_results()[,3]))/40,2)
-    
+      
       updateNumericInput(session, "EN_pred_dc",
-                       value = round(mean(EN_pred_results()[,3]),2),
-                       max = round(max(EN_pred_results()[,3]),2),
-                       min = round(min(EN_pred_results()[,3]),2),
-                       step = en_stepdc
+                         value = round(mean(EN_pred_results()[,3]),2),
+                         max = round(max(EN_pred_results()[,3]),2),
+                         min = round(min(EN_pred_results()[,3]),2),
+                         step = en_stepdc
       )
-    
+      
       output$EN_preds = DT::renderDataTable(server = T, {data = datatable(EN_pred_results(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                  target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
-                  pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
-                  JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+                                                                                                                          target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp",buttons = c('copy', 'csv', 'excel'),paging = T,
+                                                                                                                                                                                                            pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                                                                                                                                                                                                              JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
       output$EN_pred_coeffs = DT::renderDataTable(server = T, {data = datatable(EN_pred_coeffs(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                  target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
-                  paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-
+                                                                                                                               target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                                paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                                                                                                                                                                                                                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      
       output$EN_pred_scatplot = renderPlotly(scatter_confuse(EN_pred_scat_dat(),input$EN_pred_stand,input$EN_pred_dc))
-    
-
+      
+      
       resid_data = EN_pred_results()[,c(1,3)]
       resid_data = resid_data %>% mutate(Residuals = round(EN_pred_results()[,2]-EN_pred_results()[,3],3))
       output$EN_pred_resid_scatter = renderPlotly(scatter(resid_data))
-    
+      
       output$EN_pred_lineplot = renderPlotly(plot_ly(EN_pred_scat_dat(), x = ~EN_pred_scat_dat()[,1], y = ~EN_pred_scat_dat()[,2], name="Observations", type="scatter",
-                            mode = "lines",text = ~paste("<b>ID: </b>",EN_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_pred_scat_dat()[,2],sep=""),
-                            hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5)) %>%
-                  add_trace(y = ~EN_pred_scat_dat()[,3], name="Predictions", mode = 'lines',text = ~paste("<b>ID: </b>",EN_pred_scat_dat()[,1],"<br><b>Prediction:</b> ",
-                            round(EN_pred_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-                  layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",
-                            font=list(size=20)),range=c(min(0.99*min(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]),1.01*min(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3])),
-                            max(0.99*max(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]),1.01*max(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]))))))
+                                                     mode = "lines",text = ~paste("<b>ID: </b>",EN_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_pred_scat_dat()[,2],sep=""),
+                                                     hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5)) %>%
+                                               add_trace(y = ~EN_pred_scat_dat()[,3], name="Predictions", mode = 'lines',text = ~paste("<b>ID: </b>",EN_pred_scat_dat()[,1],"<br><b>Prediction:</b> ",
+                                                                                                                                       round(EN_pred_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+                                               layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",
+                                                                                                                                         font=list(size=20)),range=c(min(0.99*min(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]),1.01*min(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3])),
+                                                                                                                                                                     max(0.99*max(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]),1.01*max(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]))))))
       
       EN_pred_confuse_results(confuse(EN_pred_scat_dat()[,2:3],input$EN_pred_stand,input$EN_pred_dc))
-
+      
       confuse_table = matrix(0,nrow=1,ncol=4)
-    
+      
       confuse_table[1,1] = EN_pred_confuse_results()$TP
       confuse_table[1,2] = EN_pred_confuse_results()$TN
       confuse_table[1,3] = EN_pred_confuse_results()$FP
       confuse_table[1,4] = EN_pred_confuse_results()$FN
-    
+      
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-    
+      
       output$EN_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
-                      options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                      columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                                   list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
+                                                                                 options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                                columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                       {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+      
       output$EN_pred_confuse_text = renderText({paste0("Sensitivity = ",round(EN_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-                      round(EN_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_pred_confuse_results()$Accuracy,3))})
-    
+                                                       round(EN_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_pred_confuse_results()$Accuracy,3))})
+      
       refresh_trigger(FALSE) 
       
     } else if (is.null(EN_pred_results())) {
-    
+      
       output$EN_preds = NULL
       output$EN_pred_coeffs = NULL
       output$EN_pred_scatplot = NULL
@@ -3980,18 +4029,22 @@ server= function(input,output,session) {
     
     req(iv$is_valid())
     
+    EN_pred_data(NULL)
+    
     updateNumericInput(session, "num_preds",value = 2)
     changed_model(TRUE)
     
     if (input$use_pca_data) {
       data0 = PCA_dataset()
       rv=2
+      EN_final_features(PCA_coefficients()[,1])
       feats_to_use = input$pcax_to_use
       ignored_rows = NULL
       EN_model_PCA(TRUE)
     } else {
       data0 = current_data()
       rv=response_var()
+      EN_final_features(input$feats_to_use)
       feats_to_use = input$feats_to_use
       EN_model_PCA(FALSE)
     }
@@ -4033,7 +4086,7 @@ server= function(input,output,session) {
           lambda = get_model_params(fit_mod)$lambdaMin
           
           en_model = glmnet(x=as.matrix(MC_data[,-1]),MC_data[,1],lambda=lambda, alpha=alpha, na.action="na.omit",
-                              standardize=input$EN_standard,intercept=TRUE)
+                            standardize=input$EN_standard,intercept=TRUE)
           
           coeffs = as.matrix(coef(en_model,s=lambda))
           coeffs = as.data.frame(coeffs)
@@ -4075,7 +4128,7 @@ server= function(input,output,session) {
     
     # determine best alpha and lambda
     fit_EN_model = cva.glmnet(x=as.matrix(final_EN_data[,-1]),y=final_EN_data[,1],nfolds=input$num_folds,na.action="na.omit",
-                         standardize=input$EN_standard,intercept=TRUE)
+                              standardize=input$EN_standard,intercept=TRUE)
     
     final_alpha = get_model_params(fit_EN_model)$alpha
     final_lambda = get_model_params(fit_EN_model)$lambdaMin
@@ -4091,73 +4144,73 @@ server= function(input,output,session) {
   observeEvent(c(EN_results(), refresh_trigger()), ignoreInit = TRUE, {
     
     if (!is.null(EN_results())) {
-    
+      
       en_stepr = round((max(EN_results()[,2])-min(EN_results()[,2]))/40,2)
-    
+      
       updateNumericInput(session, "EN_stand",
-                       value = round(mean(EN_results()[,2]),2),
-                       max = round(max(EN_results()[,2]),2),
-                       min = round(min(EN_results()[,2]),2),
-                       step = en_stepr)
-    
+                         value = round(mean(EN_results()[,2]),2),
+                         max = round(max(EN_results()[,2]),2),
+                         min = round(min(EN_results()[,2]),2),
+                         step = en_stepr)
+      
       en_stepdc = round((max(EN_results()[,3])-min(EN_results()[,3]))/40,2)
-    
+      
       updateNumericInput(session, "EN_dec_crit",
-                       value = round(mean(EN_results()[,3]),2),
-                       max = round(max(EN_results()[,3]),2),
-                       min = round(min(EN_results()[,3]),2),
-                       step = en_stepdc)
-    
+                         value = round(mean(EN_results()[,3]),2),
+                         max = round(max(EN_results()[,3]),2),
+                         min = round(min(EN_results()[,3]),2),
+                         step = en_stepdc)
+      
       output$EN_fits = DT::renderDataTable(server = T, {data = datatable(EN_results(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F,dom="ltBp", buttons = c('copy', 'csv', 'excel'),
-                paging = T,pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
-                JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+                                                                                                                    target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F,dom="ltBp", buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                     paging = T,pageLength = num_rows_per_page,scrollX = T,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                                                                                                                                                                                                       JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
       output$EN_coeffs = DT::renderDataTable(server = T, {data = datatable(EN_coeffs(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
-                paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
-                JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
-
+                                                                                                                     target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                      paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),initComplete =
+                                                                                                                                                                                                        JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      
       output$EN_scatplot = renderPlotly(scatter_confuse(EN_scat_dat(),input$EN_stand,input$EN_dec_crit))
-    
+      
       resid_data = EN_results()[,c(1,3)]
       resid_data = resid_data %>% mutate(Residuals = round(EN_results()[,2]-EN_results()[,3],3))
       output$EN_resid_scatplot = renderPlotly(scatter(resid_data))
-
+      
       output$EN_lineplot = renderPlotly(plot_ly(EN_scat_dat(), x = ~EN_scat_dat()[,1], y = ~EN_scat_dat()[,2], name="Observations", type="scatter",
-                        mode = "lines",text = ~paste("<b>ID: </b>",EN_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_scat_dat()[,2],sep=""),
-                        hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5)) %>%
-                add_trace(y = ~EN_scat_dat()[,3], name="Fitted_Value", mode = 'lines',text = ~paste("<b>ID: </b>",EN_scat_dat()[,1],"<br><b>Fitted_Value:</b> ",
-                        round(EN_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-                layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fitted_Values",
-                        font=list(size=20)),range=c(min(0.99*min(EN_scat_dat()[,2],EN_scat_dat()[,3]),1.01*min(EN_scat_dat()[,2],EN_scat_dat()[,3])),
-                        max(0.99*max(EN_scat_dat()[,2],EN_scat_dat()[,3]),1.01*max(EN_scat_dat()[,2],EN_scat_dat()[,3]))))))
+                                                mode = "lines",text = ~paste("<b>ID: </b>",EN_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_scat_dat()[,2],sep=""),
+                                                hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5)) %>%
+                                          add_trace(y = ~EN_scat_dat()[,3], name="Fitted_Value", mode = 'lines',text = ~paste("<b>ID: </b>",EN_scat_dat()[,1],"<br><b>Fitted_Value:</b> ",
+                                                                                                                              round(EN_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+                                          layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fitted_Values",
+                                                                                                                                    font=list(size=20)),range=c(min(0.99*min(EN_scat_dat()[,2],EN_scat_dat()[,3]),1.01*min(EN_scat_dat()[,2],EN_scat_dat()[,3])),
+                                                                                                                                                                max(0.99*max(EN_scat_dat()[,2],EN_scat_dat()[,3]),1.01*max(EN_scat_dat()[,2],EN_scat_dat()[,3]))))))
       
       EN_confuse_results(confuse(EN_scat_dat()[,2:3],input$EN_stand,input$EN_dec_crit))
-    
+      
       EN_confuse_table = matrix(0,nrow=1,ncol=4)
-    
+      
       EN_confuse_table[1,1] = EN_confuse_results()$TP
       EN_confuse_table[1,2] = EN_confuse_results()$TN
       EN_confuse_table[1,3] = EN_confuse_results()$FP
       EN_confuse_table[1,4] = EN_confuse_results()$FN
-    
+      
       colnames(EN_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
-    
+      
       output$EN_confuse = DT::renderDataTable(server = T, {data = datatable(EN_confuse_table,rownames = F,selection = 
-                  list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
-                  options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                  columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                              list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
+                                                                            options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                           columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                   {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
-    
+      
       output$EN_confuse_text = renderText({paste0("Sensitivity = ",round(EN_confuse_results()$Sensitivity,3),"; Specificity = ",
-                  round(EN_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_confuse_results()$Accuracy,3))})
-    
+                                                  round(EN_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_confuse_results()$Accuracy,3))})
+      
       refresh_trigger(FALSE)
       
     } else if (is.null(EN_results())) {
-          
+      
       output$EN_fits = NULL
       output$EN_coeffs = NULL
       output$EN_scatplot = NULL
@@ -4249,6 +4302,8 @@ server= function(input,output,session) {
       LG_model = LG_model,
       LG_standardize = LG_pred_standardize(),
       LG_model_PCA = LG_model_PCA(),
+      LG_final_features = LG_final_features(),
+      LG_pred_data = LG_pred_data(),
       
       XGBCL_pred_results = XGBCL_pred_results(),
       XGBCL_pred_coeffs = XGBCL_pred_coeffs(),
@@ -4263,6 +4318,9 @@ server= function(input,output,session) {
       XGBCL_model = XGBCL_model,
       XGBCL_standardize = XGBCL_standardize(),
       XGBCL_model_PCA = XGBCL_model_PCA(),
+      XGBCL_final_features = XGBCL_final_features(),
+      XGBCL_pred_data = XGBCL_pred_data(),
+      XGBCL_final_data = XGBCL_final_data(),
       Optimal_CLHP = Optimal_CLHP,
       
       XGB_pred_results = XGB_pred_results(),
@@ -4278,6 +4336,9 @@ server= function(input,output,session) {
       XGB_model = XGB_model,
       XGB_standardize = XGB_standardize(),
       XGB_model_PCA = XGB_model_PCA(),
+      XGB_final_features = XGB_final_features(),
+      XGB_pred_data = XGB_pred_data(),
+      XGB_final_data = XGB_final_data(),
       Optimal_HP = Optimal_HP,
       
       EN_pred_results = EN_pred_results(),
@@ -4291,7 +4352,9 @@ server= function(input,output,session) {
       EN_scat_dat = EN_scat_dat(),
       EN_model = EN_model,
       EN_standardize = EN_standardize(),
-      EN_model_PCA = EN_model_PCA()
+      EN_model_PCA = EN_model_PCA(),
+      EN_final_features = EN_final_features(),
+      EN_pred_data = EN_pred_data()
     )
     
     save(save_list, file = file)
@@ -4334,10 +4397,28 @@ server= function(input,output,session) {
       
     } else {
       
-      columns_to_grab = pred_model_features()
+      if (input$model_choice == "Logistic_Regression") {
+        
+        columns_to_grab = LG_final_features()
+        
+      } else if (input$model_choice == "XGB_Classifier") {
+        
+        columns_to_grab = XGBCL_final_features()
+        
+      } else if (input$model_choice == "XGBoost") {
+        
+        columns_to_grab = XGB_final_features()
+        
+      } else if (input$model_choice == "Elastic_Net") {
+        
+        columns_to_grab = EN_final_features()
+        
+      } else {
+        
+        columns_to_grab = NULL
+      }
       
       temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = length(columns_to_grab)+5))
-      
       missing_columns = setdiff(columns_to_grab, colnames(pred_file_data))
       
       if (length(missing_columns) > 0) {
@@ -4347,30 +4428,46 @@ server= function(input,output,session) {
           easyClose = TRUE
         ))
         
+        return()
+        
       } else {
-
-        temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = length(columns_to_grab) + 5))
         
         temp_data[,1:2] = pred_file_data[,1:2, drop = FALSE]
-        temp_data[, 3:(2 + length(columns_to_grab))] = pred_file_data[, columns_to_grab, drop = FALSE]
+        temp_data[,3:(2+length(columns_to_grab))] = pred_file_data[,columns_to_grab,drop = FALSE]
         
-        temp_data[, (ncol(temp_data)-2):ncol(temp_data)] <- -999
+        temp_data[,(ncol(temp_data)-2):ncol(temp_data)] = -999
         
-        colnames(temp_data) <- c(
+        colnames(temp_data) = c(
           colnames(current_data()[1]),
           colnames(current_data()[response_var()]),
           columns_to_grab,
           "Prediction", "Lower_Bound", "Upper_Bound"
         )
-      
-      pred_data(temp_data)
-      
-      updateNumericInput(session, "num_preds",value = nrow(pred_data()))
-      
-      current_pred_page(1)
-      
-      renderpreddata(pred_data(),date_format_string,column_props,current_pred_page(),output)
-      
+        
+        updateNumericInput(session, "num_preds",value = nrow(temp_data))
+        current_pred_page(1)
+        
+        if (input$model_choice == "Logistic_Regression") {
+          
+          LG_pred_data(temp_data)
+          renderpreddata(LG_pred_data(),date_format_string,column_props,current_pred_page(),output)
+          
+        } else if (input$model_choice == "XGB_Classifier") {
+          
+          XGBCL_pred_data(temp_data)
+          renderpreddata(XGBCL_pred_data(),date_format_string,column_props,current_pred_page(),output)
+          
+        } else if (input$model_choice == "XGBoost") {
+          
+          XGB_pred_data(temp_data)
+          renderpreddata(XGB_pred_data(),date_format_string,column_props,current_pred_page(),output)
+          
+        } else if (input$model_choice == "Elastic_Net") {
+          
+          EN_pred_data(temp_data)
+          renderpreddata(EN_pred_data(),date_format_string,column_props,current_pred_page(),output)
+          
+        }
       }
     }
   })
@@ -4405,25 +4502,36 @@ server= function(input,output,session) {
         })
         
         model_to_use(LG_model)
+        model_features = LG_final_features()
+        pred_data(LG_pred_data())
         
         if (LG_model_PCA()) {
+          
           final_model_PCA(TRUE)
-          model_features = PCA_coefficients()[,1]
           model_PCA_axes(colnames(LG_results())[4:ncol(LG_results())])
           
           if (is.null(LG_pred_results())) {
+            
             no_resids(TRUE)
             resids = NULL
+            
           } else if (LG_pred_standardize() != LG_standardize()) {
+            
             standard_mismatch(TRUE)
             resids = NULL
+            
           } else if (!identical(model_PCA_axes(),colnames(LG_pred_results())[4:ncol(LG_pred_results())])) {
+            
             feature_mismatch(TRUE)
             resids = NULL
+            
           } else if (LG_pred_thresh() != LG_thresh()) {
+            
             thresh_mismatch(TRUE)
             resids = NULL
+            
           } else {
+            
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
             thresh_mismatch(FALSE)
@@ -4431,23 +4539,32 @@ server= function(input,output,session) {
           }
           
         } else {
+          
           final_model_PCA(FALSE)
-          model_features = colnames(LG_results())[4:ncol(LG_results())]
           model_PCA_axes(NULL)
           
           if (is.null(LG_pred_results())) {
+            
             no_resids(TRUE)
             resids = NULL
+            
           } else if (LG_pred_standardize() != LG_standardize()) {
+            
             standard_mismatch(TRUE)
             resids = NULL
+            
           } else if (!identical(model_features,colnames(LG_pred_results())[4:ncol(LG_pred_results())])) {
+            
             feature_mismatch(TRUE)
             resids = NULL
+            
           } else if (LG_pred_thresh() != LG_thresh()) {
+            
             thresh_mismatch(TRUE)
             resids = NULL
+            
           } else {
+            
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
             thresh_mismatch(FALSE)
@@ -4456,11 +4573,14 @@ server= function(input,output,session) {
         }
         
         if (!is.null(LG_pred_results()) && !feature_mismatch() && !standard_mismatch() && !thresh_mismatch() && !no_resids()) {
+          
           resids = ((LG_pred_results()[,2] - LG_pred_results()[,3])^2)^0.5
+          
         } else {
+          
           resids = NULL
         }
-        
+
       } else if (input$model_choice == "XGB_Classifier") {
         
         output$model_text = renderUI({
@@ -4474,25 +4594,36 @@ server= function(input,output,session) {
         })
         
         model_to_use(XGBCL_model)
+        model_features = XGBCL_final_features()
+        pred_data(XGBCL_pred_data())
         
         if (XGBCL_model_PCA()) {
+          
           final_model_PCA(TRUE)
-          model_features = PCA_coefficients()[,1]
           model_PCA_axes(colnames(XGBCL_results())[4:ncol(XGBCL_results())])
           
           if (is.null(XGBCL_pred_results())) {
+            
             no_resids(TRUE)
             resids = NULL
+            
           } else if (XGBCL_pred_standardize() != XGBCL_standardize()) {
+            
             standard_mismatch(TRUE)
             resids = NULL
+            
           } else if (!identical(model_PCA_axes(),colnames(XGBCL_pred_results())[4:ncol(XGBCL_pred_results())])) {
+            
             feature_mismatch(TRUE)
             resids = NULL
+            
           } else if (XGBCL_pred_thresh() != XGBCL_thresh()) {
+            
             thresh_mismatch(TRUE)
             resids = NULL
+            
           } else {
+            
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
             thresh_mismatch(FALSE)
@@ -4500,23 +4631,32 @@ server= function(input,output,session) {
           }
           
         } else {
+          
           final_model_PCA(FALSE)
-          model_features = colnames(XGBCL_results())[4:ncol(XGBCL_results())]
           model_PCA_axes(NULL)
           
           if (is.null(XGBCL_pred_results())) {
+            
             no_resids(TRUE)
             resids = NULL
+            
           } else if (XGBCL_pred_standardize() != XGBCL_standardize()) {
+            
             standard_mismatch(TRUE)
             resids = NULL
+            
           } else if (!identical(model_features,colnames(XGBCL_pred_results())[4:ncol(XGBCL_pred_results())])) {
+            
             feature_mismatch(TRUE)
             resids = NULL
+            
           } else if (XGBCL_pred_thresh() != XGBCL_thresh()) {
+            
             thresh_mismatch(TRUE)
             resids = NULL
+            
           } else {
+            
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
             thresh_mismatch(FALSE)
@@ -4525,53 +4665,72 @@ server= function(input,output,session) {
         }
         
         if (!is.null(XGBCL_pred_results()) && !feature_mismatch() && !standard_mismatch() && !thresh_mismatch() && !no_resids()) {
+          
           resids = ((XGBCL_pred_results()[,2] - XGBCL_pred_results()[,3])^2)^0.5
+          
         } else {
+          
           resids = NULL
         }
-        
+
       } else if (input$model_choice == "XGBoost") {
         
         output$model_text = renderUI({HTML("<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost</div>
             <div style='font-style: italic;'>Predictions: Response Variable Units</div>")})
         
         model_to_use(XGB_model)
+        model_features = XGB_final_features()
+        pred_data(XGB_pred_data())
         
         if (XGB_model_PCA()) {
+          
           final_model_PCA(TRUE)
-          model_features = PCA_coefficients()[,1]
           model_PCA_axes(colnames(XGB_results())[4:ncol(XGB_results())])
           
           if (is.null(XGB_pred_results())) {
+            
             no_resids(TRUE)
             resids = NULL
+            
           } else if (XGB_pred_standardize() != XGB_standardize()) {
+            
             standard_mismatch(TRUE)
             resids = NULL
+            
           } else if (!identical(model_PCA_axes(),colnames(XGB_pred_results())[4:ncol(XGB_pred_results())])) {
+            
             feature_mismatch(TRUE)
             resids = NULL
+            
           } else {
+            
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
             no_resids(FALSE)
           }
           
         } else {
+          
           final_model_PCA(FALSE)
-          model_features = colnames(XGB_results())[4:ncol(XGB_results())]
           model_PCA_axes(NULL)
           
           if (is.null(XGB_pred_results())) {
+            
             no_resids(TRUE)
             resids = NULL
+            
           } else if (XGB_pred_standardize() != XGB_standardize()) {
+            
             standard_mismatch(TRUE)
             resids = NULL
+            
           } else if (!identical(model_features,colnames(XGB_pred_results())[4:ncol(XGB_pred_results())])) {
+            
             feature_mismatch(TRUE)
             resids = NULL
+            
           } else {
+            
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
             no_resids(FALSE)
@@ -4579,53 +4738,72 @@ server= function(input,output,session) {
         }
         
         if (!is.null(XGB_pred_results()) && !feature_mismatch() && !standard_mismatch() && !no_resids()) {
+          
           resids = ((XGB_pred_results()[,2] - XGB_pred_results()[,3])^2)^0.5
+          
         } else {
+          
           resids = NULL
         }
-        
+
       } else if (input$model_choice == "Elastic_Net") {
         
         output$model_text = renderUI({HTML("<div style='font-size: 20px; font-weight: bold;'>Model: Elastic Net</div>
             <div style='font-style: italic;'>Predictions: Response Variable Units</div>")})
         
         model_to_use(EN_model)
+        model_features = EN_final_features()
+        pred_data(EN_pred_data())
         
         if (EN_model_PCA()) {
+          
           final_model_PCA(TRUE)
-          model_features = PCA_coefficients()[,1]
           model_PCA_axes(colnames(EN_results())[4:ncol(EN_results())])
           
           if (is.null(EN_pred_results())) {
+            
             no_resids(TRUE)
             resids = NULL
+            
           } else if (EN_pred_standardize() != EN_standardize()) {
+            
             standard_mismatch(TRUE)
             resids = NULL
+            
           } else if (!identical(model_PCA_axes(),colnames(EN_pred_results())[4:ncol(EN_pred_results())])) {
+            
             feature_mismatch(TRUE)
             resids = NULL
+            
           } else {
+            
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
             no_resids(FALSE)
           }
           
         } else {
+          
           final_model_PCA(FALSE)
-          model_features = colnames(EN_results())[4:ncol(EN_results())]
           model_PCA_axes(NULL)
           
           if (is.null(EN_pred_results())) {
+            
             no_resids(TRUE)
             resids = NULL
+            
           } else if (EN_pred_standardize() != EN_standardize()) {
+            
             standard_mismatch(TRUE)
             resids = NULL
+            
           } else if (!identical(model_features,colnames(EN_pred_results())[4:ncol(EN_pred_results())])) {
+            
             feature_mismatch(TRUE)
             resids = NULL
+            
           } else {
+            
             feature_mismatch(FALSE)
             standard_mismatch(FALSE)
             no_resids(FALSE)
@@ -4633,15 +4811,21 @@ server= function(input,output,session) {
         }
         
         if (!is.null(EN_pred_results()) && !feature_mismatch() && !standard_mismatch() && !no_resids()) {
+          
           resids = ((EN_pred_results()[,2] - EN_pred_results()[,3])^2)^0.5
+          
         } else {
+          
           resids = NULL
         }
       }
       
       if (final_model_PCA()) {
+        
         output$pca_model_text = renderText({HTML("NOTE: PCA axes being used as features.")})
+        
       } else {
+        
         output$pca_model_text = NULL
       }
       
@@ -4686,10 +4870,10 @@ server= function(input,output,session) {
       }
       
       current_pred_page(1)
-
+      
       selected_data = current_data()[,model_features]
       num_cols = length(model_features)
-
+      
       min_feats = apply(selected_data, 2, min, na.rm = TRUE)
       max_feats = apply(selected_data, 2, max, na.rm = TRUE)
       
@@ -4698,7 +4882,7 @@ server= function(input,output,session) {
       feature_ranges[2,1] = "Maximum"
       feature_ranges[1, 2:(1 + num_cols)] = magnitude_round(min_feats)
       feature_ranges[2, 2:(1 + num_cols)] = magnitude_round(max_feats)
-
+      
       colnames(feature_ranges) = c("Feature_Characteristic",model_features)
       model_feature_ranges(feature_ranges)
       
@@ -4733,8 +4917,33 @@ server= function(input,output,session) {
     
     req(iv$is_valid())
     
-    temp_data = pred_data()
-    model_features = pred_model_features()
+    if (input$model_choice == "Logistic_Regression") {
+      
+      temp_data = LG_pred_data()
+      model_features = LG_final_features()
+      
+    } else if (input$model_choice == "XGB_Classifier") {
+      
+      temp_data = XGBCL_pred_data()
+      model_features = XGBCL_final_features()
+      
+    } else if (input$model_choice == "XGBoost") {
+      
+      temp_data = XGB_pred_data()
+      model_features = XGB_final_features()
+      
+    } else if (input$model_choice == "Elastic_Net") {
+      
+      temp_data = EN_pred_data()
+      model_features = EN_final_features()
+      
+    } else {
+      
+      temp_data = NULL
+      model_features = NULL
+      return()
+    }
+    
     iv_name = colnames(temp_data)[1]
     rv_name = colnames(temp_data)[2]
     
@@ -4742,7 +4951,7 @@ server= function(input,output,session) {
       
       new_rows = matrix(-999, nrow = (input$num_preds-nrow(temp_data)), ncol = length(model_features)+5)
       colnames(new_rows) = c(iv_name,rv_name,model_features,"Prediction","Lower_Bound","Upper_Bound")
-
+      
       temp_data1 = rbind(temp_data,new_rows)
       colnames(temp_data1) = colnames(new_rows)
       
@@ -4750,14 +4959,30 @@ server= function(input,output,session) {
       
       temp_data1 = matrix(-999, nrow = 1, ncol = length(model_features)+5)
       colnames(temp_data1) = c(iv_name,rv_name,model_features,"Prediction","Lower_Bound","Upper_Bound")
-
+      
     } else {
       temp_data1 = temp_data[1:input$num_preds,]
     }
     
-    pred_data(temp_data1)
+    if (input$model_choice == "Logistic_Regression") {
+      
+      LG_pred_data(temp_data1)
+      
+    } else if (input$model_choice == "XGB_Classifier") {
+      
+      XGBCL_pred_data(temp_data1)
+      
+    } else if (input$model_choice == "XGBoost") {
+      
+      XGB_pred_data(temp_data1)
+      
+    } else if (input$model_choice == "Elastic_Net") {
+      
+      EN_pred_data(temp_data1)
+      
+    }
     
-    renderpreddata(pred_data(),date_format_string,column_props,current_pred_page(),output)
+    renderpreddata(temp_data1,date_format_string,column_props,current_pred_page(),output)
     
   })
   
@@ -4767,7 +4992,7 @@ server= function(input,output,session) {
     info = input$pd_data_cell_edit
     
     data=pred_data()
-
+    
     i = info$row
     j = info$col + 1
     
@@ -4782,7 +5007,27 @@ server= function(input,output,session) {
     
     req(iv$is_valid())
     
-    prediction_data = data.frame(pred_data())
+    if (input$model_choice == "Logistic_Regression") {
+      
+      prediction_data = LG_pred_data()
+      
+    } else if (input$model_choice == "XGB_Classifier") {
+      
+      prediction_data = XGBCL_pred_data()
+      
+    } else if (input$model_choice == "XGBoost") {
+      
+      prediction_data = XGB_pred_data()
+      
+    } else if (input$model_choice == "Elastic_Net") {
+      
+      prediction_data = EN_pred_data()
+      
+    } else {
+      
+      prediction_data = NULL
+      return()
+    }
     
     if (any(prediction_data[,3:(ncol(prediction_data)-3)] == -999)) {
       
@@ -4794,7 +5039,24 @@ server= function(input,output,session) {
       
       resids = pred_residuals()
       model = model_to_use()
-      model_features = pred_model_features()
+      
+      if (input$model_choice == "Logistic_Regression") {
+        
+        model_features = LG_final_features()
+        
+      } else if (input$model_choice == "XGB_Classifier") {
+        
+        model_features = XGBCL_final_features()
+        
+      } else if (input$model_choice == "XGBoost") {
+        
+        model_features = XGB_final_features()
+        
+      } else if (input$model_choice == "Elastic_Net") {
+        
+        model_features = EN_final_features()
+      }
+      
       iv_name = colnames(current_data())[1]
       rv_name = colnames(current_data())[response_var()]
       stop = ncol(prediction_data)-3
@@ -4817,7 +5079,6 @@ server= function(input,output,session) {
         part2 = as.matrix(PCA_coefficients() %>% select(any_of(model_PCA_axes())))
         
         pred_pca_data = data.frame(part1 %*% part2)
-        
       }
       
       if (input$model_choice == "Logistic_Regression") {
@@ -4900,4 +5161,5 @@ server= function(input,output,session) {
     dbDisconnect(temp_db)
   })
 }
+
 shinyApp(ui, server)

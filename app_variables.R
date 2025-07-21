@@ -107,6 +107,8 @@ LG_model = NULL
 LG_model_PCA = reactiveVal(FALSE)
 LG_standardize = reactiveVal(TRUE)
 LG_thresh = reactiveVal()
+LG_final_features = reactiveVal()
+LG_pred_data = reactiveVal()
 
 # XGBoost Classifier Prediction Results
 XGBCL_pred_results = reactiveVal()
@@ -131,6 +133,8 @@ XGBCL_model_PCA = reactiveVal(FALSE)
 XGBCL_standardize = reactiveVal(FALSE)
 XGBCL_final_data = reactiveVal()
 XGBCL_thresh = reactiveVal()
+XGBCL_final_features = reactiveVal()
+XGBCL_pred_data = reactiveVal()
 
 # XGBoost Prediction Results
 XGB_pred_results = reactiveVal()
@@ -153,6 +157,8 @@ XGB_model = NULL
 XGB_model_PCA = reactiveVal(FALSE)
 XGB_standardize = reactiveVal(FALSE)
 XGB_final_data = reactiveVal()
+XGB_final_features = reactiveVal()
+XGB_pred_data = reactiveVal()
 
 # Elastic Net Prediction Results
 EN_pred_results = reactiveVal()
@@ -169,6 +175,8 @@ EN_scat_dat = reactiveVal()
 EN_model = NULL
 EN_model_PCA = reactiveVal(FALSE)
 EN_standardize = reactiveVal(TRUE)
+EN_final_features = reactiveVal()
+EN_pred_data = reactiveVal()
 
 # Parameters needed for Prediction Tab
 final_model_PCA = reactiveVal(FALSE)
