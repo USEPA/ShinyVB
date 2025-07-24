@@ -44,8 +44,8 @@ raincloud = function(data,date_format_string) {
            alpha = .3,
            position = position_jitter(seed = 1, width = .12)) +
          
-         annotation_custom(grid::textGrob(paste("Mean = ",round(stat1,1)),just="left",gp = gpar(fontsize=24),x=unit(0.83,"npc"), y=unit(0.95,"npc"))) +
-         annotation_custom(grid::textGrob(paste("Median = ",round(stat2,1)),just="left",gp = gpar(fontsize=24),x=unit(0.83,"npc"), y=unit(0.91,"npc"))) +
+         annotation_custom(grid::textGrob(paste("Mean = ",format(ifelse(stat1<1,round(stat1,2),round(stat1,1)),nsmall=1)),just="left",gp = gpar(fontsize=24),x=unit(0.83,"npc"), y=unit(0.95,"npc"))) +
+         annotation_custom(grid::textGrob(paste("Median = ",format(ifelse(stat2<1,round(stat2,2),round(stat2,1)),nsmall=1)),just="left",gp = gpar(fontsize=24),x=unit(0.83,"npc"), y=unit(0.91,"npc"))) +
          annotation_custom(grid::textGrob(paste("n = ", stat3),just="left",gp = gpar(fontsize=24),x=unit(0.83,"npc"), y=unit(0.87,"npc"))) +
          
          labs(x = NULL,y = name) +

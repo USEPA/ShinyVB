@@ -60,11 +60,11 @@ renderpreddata = function(data,
           )
         )
       ) %>%
-        formatStyle(columns = 1:2, backgroundColor = "#b0bed9") %>%
+        formatStyle(columns = 1:2, backgroundColor = "#b0bed9") |>
         formatStyle(columns = 3:(ncol(data)-3),color = styleEqual(-999, "white", default = "black"),
-                    backgroundColor = styleEqual(-999, "#BA0C2F", default = "#aaeeaa")) %>%
-        formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
-        formatRound(columns = 2:ncol(data), digits = sig_digies) %>%
+                    backgroundColor = styleEqual(-999, "#BA0C2F", default = "#aaeeaa")) |>
+        formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") |>
+        formatRound(columns = 2:ncol(data), digits = sig_digies) |>
         formatDate(1, date_format_string)
     })
     
@@ -101,10 +101,10 @@ renderpreddata = function(data,
           )
         )
       ) %>%
-        formatStyle(columns = 1:2, backgroundColor = "#b0bed9") %>%
+        formatStyle(columns = 1:2, backgroundColor = "#b0bed9") |>
         formatStyle(columns = 3:(ncol(data)-3),color = styleEqual(-999, "white", default = "black"),
-                    backgroundColor = styleEqual(-999, "#BA0C2F", default = "#aaeeaa")) %>%
-        formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") %>%
+                    backgroundColor = styleEqual(-999, "#BA0C2F", default = "#aaeeaa")) |>
+        formatStyle(columns = (ncol(data)-2):ncol(data), backgroundColor = "lightgray") |>
         formatRound(columns = 1:ncol(data),digits = sig_digies)
     })
   } else if (date_format_string == "Character") {

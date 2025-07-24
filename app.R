@@ -4372,101 +4372,105 @@ server= function(input,output,session) {
     }
   })
   
-  # Upload excel/csv data file into prediction data table
+  # Upload data file into prediction data table
   observeEvent(input$pred_file, ignoreInit = T, {
     
-    ext = tools::file_ext(input$pred_file$name)
-    
-    if (ext == "xlsx") {
-      pred_file_data <<- read.xlsx(input$pred_file$datapath)
-    } else {
-      pred_file_data <<- read.csv(input$pred_file$datapath,header = TRUE,sep = input$sep)
-    }
-    
-    if (any(sapply(data.frame(pred_file_data[,-1]), function(col) !is.numeric(col)))) {
-      
-      showModal(modalDialog(paste("This dataset contains non-numeric data. Please remedy prior to data importation."),
-                            easyClose = F,footer = div(modalButton('Close'))))
-      return()
-      
-    }  else if (nrow(pred_file_data) < 2) {
-      
-      showModal(modalDialog(paste("File must contain more than 1 data row."), easyClose = F,footer = div(modalButton('Close'))))
-      
+    if (input$model_choice == "None") {
+      showModal(modalDialog(paste("No model has been chosen."), easyClose = F,footer = div(modalButton('Close'))))
       return()
       
     } else {
       
-      if (input$model_choice == "Logistic_Regression") {
-        
-        columns_to_grab = LG_final_features()
-        
-      } else if (input$model_choice == "XGB_Classifier") {
-        
-        columns_to_grab = XGBCL_final_features()
-        
-      } else if (input$model_choice == "XGBoost") {
-        
-        columns_to_grab = XGB_final_features()
-        
-      } else if (input$model_choice == "Elastic_Net") {
-        
-        columns_to_grab = EN_final_features()
-        
+      ext = tools::file_ext(input$pred_file$name)
+      
+      if (ext == "xlsx") {
+        pred_file_data <<- read.xlsx(input$pred_file$datapath)
       } else {
-        
-        columns_to_grab = NULL
+        pred_file_data <<- read.csv(input$pred_file$datapath,header = TRUE,sep = input$sep)
       }
       
-      temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = length(columns_to_grab)+5))
-      missing_columns = setdiff(columns_to_grab, colnames(pred_file_data))
-      
-      if (length(missing_columns) > 0) {
-        showModal(modalDialog(
-          title = "Error",
-          paste("The following required columns are missing in the imported prediction data:", paste(missing_columns, collapse = ", ")),
-          easyClose = TRUE
-        ))
+      if (any(sapply(data.frame(pred_file_data[,-1]), function(col) !is.numeric(col)))) {
+        
+        showModal(modalDialog(paste("This dataset contains non-numeric data. Please remedy prior to data importation."),
+                              easyClose = F,footer = div(modalButton('Close'))))
+        return()
+        
+      }  else if (nrow(pred_file_data) < 2) {
+        
+        showModal(modalDialog(paste("File must contain more than 1 data row."), easyClose = F,footer = div(modalButton('Close'))))
         
         return()
         
       } else {
         
-        temp_data[,1:2] = pred_file_data[,1:2, drop = FALSE]
-        temp_data[,3:(2+length(columns_to_grab))] = pred_file_data[,columns_to_grab,drop = FALSE]
-        
-        temp_data[,(ncol(temp_data)-2):ncol(temp_data)] = -999
-        
-        colnames(temp_data) = c(
-          colnames(current_data()[1]),
-          colnames(current_data()[response_var()]),
-          columns_to_grab,
-          "Prediction", "Lower_Bound", "Upper_Bound"
-        )
-        
-        updateNumericInput(session, "num_preds",value = nrow(temp_data))
-        current_pred_page(1)
-        
         if (input$model_choice == "Logistic_Regression") {
           
-          LG_pred_data(temp_data)
-          renderpreddata(LG_pred_data(),date_format_string,column_props,current_pred_page(),output)
+          columns_to_grab = LG_final_features()
           
         } else if (input$model_choice == "XGB_Classifier") {
           
-          XGBCL_pred_data(temp_data)
-          renderpreddata(XGBCL_pred_data(),date_format_string,column_props,current_pred_page(),output)
+          columns_to_grab = XGBCL_final_features()
           
         } else if (input$model_choice == "XGBoost") {
           
-          XGB_pred_data(temp_data)
-          renderpreddata(XGB_pred_data(),date_format_string,column_props,current_pred_page(),output)
+          columns_to_grab = XGB_final_features()
           
         } else if (input$model_choice == "Elastic_Net") {
           
-          EN_pred_data(temp_data)
-          renderpreddata(EN_pred_data(),date_format_string,column_props,current_pred_page(),output)
+          columns_to_grab = EN_final_features()
           
+        }
+        
+        temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = length(columns_to_grab)+5))
+        missing_columns = setdiff(columns_to_grab, colnames(pred_file_data))
+        
+        if (length(missing_columns) > 0) {
+          showModal(modalDialog(
+            title = "Error",
+            paste("The following required columns are missing in the imported prediction data:", paste(missing_columns, collapse = ", ")),
+            easyClose = TRUE
+          ))
+          
+          return()
+          
+        } else {
+          
+          temp_data[,1:2] = pred_file_data[,1:2, drop = FALSE]
+          temp_data[,3:(2+length(columns_to_grab))] = pred_file_data[,columns_to_grab,drop = FALSE]
+          
+          temp_data[,(ncol(temp_data)-2):ncol(temp_data)] = -999
+          
+          colnames(temp_data) = c(
+            "Sample_Name", #colnames(current_data()[1]),
+            colnames(current_data()[response_var()]),
+            columns_to_grab,
+            "Prediction", "Lower_Bound", "Upper_Bound"
+          )
+          
+          updateNumericInput(session, "num_preds",value = nrow(temp_data))
+          current_pred_page(1)
+          
+          if (input$model_choice == "Logistic_Regression") {
+            
+            LG_pred_data(temp_data)
+            renderpreddata(LG_pred_data(),"Character",column_props,current_pred_page(),output)
+            
+          } else if (input$model_choice == "XGB_Classifier") {
+            
+            XGBCL_pred_data(temp_data)
+            renderpreddata(XGBCL_pred_data(),"Character",column_props,current_pred_page(),output)
+            
+          } else if (input$model_choice == "XGBoost") {
+            
+            XGB_pred_data(temp_data)
+            renderpreddata(XGB_pred_data(),"Character",column_props,current_pred_page(),output)
+            
+          } else if (input$model_choice == "Elastic_Net") {
+            
+            EN_pred_data(temp_data)
+            renderpreddata(EN_pred_data(),"Character",column_props,current_pred_page(),output)
+            
+          }
         }
       }
     }
@@ -4580,7 +4584,7 @@ server= function(input,output,session) {
           
           resids = NULL
         }
-
+        
       } else if (input$model_choice == "XGB_Classifier") {
         
         output$model_text = renderUI({
@@ -4672,7 +4676,7 @@ server= function(input,output,session) {
           
           resids = NULL
         }
-
+        
       } else if (input$model_choice == "XGBoost") {
         
         output$model_text = renderUI({HTML("<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost</div>
@@ -4745,7 +4749,7 @@ server= function(input,output,session) {
           
           resids = NULL
         }
-
+        
       } else if (input$model_choice == "Elastic_Net") {
         
         output$model_text = renderUI({HTML("<div style='font-size: 20px; font-weight: bold;'>Model: Elastic Net</div>
@@ -4829,7 +4833,8 @@ server= function(input,output,session) {
         output$pca_model_text = NULL
       }
       
-      iv_name = colnames(current_data())[1]
+      #iv_name = colnames(current_data())[1]
+      iv_name = "Sample_Name"
       rv_name = colnames(current_data())[response_var()]
       
       temp_data = data.frame(matrix(-999, nrow = input$num_preds, ncol = length(model_features)+5))
@@ -4886,7 +4891,7 @@ server= function(input,output,session) {
       colnames(feature_ranges) = c("Feature_Characteristic",model_features)
       model_feature_ranges(feature_ranges)
       
-      renderpreddata(pred_data(),date_format_string,column_props,current_pred_page(),output)
+      renderpreddata(pred_data(),"Character",column_props,current_pred_page(),output)
       
       output$pd_feat_ranges = DT::renderDataTable(server = T, {
         datatable(
@@ -4982,24 +4987,64 @@ server= function(input,output,session) {
       
     }
     
-    renderpreddata(temp_data1,date_format_string,column_props,current_pred_page(),output)
+    renderpreddata(temp_data1,"Character",column_props,current_pred_page(),output)
     
   })
   
-  # Provide prediction dataset cell value editing
+  # Prediction dataset cell value editing
   observeEvent(input$pd_data_cell_edit, ignoreInit = T, {
     
     info = input$pd_data_cell_edit
     
-    data=pred_data()
+    if (input$model_choice == "Logistic_Regression") {
+      
+      data = LG_pred_data()
+      
+    } else if (input$model_choice == "XGB_Classifier") {
+      
+      data = XGBCL_pred_data()
+      
+    } else if (input$model_choice == "XGBoost") {
+      
+      data = XGB_pred_data()
+      
+    } else if (input$model_choice == "Elastic_Net") {
+      
+      data = EN_pred_data()
+    }
     
-    i = info$row
-    j = info$col + 1
-    
-    data = editData(data,input$pd_data_cell_edit,"pd_data",rownames = FALSE)
-    
-    pred_data(data)
-    renderpreddata(pred_data(),date_format_string,column_props,current_pred_page(),output)
+    if (is.null(info) || info$value == "" || is.na(info$value)) {
+      
+      showModal(modalDialog(title = "Input Error",paste("Missing feature values are not allowed."),easyClose = FALSE,footer = div(modalButton('Close'))))
+      renderpreddata(data,"Character",column_props,current_pred_page(),output)
+      
+    } else {
+      
+      i = info$row
+      j = info$col + 1
+      
+      data_new = editData(data,input$pd_data_cell_edit,"pd_data",rownames = FALSE)
+      pred_data(data_new)
+      
+      if (input$model_choice == "Logistic_Regression") {
+        
+        LG_pred_data(data_new)
+        
+      } else if (input$model_choice == "XGB_Classifier") {
+        
+        XGBCL_pred_data(data_new)
+        
+      } else if (input$model_choice == "XGBoost") {
+        
+        XGB_pred_data(data_new)
+        
+      } else if (input$model_choice == "Elastic_Net") {
+        
+        EN_pred_data(data_new)
+      }
+      
+      renderpreddata(data_new,"Character",column_props,current_pred_page(),output)
+    }
   })
   
   # Make predictions using selected model
@@ -5029,7 +5074,15 @@ server= function(input,output,session) {
       return()
     }
     
-    if (any(prediction_data[,3:(ncol(prediction_data)-3)] == -999)) {
+    if (is.null(prediction_data)) {
+      
+      showModal(modalDialog(paste("Missing feature values are not allowed. Provide all feature values to make predictions."),
+                            easyClose = F,footer = div(modalButton('Close'))))
+      return()
+      
+    } else if (any(prediction_data[, 3:(ncol(prediction_data) - 3)] == -999) || 
+               is.null(prediction_data[, 3:(ncol(prediction_data) - 3)]) || 
+               any(is.na(prediction_data[, 3:(ncol(prediction_data) - 3)]))) {
       
       showModal(modalDialog(paste("Missing feature values are not allowed. Provide all feature values to make predictions."),
                             easyClose = F,footer = div(modalButton('Close'))))
@@ -5057,7 +5110,8 @@ server= function(input,output,session) {
         model_features = EN_final_features()
       }
       
-      iv_name = colnames(current_data())[1]
+      # iv_name = colnames(current_data())[1]
+      iv_name = "Sample_Name"
       rv_name = colnames(current_data())[response_var()]
       stop = ncol(prediction_data)-3
       
@@ -5152,7 +5206,7 @@ server= function(input,output,session) {
       colnames(new_pred_data) = c(iv_name,rv_name,model_features,"Prediction","Lower_Bound","Upper_Bound")
       pred_data(new_pred_data)
       
-      output$pd_data = renderpreddata(pred_data(),date_format_string,column_props,current_pred_page(),output)
+      output$pd_data = renderpreddata(pred_data(),"Character",column_props,current_pred_page(),output)
     }
   })
   
