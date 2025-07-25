@@ -271,48 +271,13 @@ ui = fluidPage(
       height: 35px;
     }
     
-    #EN_stand {
-      width: 120px;
-      height: 35px;
-    }
-    
-    #EN_dec_crit {
+    #EN_pred_stand, #EN_pred_dc, #EN_stand, #EN_dec_crit, #LG_pred_dc, #LG_fit_dc, #XGBCL_pred_dc, #XGBCL_dec_crit, #XGB_pred_stand, #XGB_stand, #XGB_pred_dc, #XGB_dec_crit {
       width: 120px;
       height: 35px;
     }
     
     #LG_binarize_crit_value {
       width: 90px;
-      height: 35px;
-    }
-    
-    #LG_pred_dc {
-      width: 120px;
-      height: 35px;
-    }
-    
-    #LG_fit_dc {
-      width: 120px;
-      height: 35px;
-    }
-    
-    #XGB_stand {
-      width: 120px;
-      height: 35px;
-    }
-    
-    #XGB_dec_crit {
-      width: 120px;
-      height: 35px;
-    }
-    
-    #XGBCL_pred_dc {
-      width: 120px;
-      height: 35px;
-    }
-    
-    #XGBCL_dec_crit{
-      width: 120px;
       height: 35px;
     }
     

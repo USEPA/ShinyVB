@@ -1,4 +1,4 @@
-Version = "1.0.0"
+version = "1.0.0"
 
 # Leaflet reactive variables
 bo = reactiveVal(0)
@@ -48,6 +48,7 @@ id_var = 1
 ignored_rows = NULL
 num_rows_per_page = 20
 date_format_string = "MDY"
+plot_delay = 900
 
 # XGB hyperparameters
 xgb_tree_method_set = reactiveVal("hist")
