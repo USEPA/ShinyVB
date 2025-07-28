@@ -108,6 +108,7 @@ LG_model = NULL
 LG_model_PCA = reactiveVal(FALSE)
 LG_standardize = reactiveVal(TRUE)
 LG_thresh = reactiveVal()
+LG_crit_prob = reactiveVal(0.5)
 LG_final_features = reactiveVal()
 LG_pred_data = reactiveVal()
 
@@ -134,6 +135,7 @@ XGBCL_model_PCA = reactiveVal(FALSE)
 XGBCL_standardize = reactiveVal(FALSE)
 XGBCL_final_data = reactiveVal()
 XGBCL_thresh = reactiveVal()
+XGBCL_crit_prob = reactiveVal(0.5)
 XGBCL_final_features = reactiveVal()
 XGBCL_pred_data = reactiveVal()
 

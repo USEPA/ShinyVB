@@ -269,6 +269,7 @@ server= function(input,output,session) {
       LG_scat_dat = LG_scat_dat(),
       LG_model = LG_model,
       LG_thresh = LG_thresh(),
+      LG_crit_prob = LG_crit_prob(),
       LG_standardize = LG_pred_standardize(),
       LG_model_PCA = LG_model_PCA(),
       LG_final_features = LG_final_features(),
@@ -287,6 +288,7 @@ server= function(input,output,session) {
       XGBCL_scat_dat = XGBCL_scat_dat(),
       XGBCL_model = XGBCL_model,
       XGBCL_thresh = XGBCL_thresh(),
+      XGBCL_crit_prob = XGBCL_crit_prob(),
       XGBCL_standardize = XGBCL_standardize(),
       XGBCL_model_PCA = XGBCL_model_PCA(),
       XGBCL_final_features = XGBCL_final_features(),
@@ -380,6 +382,7 @@ server= function(input,output,session) {
       LG_scat_dat = LG_scat_dat(),
       LG_model = LG_model,
       LG_thresh = LG_thresh(),
+      LG_crit_prob = LG_crit_prob(),
       LG_standardize = LG_pred_standardize(),
       LG_model_PCA = LG_model_PCA(),
       LG_final_features = LG_final_features(),
@@ -398,6 +401,7 @@ server= function(input,output,session) {
       XGBCL_scat_dat = XGBCL_scat_dat(),
       XGBCL_model = XGBCL_model,
       XGBCL_thresh = XGBCL_thresh(),
+      XGBCL_crit_prob = XGBCL_crit_prob(),
       XGBCL_standardize = XGBCL_standardize(),
       XGBCL_model_PCA = XGBCL_model_PCA(),
       XGBCL_final_features = XGBCL_final_features(),
@@ -503,6 +507,7 @@ server= function(input,output,session) {
       LG_scat_dat(temp_env$save_list$LG_scat_dat)
       LG_model <<- temp_env$save_list$LG_model
       LG_thresh(temp_env$save_list$LG_thresh)
+      LG_crit_prob(temp_env$save_list$LG_crit_prob)
       LG_standardize(temp_env$save_list$LG_standardize)
       LG_model_PCA(temp_env$save_list$LG_model_PCA)
       LG_final_features(temp_env$save_list$LG_final_features)
@@ -521,6 +526,7 @@ server= function(input,output,session) {
       XGBCL_scat_dat(temp_env$save_list$XGBCL_scat_dat)
       XGBCL_model <<- temp_env$save_list$XGBCL_model
       XGBCL_thresh(temp_env$save_list$XGBCL_thresh)
+      XGBCL_crit_prob(temp_env$save_list$XGBCL_crit_prob)
       XGBCL_standardize(temp_env$save_list$XGBCL_standardize)
       XGBCL_model_PCA(temp_env$save_list$XGBCL_model_PCA)
       XGBCL_final_features(temp_env$save_list$XGBCL_final_features)
@@ -628,14 +634,14 @@ server= function(input,output,session) {
           renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
           
           output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,extensions='Buttons',selection=list(selected =
-                                                                                                                                               list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
-                                                                                                                                                                                                                                      scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                                                                                                                                                                                                                                      initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                            list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
+                            scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                            initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
           
           output$XGB_optim_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_HP,rownames=F,extensions='Buttons',selection=list(selected =
-                                                                                                                                           list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
-                                                                                                                                                                                                                                  scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                                                                                                                                                                                                                                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                            list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='tB',paging = F,pageLength = 5,scrollX = F,
+                            scrollY = F,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                            initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
           
           updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
           updateCheckboxGroupButtons(session,"feats_to_corr",choices=feat_names(),selected=NULL,size="xs",status = "custom")
@@ -969,6 +975,7 @@ server= function(input,output,session) {
       LG_scat_dat(NULL)
       LG_model <<- NULL
       LG_thresh(NULL)
+      LG_crit_prob(NULL)
       LG_final_features(NULL)
       LG_pred_data(NULL)
       
@@ -989,6 +996,7 @@ server= function(input,output,session) {
       XGBCL_scat_dat(NULL)
       XGBCL_model <<- NULL
       XGBCL_thresh(NULL)
+      XGBCL_crit_prob(NULL)
       XGBCL_final_data(NULL)
       XGBCL_final_features(NULL)
       XGBCL_pred_data(NULL)
@@ -1251,9 +1259,9 @@ server= function(input,output,session) {
     iso_results[,6] = round((iso_results[,2] * iso_results[,3] * iso_results[,4] * iso_results[,5])^0.25 - 0.7071,3)
     
     output$iso_outliers = DT::renderDataTable(server = T, {data = datatable(iso_results,rownames = F,selection = list(selection = "multiple",
-                                                                                                                      selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
-                                                                                                                                                                                                                    buttons = c('copy', 'csv', 'excel'),pageLength = num_rows_per_page,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-                                                                                                                                                                                                                    initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
+                      selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
+                      buttons = c('copy', 'csv', 'excel'),pageLength = num_rows_per_page,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                      initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = 'IsoForest Outliers')
@@ -1730,7 +1738,7 @@ server= function(input,output,session) {
     refresh_trigger(FALSE)
   })
   
-  # LGR predictions
+  # LG predictions
   debounced_LG_pred_dc = debounce(reactive(input$LG_pred_dc), plot_delay)
   
   observeEvent(debounced_LG_pred_dc(), ignoreInit = TRUE, {
@@ -1912,7 +1920,7 @@ server= function(input,output,session) {
       
       LG_pred_scat_dat(LG_pred_results()[,1:3])
       
-      LG_pred_confuse_results(confuse(LG_pred_scat_dat()[,2:3],0.5,input$LG_pred_dc))
+      LG_pred_confuse_results(confuse(LG_pred_scat_dat()[,2:3],0.5,debounced_LG_pred_dc()))
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
       updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'LG: Predict')
@@ -1983,7 +1991,7 @@ server= function(input,output,session) {
     }
   })
   
-  # LGR fitting
+  # LG fitting
   debounced_LG_fit_dc = debounce(reactive(input$LG_fit_dc), plot_delay)
   
   observeEvent(debounced_LG_fit_dc(), ignoreInit = T, {
@@ -1991,6 +1999,7 @@ server= function(input,output,session) {
     if (nrow(LG_scat_dat()) != 0) {
       
       if (is.numeric(debounced_LG_fit_dc())) {
+        LG_crit_prob(debounced_LG_fit_dc())
         refresh_trigger(TRUE)
       }
     }
@@ -2190,7 +2199,7 @@ server= function(input,output,session) {
                                         theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
       
-      LG_confuse_results(confuse(LG_scat_dat()[,2:3],0.5,debounced_LG_fit_dc()))
+      LG_confuse_results(confuse(LG_scat_dat()[,2:3],debounced_LG_fit_dc(),debounced_LG_fit_dc()))
       
       confuse_table = matrix(0,nrow=1,ncol=4)
       
@@ -2610,7 +2619,7 @@ server= function(input,output,session) {
       
       XGBCL_pred_scat_dat(XGBCL_pred_results()[,1:3])
       
-      XGBCL_pred_confuse_results(confuse(XGBCL_pred_scat_dat()[,2:3],0.5,input$XGBCL_pred_dc))
+      XGBCL_pred_confuse_results(confuse(XGBCL_pred_scat_dat()[,2:3],debounced_XGBCL_pred_dc(),debounced_XGBCL_pred_dc()))
       
       removeModal()
       
@@ -2650,7 +2659,7 @@ server= function(input,output,session) {
                                                 theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
                                                 theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
-      XGBCL_pred_confuse_results(confuse(XGBCL_pred_scat_dat()[,2:3],0.5,debounced_XGBCL_pred_dc()))
+      XGBCL_pred_confuse_results(confuse(XGBCL_pred_scat_dat()[,2:3],debounced_XGBCL_pred_dc(),debounced_XGBCL_pred_dc()))
       
       confuse_table = data.frame(matrix(0,nrow=1,ncol=4))
       
@@ -2697,6 +2706,7 @@ server= function(input,output,session) {
     if (nrow(XGBCL_scat_dat()) != 0) {
       
       if (is.numeric(debounced_XGBCL_dec_crit())) {
+        XGBCL_crit_prob(debounced_XGBCL_dec_crit())
         refresh_trigger(TRUE)
       }
     }
@@ -2850,7 +2860,7 @@ server= function(input,output,session) {
       
       XGBCL_scat_dat(XGBCL_results()[,1:3])
       
-      XGBCL_confuse_results(confuse(XGBCL_scat_dat()[,2:3],0.5,input$XGBCL_dec_crit))
+      XGBCL_confuse_results(confuse(XGBCL_scat_dat()[,2:3],input$XGBCL_dec_crit,input$XGBCL_dec_crit))
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
       updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Fitting')
@@ -2932,7 +2942,7 @@ server= function(input,output,session) {
                                            theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
                                            theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
-      XGBCL_confuse_results(confuse(XGBCL_scat_dat()[,2:3],0.5,debounced_XGBCL_dec_crit()))
+      XGBCL_confuse_results(confuse(XGBCL_scat_dat()[,2:3],debounced_XGBCL_dec_crit(),debounced_XGBCL_dec_crit()))
       
       xgbcl_confuse_table = matrix(0,nrow=1,ncol=4)
       
@@ -3334,7 +3344,6 @@ server= function(input,output,session) {
       iv$add_rule("XGB_pred_stand", sv_between(min(XGB_pred_scat_dat()[,2]),max(XGB_pred_scat_dat()[,2])))
       
       if (is.numeric(debounced_XGB_pred_stand())) {
-        
         refresh_trigger(TRUE)
       }
     }
@@ -3806,7 +3815,7 @@ server= function(input,output,session) {
       grid.size = 25
     )
     
-    print(pdp_info$plot())
+    # print(pdp_info$plot())
     
     output$XGB_pdp_plot = renderPlot({plot(pdp_info$plot())})
     
@@ -4374,6 +4383,7 @@ server= function(input,output,session) {
       LG_scat_dat = LG_scat_dat(),
       LG_model = LG_model,
       LG_thresh = LG_thresh(),
+      LG_crit_prob = LG_crit_prob(),
       LG_standardize = LG_pred_standardize(),
       LG_model_PCA = LG_model_PCA(),
       LG_final_features = LG_final_features(),
@@ -4392,6 +4402,7 @@ server= function(input,output,session) {
       XGBCL_scat_dat = XGBCL_scat_dat(),
       XGBCL_model = XGBCL_model,
       XGBCL_thresh = XGBCL_thresh(),
+      XGBCL_crit_prob = XGBCL_crit_prob(),
       XGBCL_standardize = XGBCL_standardize(),
       XGBCL_model_PCA = XGBCL_model_PCA(),
       XGBCL_final_features = XGBCL_final_features(),
@@ -4516,6 +4527,7 @@ server= function(input,output,session) {
         } else {
           
           temp_data[,1:2] = pred_file_data[,1:2, drop = FALSE]
+          
           temp_data[,3:(2+length(columns_to_grab))] = pred_file_data[,columns_to_grab,drop = FALSE]
           
           temp_data[,(ncol(temp_data)-3):ncol(temp_data)] = -999
@@ -4574,13 +4586,15 @@ server= function(input,output,session) {
       if (input$model_choice == "Logistic_Regression") {
         
         output$model_text = renderUI({
-          threshold = LG_thresh()
           
+          threshold = LG_thresh()
+          probability = ifelse(is.null(LG_crit_prob()),0.5,LG_crit_prob())
+
           HTML(paste0(
             "<div style='font-size: 20px; font-weight: bold;'>Model: Logistic Regression</div>",
             "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
             "<div>Critical Threshold: ", threshold, "</div>",
-            "<div>Critical Probality: 0.5</div>"
+            "<div>Critical Probality: ", probability, "</div>"
           ))
         })
         
@@ -4667,13 +4681,15 @@ server= function(input,output,session) {
       } else if (input$model_choice == "XGB_Classifier") {
         
         output$model_text = renderUI({
+          
           threshold = XGBCL_thresh()
+          probability = ifelse(is.null(XGBCL_crit_prob()),0.5,XGBCL_crit_prob())
           
           HTML(paste0(
             "<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost Classifier</div>",
             "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
             "<div>Critical Threshold: ", threshold, "</div>",
-            "<div>Critical Probality: 0.5</div>"
+            "<div>Critical Probality: ", probability, "</div>"
           ))
         })
         
@@ -5234,8 +5250,8 @@ server= function(input,output,session) {
           
           if (is.numeric(prediction_data[i,2])) {
             
-            outcomes[i] = ifelse(predictions[i] <= 0.5 && prediction_data[i,2] <= LG_thresh(),"TN", ifelse(predictions[i] > 0.5 && prediction_data[i,2] > LG_thresh(),"TP",
-                                         ifelse(predictions[i] > 0.5 && prediction_data[i,2] <= LG_thresh(),"FP","FN")))
+            outcomes[i] = ifelse(predictions[i] <= LG_crit_prob() && prediction_data[i,2] <= LG_thresh(),"TN", ifelse(predictions[i] > LG_crit_prob() && prediction_data[i,2] > LG_thresh(),"TP",
+                                         ifelse(predictions[i] > LG_crit_prob() && prediction_data[i,2] <= LG_thresh(),"FP","FN")))
             
           } else {
             
@@ -5255,8 +5271,8 @@ server= function(input,output,session) {
           
           if (is.numeric(prediction_data[i,2])) {
             
-            outcomes[i] = ifelse(predictions[i] <= 0.5 && prediction_data[i,2] <= XGBCL_thresh(),"TN", ifelse(predictions[i] > 0.5 && prediction_data[i,2] > XGBCL_thresh(),"TP",
-                                        ifelse(predictions[i] > 0.5 && prediction_data[i,2] <= XGBCL_thresh(),"FP","FN")))
+            outcomes[i] = ifelse(predictions[i] <= XGBCL_crit_prob() && prediction_data[i,2] <= XGBCL_thresh(),"TN", ifelse(predictions[i] > XGBCL_crit_prob() && prediction_data[i,2] > XGBCL_thresh(),"TP",
+                                        ifelse(predictions[i] > XGBCL_crit_prob() && prediction_data[i,2] <= XGBCL_thresh(),"FP","FN")))
             
           } else {
             
