@@ -29,7 +29,7 @@ PredictionPanel = sidebarLayout(
   mainPanel = mainPanel(width=9, id = "prediction_main_panel",
                     fluidRow(column(12,uiOutput("model_text"))),
                     fluidRow(column(12,textOutput("pca_model_text"))),
-                    fluidRow(column(12,textOutput("resid_text"))),
+                    fluidRow(column(12,uiOutput("resid_text"))),
                     fluidRow(column(12,DT::dataTableOutput('pd_data'))),
                     fluidRow(column(12,DT::dataTableOutput('pd_feat_ranges'))))
 )

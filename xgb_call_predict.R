@@ -86,7 +86,7 @@ xgb_call_predict = function(data0,
   
   prediction_results[,3:ncol(prediction_results)] = round(prediction_results[,3:ncol(prediction_results)],4)
   prediction_results = prediction_results[order(prediction_results[,1]),]
-  colnames(prediction_results) = c(colnames(data0)[1],colnames(data0)[rv], "Prediction", feats_to_use)
+  colnames(prediction_results) = c(colnames(data0)[1],colnames(data0)[rv], "Predictions", feats_to_use)
   xgb_predictions = data.frame(prediction_results)
   
   pred_shapes = data.frame(cbind(pred_shapes[,1],format(round(rowMeans(pred_shapes[,-1]),4),scientific=F)))

@@ -51,6 +51,7 @@ source("rain.R")
 source("renderdata.R")
 source("renderPCAdata.R")
 source("renderpreddata.R")
+source("resid_scatter.R")
 source("scatter.R")
 source("scatter_confuse.R")
 source("xgb_call_predict.R")
@@ -2040,7 +2041,6 @@ server= function(input,output,session) {
       set.seed(input$model_seed)
       crit_value = input$LG_binarize_crit_value
       LG_thresh(crit_value)
-      MC_runs = input$MC_runs
       
       data1 = create_data(data0,rv,feats_to_use,ignored_rows,input$randomize,FALSE)
       data = data1[,-1]
@@ -2057,71 +2057,48 @@ server= function(input,output,session) {
       fitted_values = matrix(0, nrow = 0, ncol = 2)
       fitted_values = data.frame(fitted_values)
       
-      temp_fits = matrix(0, nrow = nrow(imp_data), ncol = 2*MC_runs)
-      temp_fits = data.frame(temp_fits)
+      modeling_data = MC_final_subbin(imp_data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
       
-      temp_coeffs = matrix(0, nrow = ncol(imp_data), ncol = MC_runs+1)
-      temp_coeffs = data.frame(temp_coeffs)
-      temp_coeffs[,1] = c("(Intercept)",feats_to_use)
+      # Binarize Response
       
-      withProgress(
-        message = 'Logistic Fitting Progress',
-        detail = paste("MC runs:", x=1,"/",MC_runs),
-        value = 0,
-        {
-          
-          for (i in 1:MC_runs) {
-            
-            MC_data = MC_subbin(imp_data, input$loggy, input$lc_val, input$lc_lowval, input$lc_upval, input$rc_val,input$rc_lowval, input$rc_upval)
-            
-            # Binarize Response
-            
-            if (input$LG_binarize) {
-              for (j in 1:nrow(MC_data)) {
-                MC_data[j, 1] = ifelse(test = MC_data[j, 1] >= crit_value, yes = 1, no = 0)
-              }
-            }
-            
-            temp_fits[,2*i-1] = MC_data[,1]
-            
-            # determine best alpha and lambda
-            fit_mod = cva.glmnet(x=as.matrix(MC_data[,-1]),y=MC_data[,1],nfolds=input$num_folds,family="binomial",
-                                 type.measure=input$LG_eval,na.action="na.omit",standardize=input$LG_standard,intercept=TRUE)
-            
-            alpha = get_model_params(fit_mod)$alpha
-            lambda = get_model_params(fit_mod)$lambdaMin
-            
-            # fit training model
-            model = glmnet(x=as.matrix(MC_data[,-1]),MC_data[,1],lambda=lambda, alpha=alpha, na.action="na.omit",family="binomial",
-                           type.measure=input$LG_eval,standardize=input$LG_standard,intercept=TRUE)
-            
-            fits = predict(model, newx = as.matrix(MC_data[,-1]), type = "response")
-            temp_fits[,2*i] = round(fits,3)
-            
-            tmp_coeffs = coef(model, s = lambda)
-            coeffs = data.frame(name = tmp_coeffs@Dimnames[[1]][tmp_coeffs@i + 1], coefficient = round(tmp_coeffs@x,4))
-            
-            for (h in 1:nrow(coeffs)) {
-              if(temp_coeffs[h,1] %in% coeffs[,1]) {
-                temp_coeffs[h,i+1] = coeffs[which(coeffs[,1] == temp_coeffs[h,1]),2]
-              } else {
-                temp_coeffs[h,i+1] = 0
-              }
-            }
-            
-            incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
-          } #End the MC Runs
-        })
+      if (input$LG_binarize) {
+        for (j in 1:nrow(modeling_data)) {
+          modeling_data[j, 1] = ifelse(test = modeling_data[j, 1] >= crit_value, yes = 1, no = 0)
+        }
+      }
       
-      fitted_coeffs[,2] = round(rowMeans(temp_coeffs[,-1]),4)
+      # determine best alpha and lambda
+      fit_mod = cva.glmnet(x=as.matrix(modeling_data[,-1]),y=modeling_data[,1],nfolds=input$num_folds,family="binomial",
+                           type.measure=input$LG_eval,na.action="na.omit",standardize=input$LG_standard,intercept=TRUE)
+      
+      alpha = get_model_params(fit_mod)$alpha
+      lambda = get_model_params(fit_mod)$lambdaMin
+      
+      # fit training model
+      logreg_model = glmnet(x=as.matrix(modeling_data[,-1]),modeling_data[,1],lambda=lambda, alpha=alpha, na.action="na.omit",family="binomial",
+                     type.measure=input$LG_eval,standardize=input$LG_standard,intercept=TRUE)
+      
+      LG_model <<- logreg_model
+      
+      fits = round(predict(logreg_model, newx = as.matrix(modeling_data[,-1]), type = "response"),3)
+      
+      tmp_coeffs = coef(logreg_model, s = lambda)
+      coeffs = data.frame(name = tmp_coeffs@Dimnames[[1]][tmp_coeffs@i + 1], coefficient = round(tmp_coeffs@x,4))
+      
+      for (h in 1:nrow(fitted_coeffs)) {
+        if(fitted_coeffs[h,1] %in% coeffs[,1]) {
+          fitted_coeffs[h,2] = coeffs[which(coeffs[,1] == fitted_coeffs[h,1]),2]
+        } else {
+          fitted_coeffs[h,2] = 0
+        }
+      }
+
       fitted_coeffs[,3] = round(exp(fitted_coeffs[,2]),4)
+      fitted_coeffs[1,3] = NA
+      colnames(fitted_coeffs) = c("Feature","Coefficient","Odds Ratio")
+      LG_coeffs(fitted_coeffs)
       
-      even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
-      odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
-      
-      obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
-      fit_mean_values = round(rowMeans(even_columns),3)
-      model_results = cbind(obs_mean_values,fit_mean_values)
+      model_results = cbind(modeling_data[,1],fits)
       
       if (input$use_pca_data) {
         fitted_model_results = data.frame(cbind(data1[,1],model_results[,1],model_results[,2],round(data[,-1],4)))
@@ -2130,13 +2107,8 @@ server= function(input,output,session) {
       }
       
       colnames(fitted_model_results) = c(colnames(data0)[1],colnames(data0)[rv],"Fitted_Prob",feats_to_use)
-      
       LG_results(fitted_model_results[order(fitted_model_results[,1]),])
-      
-      colnames(fitted_coeffs) = c("Feature","Coefficient","Odds Ratio")
-      
-      LG_coeffs(fitted_coeffs)
-      
+
       LG_scat_dat(LG_results()[,1:3])
       
       LG_confuse_results(confuse(LG_scat_dat()[,2:3],0.5,input$LG_fit_dc))
@@ -2144,30 +2116,11 @@ server= function(input,output,session) {
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
       updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'LG: Fitting')
       
-      # Fit final model
-      final_LG_data = MC_final_subbin(imp_data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
+      LG_standardize(input$LG_standard)
       
-      # Binarize Response
-      if (input$LG_binarize) {
-        for (j in 1:nrow(final_LG_data)) {
-          final_LG_data[j, 1] = ifelse(test = final_LG_data[j, 1] >= crit_value, yes = 1, no = 0)
-        }
-      }
+      updateRadioButtons(session,"model_choice",selected="None",choices=c("None",models_created()))
       
-      optimized_LG_model = cva.glmnet(x=as.matrix(final_LG_data[,-1]),y=final_LG_data[,1],nfolds=input$num_folds,family="binomial",type.measure=input$LG_eval,
-                                      na.action="na.omit",standardize=input$LG_standard,intercept=TRUE)
-      
-      final_alpha = get_model_params(optimized_LG_model)$alpha
-      final_lambda = get_model_params(optimized_LG_model)$lambdaMin
-      
-      # Compute and save final LG model
-      LG_model <<- glmnet(x=as.matrix(final_LG_data[,-1]),final_LG_data[,1],lambda=final_lambda, alpha=final_alpha, na.action="na.omit",
-                          family="binomial",type.measure=input$LG_eval,standardize=input$LG_standard,intercept=TRUE)
     }
-    
-    LG_standardize(input$LG_standard)
-    
-    updateRadioButtons(session,"model_choice",selected="None",choices=c("None",models_created()))
     
   })
   
@@ -2746,135 +2699,17 @@ server= function(input,output,session) {
       
       crit_value = input$XGBCL_binarize_crit_value
       XGBCL_thresh(crit_value)
-      MC_runs = input$MC_runs
       
       data1 = create_data(data0,rv,feats_to_use,ignored_rows,input$randomize,input$XGBCL_standard)
       data = data1[,-1]
       
-      withProgress(
-        message = 'XGBCL Fitting Progress',
-        detail = paste("MC runs:", x = 1,"/",MC_runs),
-        value = 0,
-        {
-          
-          temp_fits = matrix(0, nrow = nrow(data), ncol = 2*MC_runs)
-          temp_fits = data.frame(temp_fits)
-          
-          temp_shapes = matrix(0, nrow = length(feats_to_use), ncol = MC_runs+1)
-          temp_shapes = data.frame(temp_shapes)
-          temp_shapes[,1] = feats_to_use
-          
-          for (i in 1:MC_runs) {
-            
-            MC_data = MC_subbin(data, input$loggy, input$lc_val, input$lc_lowval, input$lc_upval, input$rc_val,input$rc_lowval, input$rc_upval)
-            
-            if (input$XGBCL_binarize) {
-              for (j in 1:nrow(MC_data)) {
-                MC_data[j, 1] = ifelse(test = MC_data[j, 1] >= crit_value, yes = 1, no = 0)
-              }
-            }
-            
-            temp_fits[,2*i-1] = MC_data[,1]
-            
-            if (xgbcl_booster_set() == "dart") {
-              
-              params = list(
-                objective = "binary:logistic",
-                eval_metric = input$XGBCL_eval,
-                booster = xgbcl_booster_set(),
-                rate_drop = ratecl_drop_set(),
-                skip_drop = skipcl_drop_set(),
-                sample_type = dartcl_sample_type_set(),
-                normalize_type = dartcl_normalize_type_set(),
-                tree_method = xgbcl_tree_method_set(),
-                eta = Optimal_CLHP$eta,
-                gamma = Optimal_CLHP$gamma,
-                max_depth = Optimal_CLHP$max_depth,
-                min_child_weight = Optimal_CLHP$min_child_weight,
-                subsample = Optimal_CLHP$subsample,
-                colsample_bytree = Optimal_CLHP$colsample_bytree
-              )
-            } else {
-              params = list(
-                objective = "binary:logistic",
-                eval_metric = input$XGBCL_eval,
-                booster = xgbcl_booster_set(),
-                tree_method = xgbcl_tree_method_set(),
-                eta = Optimal_CLHP$eta,
-                gamma = Optimal_CLHP$gamma,
-                max_depth = Optimal_CLHP$max_depth,
-                min_child_weight = Optimal_CLHP$min_child_weight,
-                subsample = Optimal_CLHP$subsample,
-                colsample_bytree = Optimal_CLHP$colsample_bytree
-              )
-            }
-            
-            xgbcl_model = xgboost(data = as.matrix(MC_data[,-1]),label=MC_data[,1], params=params, early_stopping_rounds=early_stop_set(), nrounds=1000, verbose=0)
-            
-            fits = predict(xgbcl_model, newdata=as.matrix(MC_data[,-1]))
-            temp_fits[,2*i] = fits
-            
-            if (ncol(MC_data) > 2) {
-              shap_values = shap.values(xgb_model = xgbcl_model, X_train = as.matrix(MC_data[,-1]))
-              mean_shaps = round(shap_values$mean_shap_score,4)
-              shap_names = names(mean_shaps)
-              shap = data.frame(cbind(shap_names,mean_shaps))
-            } else {
-              shap = data.frame("Feature" = colnames(MC_data)[[2]], "mean_shaps" = 0)
-            }
-            
-            for (c in 1:nrow(temp_shapes)) {
-              current_feat = temp_shapes[c,1]
-              temp_shapes[c,i+1] = as.numeric(shap[which(shap[,1] == current_feat),2])
-            }
-            
-            incProgress(1/MC_runs, detail = paste("MC run: ",i,"/",MC_runs))
-          }
-        })
-      
-      even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
-      odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
-      
-      obs_mean_values = ifelse(test = rowMeans(odd_columns) >= 0.5, yes = 1, no = 0)
-      fit_mean_values = rowMeans(even_columns)
-      fits = cbind(obs_mean_values,round(fit_mean_values,3))
-      
-      if (input$use_pca_data) {
-        xgbcl_results = data.frame(cbind(data1[,1],fits[,1],fits[,2],round(data[,-1],4)))
-      } else {
-        xgbcl_results = data.frame(cbind(data1[,1],fits[,1],fits[,2],data[,-1]))
-      }
-      
-      colnames(xgbcl_results) = c(colnames(data0)[[1]],colnames(data0)[[rv]],"Fitted_Prob",colnames(data[,-1]))
-      
-      xgbcl_results = xgbcl_results[order(xgbcl_results[,1]),]
-      XGBCL_results(xgbcl_results)
-      
-      xgbcl_shapes1 = as.data.frame(temp_shapes[,-1])
-      xgbcl_shapes2 = rowMeans(xgbcl_shapes1)
-      xgbcl_shapes = data.frame(cbind(temp_shapes[,1],xgbcl_shapes2))
-      xgbcl_shapes = xgbcl_shapes[order(xgbcl_shapes[,2],decreasing = T),]
-      colnames(xgbcl_shapes) = c("Feature","Mean_SHAP")
-      
-      XGBCL_coeffs(xgbcl_shapes)
-      
-      XGBCL_scat_dat(XGBCL_results()[,1:3])
-      
-      XGBCL_confuse_results(confuse(XGBCL_scat_dat()[,2:3],input$XGBCL_dec_crit,input$XGBCL_dec_crit))
-      
-      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Fitting')
-      
-      # Fit final XGBCL_Model
-      final_XGBCL_data = MC_final_subbin(data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
+      modeling_data = MC_final_subbin(data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
       
       if (input$XGBCL_binarize) {
-        for (j in 1:nrow(final_XGBCL_data)) {
-          final_XGBCL_data[j, 1] = ifelse(test = final_XGBCL_data[j, 1] >= crit_value, yes = 1, no = 0)
+        for (j in 1:nrow(modeling_data)) {
+          modeling_data[j, 1] = ifelse(test = modeling_data[j, 1] >= crit_value, yes = 1, no = 0)
         }
       }
-      
-      XGBCL_final_data(final_XGBCL_data)
       
       if (xgbcl_booster_set() == "dart") {
         
@@ -2909,7 +2744,43 @@ server= function(input,output,session) {
         )
       }
       
-      XGBCL_model <<- xgboost(data = as.matrix(final_XGBCL_data[,-1]),label=final_XGBCL_data[,1], params=params, early_stopping_rounds=early_stop_set(),nrounds=2000, verbose=0)
+      xgbcl_model = xgboost(data = as.matrix(modeling_data[,-1]),label=modeling_data[,1], params=params, early_stopping_rounds=early_stop_set(), nrounds=1000, verbose=0)
+      
+      XGBCL_model <<- xgbcl_model
+      
+      shap_values = shap.values(xgb_model = xgbcl_model, X_train = as.matrix(modeling_data[,-1]))
+      mean_shaps = shap_values$mean_shap_score
+      shap_names = names(mean_shaps)
+      shap_temp = data.frame(cbind(shap_names,mean_shaps))
+      
+      XGBCL_shapes = data.frame(shap_temp,row.names = NULL)
+      XGBCL_shapes$mean_shaps = as.numeric(XGBCL_shapes$mean_shaps)
+      XGBCL_shapes$mean_shaps = format(XGBCL_shapes$mean_shaps,scientific=FALSE,digits=3)
+      XGBCL_shapes[order(XGBCL_shapes$mean_shaps,decreasing=TRUE),]
+      colnames(XGBCL_shapes) = c("Feature","Mean SHAP")
+      
+      XGBCL_coeffs(XGBCL_shapes)
+      
+      fitted = predict(xgbcl_model, newdata=as.matrix(modeling_data[,-1]))
+      fits = cbind(modeling_data[,1],round(fitted,3))
+      
+      if (input$use_pca_data) {
+        xgbcl_results = data.frame(cbind(data1[,1],fits[,1],fits[,2],round(data[,-1],4)))
+      } else {
+        xgbcl_results = data.frame(cbind(data1[,1],fits[,1],fits[,2],data[,-1]))
+      }
+      
+      colnames(xgbcl_results) = c(colnames(data0)[[1]],colnames(data0)[[rv]],"Fitted_Prob",colnames(data[,-1]))
+      
+      xgbcl_results = xgbcl_results[order(xgbcl_results[,1]),]
+      XGBCL_results(xgbcl_results)
+      
+      XGBCL_scat_dat(XGBCL_results()[,1:3])
+      
+      XGBCL_confuse_results(confuse(XGBCL_scat_dat()[,2:3],input$XGBCL_dec_crit,input$XGBCL_dec_crit))
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+      updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGBCL: Fitting')
       
       XGBCL_standardize(input$XGBCL_standard)
       
@@ -3462,7 +3333,7 @@ server= function(input,output,session) {
       
       
       resid_data = XGB_pred_scat_dat()[,c(1,3)] %>% mutate(Residuals = round(XGB_pred_scat_dat()[,2]-XGB_pred_scat_dat()[,3],3))
-      output$XGB_pred_resid_scatplot = renderPlotly(scatter(resid_data))
+      output$XGB_pred_resid_scatplot = renderPlotly(resid_scatter(resid_data))
       
       output$XGB_pred_lineplot = renderPlotly(plot_ly(XGB_pred_scat_dat(), x = ~XGB_pred_scat_dat()[,1], y = ~XGB_pred_scat_dat()[,2], name="Observations",
                             type="scatter", mode = "lines",text = ~paste("<b>ID: </b>",XGB_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",
@@ -3552,112 +3423,7 @@ server= function(input,output,session) {
     data1 = create_data(data0,rv,feats_to_use,ignored_rows,input$randomize,input$XGB_standard)
     data = data1[,-1]
     
-    MC_runs = input$MC_runs
-    
-    temp_fits = matrix(0, nrow = nrow(data), ncol = 2*MC_runs)
-    temp_fits = data.frame(temp_fits)
-    
-    temp_shapes = matrix(0, nrow = length(feats_to_use), ncol = MC_runs+1)
-    temp_shapes = data.frame(temp_shapes)
-    temp_shapes[,1] = feats_to_use
-    
-    withProgress(
-      message = 'XGB Fitting Progress',
-      detail = paste("MC runs:", x = 1,"/",MC_runs),
-      value = 0,
-      {
-        
-        for (i in 1:MC_runs) {
-          
-          MC_data = MC_subbin(data,input$loggy,input$lc_val,input$lc_lowval,input$lc_upval,input$rc_val,input$rc_lowval,input$rc_upval)
-          
-          temp_fits[,2*i-1] = MC_data[,1]
-          
-          if (xgb_booster_set() == "dart") {
-            
-            params = list(
-              booster = xgb_booster_set(),
-              rate_drop = rate_drop_set(),
-              skip_drop = skip_drop_set(),
-              sample_type = dart_sample_type_set(),
-              normalize_type = dart_normalize_type_set(),
-              tree_method = xgb_tree_method_set(),
-              eta = Optimal_HP$eta,
-              gamma = Optimal_HP$gamma,
-              max_depth = Optimal_HP$max_depth,
-              min_child_weight = Optimal_HP$min_child_weight,
-              subsample = Optimal_HP$subsample,
-              colsample_bytree = Optimal_HP$colsample_bytree
-            )
-          } else {
-            params = list(
-              booster = xgb_booster_set(),
-              tree_method = xgb_tree_method_set(),
-              eta = Optimal_HP$eta,
-              gamma = Optimal_HP$gamma,
-              max_depth = Optimal_HP$max_depth,
-              min_child_weight = Optimal_HP$min_child_weight,
-              subsample = Optimal_HP$subsample,
-              colsample_bytree = Optimal_HP$colsample_bytree
-            )
-          }
-          
-          xgb_model = xgboost(data = as.matrix(MC_data[,-1]),label=MC_data[,1], params=params, early_stopping_rounds=early_stop_set(), nrounds=1000, verbose=0)
-          
-          temp_fits[,2*i] = predict(xgb_model, newdata=as.matrix(MC_data[,-1]))
-          
-          if (ncol(MC_data) > 2) {
-            
-            shap_values = shap.values(xgb_model = xgb_model, X_train = as.matrix(MC_data[,-1]))
-            mean_shaps = shap_values$mean_shap_score
-            shap_names = names(mean_shaps)
-            shap_temp = data.frame(cbind(shap_names,mean_shaps))
-          } else {
-            shap_temp = data.frame("Feature" = colnames(MC_data)[[2]], "Mean_SHAP" = 0)
-          }
-          
-          for (c in 1:nrow(temp_shapes)) {
-            current_feat = temp_shapes[c,1]
-            temp_shapes[c,i+1] = as.numeric(shap_temp[shap_temp[,1] == current_feat,2])
-          }
-          
-          incProgress(1/MC_runs, detail = paste("MC run: ",i,"/",MC_runs))
-        }
-        
-      })
-    
-    even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
-    odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
-    
-    obs_mean_values = rowMeans(odd_columns)
-    fits_mean_values = rowMeans(even_columns)
-    fits = cbind(obs_mean_values,round(fits_mean_values,3))
-    
-    temp_shapes1 = data.frame(temp_shapes[,-1])
-    
-    XGB_shapes0 = rowMeans(temp_shapes1)
-    
-    xgb_results = data.frame(cbind(data1[,1],fits,round(data[,2:ncol(data)],4)))
-    colnames(xgb_results)[1:3] = c(colnames(data0)[[1]],colnames(data0)[[rv]],"Fitted_Values")
-    xgb_results = xgb_results[order(xgb_results[,1]),]
-    
-    XGB_results(xgb_results)
-    
-    XGB_shapes = data.frame(cbind(temp_shapes[,1],format(round(XGB_shapes0,4),scientific=FALSE)))
-    colnames(XGB_shapes) = c("Feature","Mean_SHAP")
-    XGB_coeffs(XGB_shapes[order(XGB_shapes[,2],decreasing=TRUE),])
-    
-    XGB_scat_dat(XGB_results()[,1:3])
-    
-    XGB_confuse_results(confuse(XGB_scat_dat()[,2:3],input$XGB_stand,input$XGB_dec_crit))
-    
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
-    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Fitting')
-    
-    # Fit final XGB_Model
-    final_XGB_data = MC_final_subbin(data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
-    
-    XGB_final_data(final_XGB_data)
+    modeling_data = MC_final_subbin(data,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
     
     if (xgb_booster_set() == "dart") {
       
@@ -3688,8 +3454,43 @@ server= function(input,output,session) {
       )
     }
     
-    XGB_model <<- xgboost(data = as.matrix(final_XGB_data[,-1]),label=final_XGB_data[,1], params=params, early_stopping_rounds=early_stop_set(),
-                          nrounds=2000, verbose=0)
+    xgb_model = xgboost(data = as.matrix(modeling_data[,-1]),label=modeling_data[,1], params=params, early_stopping_rounds=early_stop_set(), nrounds=1000, verbose=0)
+    
+    XGB_model <<- xgb_model
+    
+    fitted_values = predict(XGB_model, as.matrix(modeling_data[,-1]))
+    lm_model = lm(fitted_values ~ modeling_data[,1])
+    
+    XGB_bias_slope(coef(lm_model)[2])
+    XGB_bias_intercept(coef(lm_model)[1])
+    
+    fits = cbind(modeling_data[,1],round(fitted_values,3))
+    
+    xgb_results = data.frame(cbind(data1[,1],fits,round(data[,2:ncol(data)],4)))
+    colnames(xgb_results)[1:3] = c(colnames(data0)[[1]],colnames(data0)[[rv]],"Fitted_Values")
+    xgb_results = xgb_results[order(xgb_results[,1]),]
+    
+    XGB_results(xgb_results)
+    
+    shap_values = shap.values(xgb_model = xgb_model, X_train = as.matrix(modeling_data[,-1]))
+    mean_shaps = shap_values$mean_shap_score
+    shap_names = names(mean_shaps)
+    shap_temp = data.frame(cbind(shap_names,mean_shaps))
+    
+    XGB_shapes = data.frame(shap_temp,row.names = NULL)
+    XGB_shapes$mean_shaps = as.numeric(XGB_shapes$mean_shaps)
+    XGB_shapes$mean_shaps = format(XGB_shapes$mean_shaps,scientific=FALSE,digits=3)
+    XGB_shapes[order(XGB_shapes$mean_shaps,decreasing=TRUE),]
+    colnames(XGB_shapes) = c("Feature","Mean SHAP")
+    
+    XGB_coeffs(XGB_shapes)
+    
+    XGB_scat_dat(XGB_results()[,1:3])
+    
+    XGB_confuse_results(confuse(XGB_scat_dat()[,2:3],input$XGB_stand,input$XGB_dec_crit))
+    
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
+    updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'XGB: Fitting')
     
     XGB_standardize(input$XGB_standard)
     
@@ -3733,7 +3534,7 @@ server= function(input,output,session) {
       output$XGB_scatplot = renderPlotly(scatter_confuse(XGB_scat_dat(),debounced_XGB_stand(),debounced_XGB_dec_crit()))
       
       xgb_resid_data = XGB_scat_dat()[,c(1,3)] %>% mutate(Residuals = round(XGB_scat_dat()[,2]-XGB_scat_dat()[,3],3))
-      output$XGB_resid_scatplot = renderPlotly(scatter(xgb_resid_data))
+      output$XGB_resid_scatplot = renderPlotly(resid_scatter(xgb_resid_data))
       
       output$XGB_lineplot = renderPlotly(plot_ly(XGB_scat_dat(), x = ~XGB_scat_dat()[,1], y = ~XGB_scat_dat()[,2], name="Observations", type="scatter", mode = "lines",
                         text = ~paste("<b>ID: </b>",XGB_scat_dat()[,1],"<br><b>Observed Value:</b> ",XGB_scat_dat()[,2],sep=""),hoveron = 'points',hoverinfo='text',
@@ -4030,7 +3831,7 @@ server= function(input,output,session) {
       
       resid_data = EN_pred_results()[,c(1,3)]
       resid_data = resid_data %>% mutate(Residuals = round(EN_pred_results()[,2]-EN_pred_results()[,3],3))
-      output$EN_pred_resid_scatter = renderPlotly(scatter(resid_data))
+      output$EN_pred_resid_scatter = renderPlotly(resid_scatter(resid_data))
       
       output$EN_pred_lineplot = renderPlotly(plot_ly(EN_pred_scat_dat(), x = ~EN_pred_scat_dat()[,1], y = ~EN_pred_scat_dat()[,2], name="Observations", type="scatter",
                         mode = "lines",text = ~paste("<b>ID: </b>",EN_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_pred_scat_dat()[,2],sep=""),
@@ -4133,8 +3934,6 @@ server= function(input,output,session) {
     
     set.seed(input$model_seed)
     
-    MC_runs=input$MC_runs
-    
     data1 = create_data(data0,rv,feats_to_use,ignored_rows,input$randomize,FALSE)
     data = data1[,-1]
     
@@ -4142,57 +3941,38 @@ server= function(input,output,session) {
     trainData = cbind(data[,1],imp_X)
     colnames(trainData) = colnames(data)
     
-    temp_fits = matrix(0, nrow = nrow(trainData), ncol = 2*MC_runs)
-    temp_fits = data.frame(temp_fits)
-    
-    temp_coeffs = matrix(0, nrow = ncol(trainData), ncol = MC_runs+1)
-    temp_coeffs = data.frame(temp_coeffs)
+    temp_coeffs = matrix(0, nrow = length(feats_to_use)+1, ncol = 2)
+    temp_coeffs = as.data.frame(temp_coeffs)
     temp_coeffs[,1] = c("(Intercept)",feats_to_use)
     
-    withProgress(
-      message = 'EN Fitting Progress',
-      detail = paste("MC runs: ", x = 1,"/",MC_runs),
-      value = 0,
-      {
-        for (i in 1:MC_runs) {
-          
-          MC_data = MC_subbin(trainData,input$loggy,input$lc_val,input$lc_lowval,input$lc_upval,input$rc_val,input$rc_lowval,input$rc_upval) 
-          
-          temp_fits[,2*i-1] = MC_data[,1]
-          
-          # determine best alpha and lambda
-          fit_mod = cva.glmnet(x=as.matrix(MC_data[,-1]),y=MC_data[,1],nfolds=input$num_folds,na.action="na.omit",
-                               standardize=input$EN_standard,intercept=TRUE)
-          
-          alpha = get_model_params(fit_mod)$alpha
-          lambda = get_model_params(fit_mod)$lambdaMin
-          
-          en_model = glmnet(x=as.matrix(MC_data[,-1]),MC_data[,1],lambda=lambda, alpha=alpha, na.action="na.omit",
-                            standardize=input$EN_standard,intercept=TRUE)
-          
-          coeffs = as.matrix(coef(en_model,s=lambda))
-          coeffs = as.data.frame(coeffs)
-          temp_coeffs[,i+1] = coeffs
-          
-          fits = predict(en_model, newx = as.matrix(MC_data[,-1]))
-          temp_fits[,2*i] = round(fits,3)
-          
-          incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
-        }
-      })
+    modeling_data = MC_final_subbin(trainData,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
     
-    mean_coeffs = format(round(rowMeans(temp_coeffs[,-1]),4),scientific=FALSE)
-    en_coeffs = data.frame(cbind(temp_coeffs[,1],mean_coeffs))
-    colnames(en_coeffs) = c("Feature","Coefficient")
+    # determine best alpha and lambda
+    fit_mod = cva.glmnet(x=as.matrix(modeling_data[,-1]),y=modeling_data[,1],nfolds=input$num_folds,na.action="na.omit",
+                         standardize=input$EN_standard,intercept=TRUE)
     
-    EN_coeffs(en_coeffs)
+    alpha = get_model_params(fit_mod)$alpha
+    lambda = get_model_params(fit_mod)$lambdaMin
     
-    even_columns = temp_fits[,seq(2, ncol(temp_fits), by = 2)]
-    odd_columns = temp_fits[,seq(1, ncol(temp_fits), by = 2)]
+    en_model = glmnet(x=as.matrix(modeling_data[,-1]),modeling_data[,1],lambda=lambda, alpha=alpha, na.action="na.omit",
+                      standardize=input$EN_standard,intercept=TRUE)
     
-    obs_mean_values = rowMeans(odd_columns)
-    fit_mean_values = rowMeans(even_columns)
-    en_results = data.frame(cbind(data1[,1],round(obs_mean_values,3),round(fit_mean_values,3),round(data[,-1],4)))
+    EN_model <<- en_model
+    
+    coeffs = as.matrix(coef(en_model,s=lambda))
+    coeffs = data.frame(coeffs, row.names=NULL)
+    temp_coeffs[,2] = round(coeffs[,1],4)
+    colnames(temp_coeffs) = c("Feature","Coefficient")
+    EN_coeffs(temp_coeffs)
+    
+    fits = predict(en_model, newx = as.matrix(modeling_data[,-1]))
+    
+    lm_model = lm(fits ~ modeling_data[,1])
+    
+    EN_bias_slope(coef(lm_model)[2])
+    EN_bias_intercept(coef(lm_model)[1])
+    
+    en_results = data.frame(cbind(data1[,1],round(modeling_data[,1],3),round(fits,3),round(data[,-1],4)))
     colnames(en_results) = c(colnames(data0)[1],colnames(data0)[rv],"Fitted_Value",colnames(data[,-1]))
     
     en_results = en_results[order(en_results[,1]),]
@@ -4204,19 +3984,6 @@ server= function(input,output,session) {
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Modeling')
     updateTabsetPanel(session, inputId = 'modeling_tabs', selected = 'EN: Fitting')
-    
-    # Fit final EN_Model
-    final_EN_data = MC_final_subbin(trainData,input$loggy,input$lc_val,input$rc_val,0.5,1.5)
-    
-    # determine best alpha and lambda
-    fit_EN_model = cva.glmnet(x=as.matrix(final_EN_data[,-1]),y=final_EN_data[,1],nfolds=input$num_folds,na.action="na.omit",
-                              standardize=input$EN_standard,intercept=TRUE)
-    
-    final_alpha = get_model_params(fit_EN_model)$alpha
-    final_lambda = get_model_params(fit_EN_model)$lambdaMin
-    
-    EN_model <<- glmnet(x=as.matrix(final_EN_data[,-1]),final_EN_data[,1],lambda=final_lambda, alpha=final_alpha, na.action="na.omit",
-                        standardize=input$EN_standard,intercept=TRUE)
     
     EN_standardize(input$EN_standard)
     
@@ -4257,7 +4024,7 @@ server= function(input,output,session) {
       
       resid_data = EN_results()[,c(1,3)]
       resid_data = resid_data %>% mutate(Residuals = round(EN_results()[,2]-EN_results()[,3],3))
-      output$EN_resid_scatplot = renderPlotly(scatter(resid_data))
+      output$EN_resid_scatplot = renderPlotly(resid_scatter(resid_data))
       
       output$EN_lineplot = renderPlotly(plot_ly(EN_scat_dat(), x = ~EN_scat_dat()[,1], y = ~EN_scat_dat()[,2], name="Observations", type="scatter",
                         mode = "lines",text = ~paste("<b>ID: </b>",EN_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_scat_dat()[,2],sep=""),
@@ -4480,9 +4247,9 @@ server= function(input,output,session) {
         pred_file_data <<- read.csv(input$pred_file$datapath,header = TRUE,sep = input$sep)
       }
       
-      if (any(sapply(data.frame(pred_file_data[,-1]), function(col) !is.numeric(col)))) {
+      if (any(sapply(data.frame(pred_file_data[,-c(1:2)]), function(col) !is.numeric(col)))) {
         
-        showModal(modalDialog(paste("This dataset contains non-numeric data. Please remedy prior to data importation."),
+        showModal(modalDialog(paste("Features values in this dataset are either non-numeric or missing. Please remedy prior to data importation."),
                               easyClose = F,footer = div(modalButton('Close'))))
         return()
         
@@ -4588,12 +4355,13 @@ server= function(input,output,session) {
         output$model_text = renderUI({
           
           threshold = LG_thresh()
-          probability = ifelse(is.null(LG_crit_prob()),0.5,LG_crit_prob())
+          ifelse(is.null(LG_crit_prob()), LG_crit_prob(0.5), LG_crit_prob())
+          probability = LG_crit_prob()
 
           HTML(paste0(
             "<div style='font-size: 20px; font-weight: bold;'>Model: Logistic Regression</div>",
             "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
-            "<div>Critical Threshold: ", threshold, "</div>",
+            "<div>Binarize Threshold: ", threshold, "</div>",
             "<div>Critical Probality: ", probability, "</div>"
           ))
         })
@@ -4683,12 +4451,13 @@ server= function(input,output,session) {
         output$model_text = renderUI({
           
           threshold = XGBCL_thresh()
-          probability = ifelse(is.null(XGBCL_crit_prob()),0.5,XGBCL_crit_prob())
+          ifelse(is.null(XGBCL_crit_prob()), XGBCL_crit_prob(0.5), XGBCL_crit_prob())
+          probability = XGBCL_crit_prob()
           
           HTML(paste0(
             "<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost Classifier</div>",
             "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
-            "<div>Critical Threshold: ", threshold, "</div>",
+            "<div>Binarize Threshold: ", threshold, "</div>",
             "<div>Critical Probality: ", probability, "</div>"
           ))
         })
@@ -4928,7 +4697,7 @@ server= function(input,output,session) {
       
       if (final_model_PCA()) {
         
-        output$pca_model_text = renderText({HTML("NOTE: PCA axes being used as features.")})
+        output$pca_model_text = renderText({HTML("PCA axes used as features.")})
         
       } else {
         
@@ -4963,17 +4732,17 @@ server= function(input,output,session) {
       pred_model_features(model_features)
       
       if (no_resids()) {
-        output$resid_text = renderText({HTML("NOTE: There are no available prediction residuals. Run a prediction model to generate them if you want confidence interval calculations.")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; run a prediction model for confidence intervals</div>")})
       } else if (standard_mismatch()) {
-        output$resid_text = renderText({HTML("NOTE: Prediction and Fitted models have different feature standardizations. The prediction residuals cannot be used.")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; Prediction/Fitted models use different feature standardizations</div>")})
       } else if (feature_mismatch()) {
-        output$resid_text = renderText({HTML("NOTE: Prediction and Fitted models have different features. The prediction residuals cannot be used.")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; Prediction/Fitted models use different features</div>")})
       } else if (thresh_mismatch()) {
-        output$resid_text = renderText({HTML("NOTE: Prediction and Fitted models have different critical value thresholds. The prediction residuals cannot be used.")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; Prediction/Fitted models use different binarize thresholds</div>")})
       } else if (is.null(resids)) {
-        output$resid_text = renderText({HTML("NOTE: There are no available prediction residuals. Run a prediction model to generate them if you want confidence interval calculations.")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; run a prediction model for confidence intervals</div>")})
       } else {
-        output$resid_text = renderText({HTML("SUCCESS: Prediction residuals are available and will be used for confidence interval calculations.")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>PREDICTION RESIDUALS AVAILABLE for confidence interval calculations</div>")})
       }
       
       current_pred_page(1)
@@ -5186,7 +4955,7 @@ server= function(input,output,session) {
                is.null(prediction_data[, 3:(ncol(prediction_data) - 4)]) || 
                any(is.na(prediction_data[, 3:(ncol(prediction_data) - 4)]))) {
       
-      showModal(modalDialog(paste("Missing feature values are not allowed. Provide all feature values to make predictions."),
+      showModal(modalDialog(paste("Missing feature values detected. Provide all feature values to make predictions."),
                             easyClose = F,footer = div(modalButton('Close'))))
       return()
       
@@ -5250,8 +5019,8 @@ server= function(input,output,session) {
           
           if (is.numeric(prediction_data[i,2])) {
             
-            outcomes[i] = ifelse(predictions[i] <= LG_crit_prob() && prediction_data[i,2] <= LG_thresh(),"TN", ifelse(predictions[i] > LG_crit_prob() && prediction_data[i,2] > LG_thresh(),"TP",
-                                         ifelse(predictions[i] > LG_crit_prob() && prediction_data[i,2] <= LG_thresh(),"FP","FN")))
+            outcomes[i] = ifelse(predictions[i] >= LG_crit_prob() && prediction_data[i,2] >= LG_thresh(),"TP", ifelse(predictions[i] <= LG_crit_prob() && prediction_data[i,2] <= LG_thresh(),"TN",
+                                         ifelse(predictions[i] >= LG_crit_prob() && prediction_data[i,2] <= LG_thresh(),"FP","FN")))
             
           } else {
             
@@ -5271,8 +5040,8 @@ server= function(input,output,session) {
           
           if (is.numeric(prediction_data[i,2])) {
             
-            outcomes[i] = ifelse(predictions[i] <= XGBCL_crit_prob() && prediction_data[i,2] <= XGBCL_thresh(),"TN", ifelse(predictions[i] > XGBCL_crit_prob() && prediction_data[i,2] > XGBCL_thresh(),"TP",
-                                        ifelse(predictions[i] > XGBCL_crit_prob() && prediction_data[i,2] <= XGBCL_thresh(),"FP","FN")))
+            outcomes[i] = ifelse(predictions[i] >= XGBCL_crit_prob() && prediction_data[i,2] >= XGBCL_thresh(),"TP", ifelse(predictions[i] <= XGBCL_crit_prob() && prediction_data[i,2] <= XGBCL_thresh(),"TN",
+                                        ifelse(predictions[i] >= XGBCL_crit_prob() && prediction_data[i,2] <= XGBCL_thresh(),"FP","FN")))
             
           } else {
             
@@ -5292,9 +5061,9 @@ server= function(input,output,session) {
           
           if (is.numeric(prediction_data[i,2])) {
             
-            outcomes[i] = ifelse(predictions[i] <= input$XGB_dec_crit && prediction_data[i,2] <= input$XGB_stand,"TN",
-                                 ifelse(predictions[i] > input$XGB_dec_crit && prediction_data[i,2] > input$XGB_stand,"TP",
-                                        ifelse(predictions[i] > input$XGB_dec_crit && prediction_data[i,2] <= input$XGB_stand,"FP","FN")))
+            outcomes[i] = ifelse(predictions[i] >= input$XGB_dec_crit && prediction_data[i,2] >= input$XGB_stand,"TP",
+                                 ifelse(predictions[i] <= input$XGB_dec_crit && prediction_data[i,2] <= input$XGB_stand,"TN",
+                                        ifelse(predictions[i] >= input$XGB_dec_crit && prediction_data[i,2] <= input$XGB_stand,"FP","FN")))
             
           } else {
             
@@ -5314,9 +5083,9 @@ server= function(input,output,session) {
           
           if (is.numeric(prediction_data[i,2])) {
             
-            outcomes[i] = ifelse(predictions[i] <= input$EN_dec_crit && prediction_data[i,2] <= input$EN_stand,"TN",
-                                 ifelse(predictions[i] > input$EN_dec_crit && prediction_data[i,2] > input$EN_stand,"TP",
-                                        ifelse(predictions[i] > input$EN_dec_crit && prediction_data[i,2] <= input$EN_stand,"FP","FN")))
+            outcomes[i] = ifelse(predictions[i] >= input$EN_dec_crit && prediction_data[i,2] >= input$EN_stand,"TP",
+                                 ifelse(predictions[i] <= input$EN_dec_crit && prediction_data[i,2] <= input$EN_stand,"TN",
+                                        ifelse(predictions[i] >= input$EN_dec_crit && prediction_data[i,2] <= input$EN_stand,"FP","FN")))
             
           } else {
             

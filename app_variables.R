@@ -162,6 +162,8 @@ XGB_standardize = reactiveVal(FALSE)
 XGB_final_data = reactiveVal()
 XGB_final_features = reactiveVal()
 XGB_pred_data = reactiveVal()
+XGB_bias_intercept = reactiveVal()
+XGB_bias_slope = reactiveVal()
 
 # Elastic Net Prediction Results
 EN_pred_results = reactiveVal()
@@ -180,6 +182,8 @@ EN_model_PCA = reactiveVal(FALSE)
 EN_standardize = reactiveVal(TRUE)
 EN_final_features = reactiveVal()
 EN_pred_data = reactiveVal()
+EN_bias_intercept = reactiveVal()
+EN_bias_slope = reactiveVal()
 
 # Parameters needed for Prediction Tab
 final_model_PCA = reactiveVal(FALSE)
