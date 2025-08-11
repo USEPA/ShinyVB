@@ -1,6 +1,8 @@
-xgbcl_pso = function(pso_data,
-                   resvar,
-                   coves_to_use,
+xgbcl_pso = function(data0,
+                   rv,
+                   feats_to_use,
+                   lc_val,
+                   rc_val,
                    lc_lowval,
                    lc_upval,
                    rc_lowval,
@@ -8,63 +10,45 @@ xgbcl_pso = function(pso_data,
                    MC_runs,
                    nfolds,
                    loggy,
-                   xgb_hyper_metric,
+                   eval_metric,
                    max_iter,
                    swarm_size,
                    member_exp,
                    ss_exp,
-                   crit_value) {
-  
+                   binarize,
+                   crit_value,
+                   MC_subbin) {
+
   pso_results = matrix(NA, nrow = MC_runs, ncol = 7)
 
   withProgress(
     message = 'HP Tuning Progress',
-    detail = paste("MC runs:", x = MC_runs),
+    detail = paste("MC runs:", x = 1,"/",MC_runs),
     value = 0,
     {
 
       for (i in 1:MC_runs) {
         
-        incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
-
-        # SUBSTITUTE random value FOR RESPONSE VARIABLE non-values and then binarize
-        if (loggy == TRUE) {
-          for (j in 1:nrow(pso_data)) {
-            if (pso_data[j, 1] == "TNTC") {
-              pso_data[j, 1] = log10(runif(1, min = rc_lowval, max = rc_upval))
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            }
-
-            if (pso_data[j, 1] == "ND") {
-              pso_data[j, 1] = log10(runif(1, min = lc_lowval, max = lc_upval))
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            }
-          }
-        } else {
-          for (j in 1:nrow(pso_data)) {
-            if (pso_data[j, 1] == "TNTC") {
-              pso_data[j, 1] = (runif(1, min = rc_lowval, max = rc_upval))
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            }
-
-            if (pso_data[j, 1] == "ND") {
-              pso_data[j, 1] = (runif(1, min = lc_lowval, max = lc_upval))
-              ifelse(test = pso_data[j, 1] >= crit_value, yes = 1, no = 0)
-            }
+        MC_data = MC_subbin(data0,loggy,lc_val,lc_lowval,lc_upval,rc_val,rc_lowval,rc_upval)
+        
+        
+        if (binarize) {
+          for (j in 1:nrow(MC_data)) {
+            MC_data[j, 1] = ifelse(test = MC_data[j, 1] >= crit_value, yes = 1, no = 0)
           }
         }
 
         # Prepare data matrices for XGBoost
-        X_train = as.matrix(pso_data[,-1])
-        y_train = pso_data[,1]
+        X_train = as.matrix(MC_data[,-1])
+        y_train = MC_data[,1]
 
         data = xgb.DMatrix(data = X_train, label = y_train)
 
-        num_cols = ncol(pso_data)-1
-        num_rows = nrow(pso_data)
+        num_cols = ncol(MC_data)-1
+        num_rows = nrow(MC_data)
 
         # Cross-validation function to evaluate XGBoost performance with given parameters
-        xgb_cv_score = function(params) {
+        cv_score = function(params) {
           
           # Extract parameters
           max_depth = round(params[1],0)
@@ -76,9 +60,9 @@ xgbcl_pso = function(pso_data,
           nrounds = round(params[7],0)
 
           # Set up XGBoost parameters
-          xgb_params = list(
+          params = list(
             objective = "binary:logistic",
-            eval_metric = xgb_hyper_metric,
+            eval_metric = eval_metric,
             max_depth = max_depth,
             eta = eta,
             subsample = subsample,
@@ -89,7 +73,7 @@ xgbcl_pso = function(pso_data,
 
           # Run cross-validation
           cv_results = xgb.cv(
-            params = xgb_params,
+            params = params,
             data = data,
             nfold = nfolds,
             nrounds = nrounds,
@@ -97,16 +81,16 @@ xgbcl_pso = function(pso_data,
             verbose = 0
           )
           
-          if (xgb_hyper_metric == "logloss") {
+          if (eval_metric == "logloss") {
             best_score = min(cv_results$evaluation_log$test_logloss_mean)
-          } else if (xgb_hyper_metric == "auc") {
+          } else if (eval_metric == "auc") {
             best_score = max(cv_results$evaluation_log$test_auc_mean)
           }
         }
 
         # Define parameter bounds for PSO
         param_bounds = matrix(
-          c(1, #lower max_depth
+          c(2, #lower max_depth
             5, #upper max_depth
             0.01, #lower eta
             0.3, #upper eta
@@ -114,10 +98,10 @@ xgbcl_pso = function(pso_data,
             0.9, #upper subsample proportion
             0.5, #lower colsamp_bytree
             0.9, #upper colsamp_bytree
-            3, #lower min_child_weight
+            2, #lower min_child_weight
             10, #upper min_child_weight
-            1, #Lower gamma
-            10, #upper gamma
+            0.25, #Lower gamma
+            5, #upper gamma
             floor(0.33*num_rows), #lower nrounds
             3*num_rows), #upper nrounds
           ncol = 2,
@@ -127,7 +111,7 @@ xgbcl_pso = function(pso_data,
         # Run PSO to find optimal parameters
         pso_result = psoptim(
           rep(NA, 7),# Initial parameter values (NA for random)
-          xgb_cv_score,# Function to minimize
+          cv_score,# Function to minimize
           lower = c(param_bounds[1,1],param_bounds[2,1],param_bounds[3,1],param_bounds[4,1],param_bounds[5,1],param_bounds[6,1],param_bounds[7,1]),
           upper = c(param_bounds[1,2],param_bounds[2,2],param_bounds[3,2],param_bounds[4,2],param_bounds[5,2],param_bounds[6,2],param_bounds[7,2]),
           control = list(
@@ -162,7 +146,7 @@ xgbcl_pso = function(pso_data,
                             best_params[6],
                             round(best_params[7],0))
         
-        print(pso_results)
+        incProgress(1/MC_runs, detail = paste("MC run:",i,"/",MC_runs))
       }
     })
   

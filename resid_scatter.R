@@ -1,4 +1,4 @@
-scatter = function(scatter_data) {
+resid_scatter = function(scatter_data) {
   
   x_name = colnames(scatter_data)[2]
   y_name = colnames(scatter_data)[3]
@@ -11,7 +11,7 @@ scatter = function(scatter_data) {
                                 "<br><b>", x_name, ":</b> ", !!sym(x_name))),
                size = 3, shape = 21, color = "black", fill = "cadetblue") +
     geom_smooth(method = "loess", se = TRUE) +
-    labs(x = x_name, y = y_name) +
+    labs(x = x_name, y = "Residuals (Obs - Fits/Preds)") +
     theme_bw() +
     theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1))
   

@@ -5,6 +5,7 @@ renderdata = function(data,
                       date_format_string,
                       feat_props,
                       ignored_rows,
+                      current_page,
                       output) {
   
   data = data.frame(data)
@@ -18,13 +19,15 @@ renderdata = function(data,
   
   row_IDs = data[,1]
   
+  PL = 20
+  
   for (i in 1:ncol(data)) {
     sig_digies = append(sig_digies, values(feat_props, keys = col_names[i])[1])
   }
   
-  if (select_choice == "Features") {
+  if (select_choice == "Change_Response") {
     
-    if (date_format_string != "Other") {
+    if (date_format_string != "Numeric" && date_format_string != "Character") {
       
       col_list = seq(1, ncol(data))
       remaining = col_list[-id_var]
@@ -40,12 +43,13 @@ renderdata = function(data,
             target = "column",
             mode = "single"
           ),
-          editable = T,
+          editable = F,
           options = list(
             autoWidth = F,
             dom='ltBp',
             paging = TRUE,
-            pageLength = 17,
+            pageLength = PL,
+            displayStart = current_page * PL - PL,
             scrollX = TRUE,
             scrollY = TRUE,
             buttons = c('copy', 'csv', 'excel'),
@@ -55,18 +59,19 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
         ) %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
           formatRound(columns = remaining, digits = sig_digies) %>%
           formatDate(id_var, date_format_string)
       })
       
-    } else {
+    } else if (date_format_string == "Numeric") {
       output$data = DT::renderDataTable(server = T, {
         datatable(
           data,
@@ -77,12 +82,13 @@ renderdata = function(data,
             target = "column",
             mode = "single"
           ),
-          editable = T,
+          editable = F,
           options = list(
             autoWidth = F,
             dom='ltBp',
             paging = TRUE,
-            pageLength = 17,
+            pageLength = PL,
+            displayStart = current_page * PL - PL,
             scrollX = TRUE,
             scrollY = TRUE,
             buttons = c('copy', 'csv', 'excel'),
@@ -92,18 +98,163 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
         ) %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
           formatRound(columns = 1:ncol(data),digits = sig_digies)
+      })
+    } else if (date_format_string == "Character") {
+      output$data = DT::renderDataTable(server = T, {
+        datatable(
+          data,
+          rownames = F,
+          extensions = 'Buttons',
+          selection = list(
+            selected = list(rows = NULL, cols = response_var - 1),
+            target = "column",
+            mode = "single"
+          ),
+          editable = F,
+          options = list(
+            autoWidth = F,
+            dom='ltBp',
+            paging = TRUE,
+            pageLength = PL,
+            displayStart = current_page * PL - PL,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            buttons = c('copy', 'csv', 'excel'),
+            columnDefs = list(list(
+              targets = '_all', className = 'dt-center'
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
+              "}"
+            )
+          )
+        ) %>%
+          formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
+          formatRound(columns = 2:ncol(data),digits = sig_digies)
       })
     }
-  } else {
-    if (date_format_string != "Other") {
+  } else if (select_choice == "Edit_Cells") {
+    if (date_format_string != "Numeric" && date_format_string != "Character") {
+      col_list = seq(1, ncol(data))
+      remaining = col_list[-id_var]
+      sig_digies = sig_digies[-id_var]
+      
+      output$data = DT::renderDataTable(server = T, {
+        datatable(
+          data,
+          rownames = F,
+          extensions = 'Buttons',
+          selection = "none",
+          editable = list(target = "cell", disable = list(columns = 0)),
+          options = list(
+            autoWidth = F,
+            dom='ltBp',
+            paging = TRUE,
+            pageLength = PL,
+            displayStart = current_page * PL - PL,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            buttons = c('copy', 'csv', 'excel'),
+            columnDefs = list(list(
+              targets = '_all', className = 'dt-center'
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
+              "}"
+            )
+          )
+        ) %>%
+          formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
+          formatRound(columns = remaining, digits = sig_digies) %>%
+          formatDate(id_var, date_format_string)
+      })
+      
+    } else if (date_format_string == "Numeric") {
+      output$data = DT::renderDataTable(server = T, {
+        datatable(
+          data,
+          rownames = F,
+          extensions = 'Buttons',
+          selection = "none",
+          editable = list(target = "cell", disable = list(columns = 0)),
+          options = list(
+            autoWidth = F,
+            paging = TRUE,
+            pageLength = PL,
+            displayStart = current_page * PL - PL,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            dom='ltBp',
+            buttons = c('copy', 'csv', 'excel'),
+            columnDefs = list(list(
+              targets = '_all', className = 'dt-center'
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
+              "}"
+            )
+          )
+        ) %>%
+          formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
+          formatRound(columns = 1:ncol(data),digits = sig_digies)
+      })
+    } else if (date_format_string == "Character") {
+      output$data = DT::renderDataTable(server = T, {
+        datatable(
+          data,
+          rownames = F,
+          extensions = 'Buttons',
+          selection = "none",
+          editable = list(target = "cell", disable = list(columns = 0)),
+          options = list(
+            autoWidth = F,
+            paging = TRUE,
+            pageLength = PL,
+            displayStart = current_page * PL - PL,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            dom='ltBp',
+            buttons = c('copy', 'csv', 'excel'),
+            columnDefs = list(list(
+              targets = '_all', className = 'dt-center'
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
+              "}"
+            )
+          )
+        ) %>%
+          formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
+          formatRound(columns = 2:ncol(data),digits = sig_digies)
+      })
+    }
+  } else if (select_choice == "D/E_Rows") {
+    if (date_format_string != "Numeric" && date_format_string != "Character") {
       col_list = seq(1, ncol(data))
       remaining = col_list[-id_var]
       sig_digies = sig_digies[-id_var]
@@ -118,12 +269,13 @@ renderdata = function(data,
             target = "row",
             mode = "multiple"
           ),
-          editable = T,
+          editable = F,
           options = list(
             autoWidth = F,
             dom='ltBp',
             paging = TRUE,
-            pageLength = 17,
+            pageLength = PL,
+            displayStart = current_page * PL - PL,
             scrollX = TRUE,
             scrollY = TRUE,
             buttons = c('copy', 'csv', 'excel'),
@@ -133,18 +285,19 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
         ) %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
           formatRound(columns = remaining, digits = sig_digies) %>%
           formatDate(id_var, date_format_string)
       })
       
-    } else {
+    } else if (date_format_string == "Numeric") {
       output$data = DT::renderDataTable(server = T, {
         datatable(
           data,
@@ -155,11 +308,12 @@ renderdata = function(data,
             target = "row",
             mode = "multiple"
           ),
-          editable = T,
+          editable = F,
           options = list(
             autoWidth = F,
             paging = TRUE,
-            pageLength = 17,
+            pageLength = PL,
+            displayStart = current_page * PL - PL,
             scrollX = TRUE,
             scrollY = TRUE,
             dom='ltBp',
@@ -170,14 +324,52 @@ renderdata = function(data,
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
               "}"
             )
           )
         ) %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
           formatRound(columns = 1:ncol(data),digits = sig_digies)
+      })
+    } else if (date_format_string == "Character") {
+      output$data = DT::renderDataTable(server = T, {
+        datatable(
+          data,
+          rownames = F,
+          extensions = 'Buttons',
+          selection = list(
+            selected = list(rows = NULL, cols = response_var - 1),
+            target = "row",
+            mode = "multiple"
+          ),
+          editable = F,
+          options = list(
+            autoWidth = F,
+            paging = TRUE,
+            pageLength = PL,
+            displayStart = current_page * PL - PL,
+            scrollX = TRUE,
+            scrollY = TRUE,
+            dom='ltBp',
+            buttons = c('copy', 'csv', 'excel'),
+            columnDefs = list(list(
+              targets = '_all', className = 'dt-center'
+            )),
+            initComplete = JS(
+              "function(settings, json) {",
+              "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+              "Shiny.setInputValue('tableRendered', 'data', {priority: 'event'});",
+              "}"
+            )
+          )
+        ) %>%
+          formatStyle(response_var, backgroundColor = "#b0bed9") %>%
+          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
+          formatRound(columns = 2:ncol(data),digits = sig_digies)
       })
     }
   }
