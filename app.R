@@ -13,8 +13,15 @@ library(ipc)
 library(isotree)
 library(leaflet)
 library(lubridate)
+<<<<<<< HEAD
+library(magrittr)
+library(Metrics)
+library(missForest)
+library(Nmisc)
+=======
 library(Matrix)
 library(missForest)
+>>>>>>> aefeb542fbf0af2e2925f59592a128e2cfaaae1a
 library(openxlsx)
 library(plotly)
 library(plyr)
