@@ -261,7 +261,7 @@ ui = fluidPage(
       vertical-align: -30px;
     }
     
-    #XGBCL_binarize_crit_value {
+    #XGBCL_binarize_crit_value, #beach_angle {
       width: 90px;
       height: 35px;
     }

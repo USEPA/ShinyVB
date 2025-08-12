@@ -39,7 +39,6 @@ map_click = function(input,map_clicks,bo) {
     leafletProxy("map") %>% addAwesomeMarkers(lat = lat, lng = lng, icon = water_icon, group = "shoreline")
     
     #Calculate Beach Orientation
-    
     #Order points from left to right
     
     if (map_clicks$points[1,1] < map_clicks$points[2,1]) {
@@ -53,7 +52,7 @@ map_click = function(input,map_clicks,bo) {
       pointB = map_clicks$points[2,]
     }
     
-    #Using latitude for y-axis and longitude for x-axis because we want 0 degrees to be a north-south orientation!
+    #Using latitude for y-axis and longitude for x-axis because we want 0 degrees to be a north-south orientation
     
     deltaY = pointB[1,1] - pointA[1,1]
     deltaX = pointB[1,2] - pointA[1,2]
@@ -116,6 +115,7 @@ map_click = function(input,map_clicks,bo) {
     }
     
     bo(round(beach_orient,digits=1))
+    updateNumericInput(inputId = "beach_angle", value = round(bo(),digits=1))
     
     # leafletProxy("map") %>% addPopups(lat=lat,lng=lng,paste("Beach Orientation:",round(beach_orient,digits=1)))
     

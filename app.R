@@ -195,6 +195,12 @@ server= function(input,output,session) {
     }
   })
   
+  # Manually change beach orientation
+  observeEvent(input$beach_angle, ignoreInit = T, {
+    bo(input$beach_angle)
+    output$beach_orient = renderText({bo()})
+  })
+  
   # Other map stuff
   observeEvent(input$map_marker_click, ignoreInit = T, {
     
@@ -219,9 +225,7 @@ server= function(input,output,session) {
          <br><br><i>Note: A newly-calculated orientation replaces the previous one.</i>")
   })
   
-  output$zoom_level = renderText({
-    input$map_zoom
-  })
+  output$zoom_level = renderText({input$map_zoom})
   
   output$beach_orient = renderText({bo()})
   
@@ -1551,7 +1555,7 @@ server= function(input,output,session) {
   })
   
   # Create wind/wave/current A/O components
-  observeEvent(input$create, ignoreInit = T, {
+  observeEvent(input$create_ao, ignoreInit = T, {
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Data Table')
@@ -2094,7 +2098,7 @@ server= function(input,output,session) {
       }
 
       fitted_coeffs[,3] = round(exp(fitted_coeffs[,2]),4)
-      fitted_coeffs[1,3] = NA
+      # fitted_coeffs[1,3] = NA
       colnames(fitted_coeffs) = c("Feature","Coefficient","Odds Ratio")
       LG_coeffs(fitted_coeffs)
       

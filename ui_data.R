@@ -63,7 +63,8 @@ DataPanel = sidebarLayout(
         
         fluidRow(column(12,textInput("O_name", label=NULL,value = "OComp"))),
 
-        fluidRow(column(12,actionButton("create", "Create A/O Components", class = "btn-default custom-btn",  style='width:185px; padding:5px;'))))) %>%
+        fluidRow(div(style = "display: flex; align-items: center; height: 100%;",column(6,numericInput("beach_angle", "Beach Orientation", value=0, min=0, max=359, step=1)),
+        column(6,actionButton("create_ao", "Create A/O", class = "btn-default custom-btn", style='width:130px; padding:10px;')))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
