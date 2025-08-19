@@ -627,8 +627,7 @@ server= function(input,output,session) {
           
           updateNumericInput(session, "num_axes",
                              value = pca_axes_max(),
-                             max = pca_axes_max()
-          )
+                             max = pca_axes_max())
           
           updateSelectInput(session,"set_column_props",choices=c("-",col_names()))
           updateSelectInput(session,"rainplot",choices=c("-",col_names()))
