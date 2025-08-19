@@ -5,7 +5,7 @@ on: [push]
 env:
   REGISTRY: ghcr.io
   VBSHINY_IMAGE: "USEPA/shinyvb"
-	
+
 jobs:
   build-vbshinny:
     runs-on: ubuntu-latest
