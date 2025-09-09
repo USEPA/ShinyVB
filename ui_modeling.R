@@ -33,13 +33,11 @@ ModelingPanel = sidebarLayout(
         title = "General Options",
         content = card(
           h5(HTML("<i>Left-Censored Limits (Non-Detections)</i>")),
-          fluidRow(column(4,numericInput("lc_lowval", label='Lower', value = 0)),
-                   column(4, numericInput("lc_upval", label='Upper', value = 3)),
-                   column(4)),
+          fluidRow(column(6,numericInput("lc_lowval", label='Lower', value = 0)),
+                   column(6, numericInput("lc_upval", label='Upper', value = 3))),
           h5(HTML("<i>Right-Censored Limits (TNTC)</i>")),
-          fluidRow(column(5,numericInput("rc_lowval", label='Lower', value = 1000)),
-                   column(5, numericInput("rc_upval", label='Upper', value = 10000)),
-                   column(2)),
+          fluidRow(column(6,numericInput("rc_lowval", label='Lower', value = 1000)),
+                   column(6, numericInput("rc_upval", label='Upper', value = 10000))),
           fluidRow(column(6, numericInput("train_pct",  label="% Training", value = 75, min=1,max=100,step=1)),
                    column(6, numericInput("MC_runs",  label="Monte Carlo Runs", value = 2, min=2,max=10000,step=1))),
           fluidRow(column(6, numericInput("num_folds",  label="CV Folds", value = 5, min=2,max=20,step=1)),
@@ -112,8 +110,8 @@ ModelingPanel = sidebarLayout(
       
       bs_accordion_multi(multi=FALSE,open=c()),
   
-  fluidRow(column(12,downloadButton("save_project2", "Save Project File"))),
-  fluidRow(column(12,fileInput("load_project2", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData")))),
+  fluidRow(column(12,downloadButton("save_project", "Save Project File"))),
+  fluidRow(column(12,fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData")))),
   
   mainPanel = mainPanel(
     width = 9,

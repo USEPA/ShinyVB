@@ -44,6 +44,7 @@ current_pred_page = reactiveVal(1)
 init_data = data.frame()
 init_column_props = hash()
 column_props = hash()
+init_ID_format = NULL
 id_var = 1
 ignored_rows = NULL
 num_rows_per_page = 20

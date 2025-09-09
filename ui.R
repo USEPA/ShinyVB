@@ -285,23 +285,8 @@ ui = fluidPage(
       width: 70px;
     }
     
-    #lc_lowval {
-      height: 35px;
-    }
-    
-    #lc_upval {
-      height: 35px;
-    }
-    
-    #rc_lowval {
-      height: 35px;
-    }
-    
-    #rc_upval {
-      height: 35px;
-    }
-    
-    #lc_lowval {
+    #lc_lowval, #lc_upval, #rc_lowval, #rc_upval {
+      width: 110px;
       height: 35px;
     }
     

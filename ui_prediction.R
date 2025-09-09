@@ -18,12 +18,14 @@ PredictionPanel = sidebarLayout(
   fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;")),
   div(fileInput("pred_file", "Import Data File", buttonLabel = "Browse",accept = c("text/csv",
         "text/comma-separated-values,text/plain",".csv",".xlsx")), style="font-family:Arial; width: 350px;"),
-  h5(HTML("NOTE: The first two columns in an imported prediction file must be the ID and Response Variable; any column names are acceptable,
-          and these can contain missing data. However, the file must contain columns with names exactly equal to each feature name in the model;
-           no particular column order is required and additional extraneous/unused columns can be present.")),
+  h5(HTML("STIPULATIONS:<br>1) First 2 columns in imported data file must be ID and Response Variable<br><br>
+                        2) These 2 columns can have any name and may contain missing data<br><br>
+                        3) File MUST contain columns with names EXACTLY equal to any features present in the chosen model<br><br>
+                        4) Any ordering of feature columns is OK; all unmatched feature columns will be ignored")),
   fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;")),
-  fluidRow(column(12,div(downloadButton("save_prediction", "Save Prediction File")),style="padding: 8px;")),
-  fluidRow(column(12,div(fileInput("load_prediction", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData"),
+  fluidRow(column(12,downloadButton("save_project", "Save Project File", style = "margin-bottom:8px;"))),
+  fluidRow(column(12,div(downloadButton("save_prediction", "Save Prediction File", style = "margin-bottom:8px;")))),
+  fluidRow(column(12,div(fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData"),
                                style="font-family:Arial; width: 350px;")))),
   
   mainPanel = mainPanel(width=9, id = "prediction_main_panel",

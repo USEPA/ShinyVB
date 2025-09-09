@@ -233,7 +233,7 @@ server= function(input,output,session) {
   
   output$beach_orient = renderText({bo()})
   
-  # Save Project file from Data tab
+  # Save Project File
   output$save_project = downloadHandler(filename = function() {paste("Project_File.RData")}, content = function(file) {
     
     save_list = list(
@@ -249,6 +249,7 @@ server= function(input,output,session) {
       fs_feats_used = fs_feats_used(),
       init_data = init_data,
       ignored_rows = ignored_rows,
+      init_ID_format = init_ID_format,
       date_format_string = date_format_string,
       saved_lc_val = input$lc_val,
       saved_rc_val = input$rc_val,
@@ -346,11 +347,11 @@ server= function(input,output,session) {
     save(save_list, file = file)
   })
   
-  # Save Project file from Modeling tab
-  output$save_project2 = downloadHandler(filename = function() {paste("Project_File.RData")}, content = function(file) {
+  # Save Prediction File
+  output$save_prediction = downloadHandler(filename = function() {paste("Prediction_File.RData")}, content = function(file) {
     
     save_list = list(
-      type = "Project",
+      type = "Prediction",
       Version = version,
       temp_db = temp_db,
       bo = bo(),
@@ -362,6 +363,7 @@ server= function(input,output,session) {
       fs_feats_used = fs_feats_used(),
       init_data = init_data,
       ignored_rows = ignored_rows,
+      init_ID_format = init_ID_format,
       date_format_string = date_format_string,
       saved_lc_val = input$lc_val,
       saved_rc_val = input$rc_val,
@@ -459,17 +461,13 @@ server= function(input,output,session) {
     save(save_list, file = file)
   })
   
-  # Load saved Workspace
-  observeEvent(c(input$load_project,input$load_project2,input$load_prediction), ignoreInit = T, {
+  # Load project/prediction file
+  observeEvent(input$load_file, ignoreInit = T, {
     
-    req(!is.null(input$load_project) | !is.null(input$load_project2) | !is.null(input$load_prediction))
+    req(!is.null(input$load_file))
     
-    if (!is.null(input$load_project)) {
-      load_element = input$load_project
-    } else if (!is.null(input$load_project2)) {
-      load_element = input$load_project2
-    } else {
-      load_element = input$load_prediction
+    if (!is.null(input$load_file)) {
+      load_element = input$load_file
     }
     
     temp_env = new.env()
@@ -487,6 +485,7 @@ server= function(input,output,session) {
       fs_feats_used(temp_env$save_list$fs_feats_used)
       init_data <<- temp_env$save_list$init_data
       ignored_rows <<- temp_env$save_list$ignored_rows
+      init_ID_format <<- temp_env$save_list$init_ID_format
       date_format_string <<- temp_env$save_list$date_format_string
       saved_lc_val = temp_env$save_list$saved_lc_val
       saved_rc_val = temp_env$save_list$saved_rc_val
@@ -576,6 +575,25 @@ server= function(input,output,session) {
       EN_final_features(temp_env$save_list$EN_final_features)
       EN_pred_data(temp_env$save_list$EN_pred_data)
       
+      if (init_ID_format == "YMD") {
+        init_data[,1] = ymd(init_data[,1])
+        date_format_string <<- "toLocaleDateString"
+      } else if (init_ID_format == "MDY") {
+        init_data[,1] = mdy(init_data[,1])
+        date_format_string <<- "toLocaleDateString"
+      } else if (init_ID_format == "MDYHM") {
+        init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
+        date_format_string <<- "toLocaleString"
+      } else if (init_ID_format == "Character") {
+        date_format_string <<- "Character"
+      } else if (init_ID_format == "Numeric") {
+        date_format_string <<- "Numeric"
+      }
+      
+      temp_data = current_data()
+      temp_data[,1] = init_data[,1]
+      current_data(temp_data)
+      
       names = c("Logistic_Regression","XGB_Classifier","XGBoost","Elastic_Net")
       created = list(LG_results(),XGBCL_results(),XGB_results(),EN_results())
       available = c()
@@ -625,10 +643,7 @@ server= function(input,output,session) {
           enable("pca_check")
           enable("run_iso_forest")
           
-          updateNumericInput(session, "num_axes",
-                             value = pca_axes_max(),
-                             max = pca_axes_max())
-          
+          updateNumericInput(session, "num_axes",value = pca_axes_max(),max = pca_axes_max())
           updateSelectInput(session,"set_column_props",choices=c("-",col_names()))
           updateSelectInput(session,"rainplot",choices=c("-",col_names()))
           updateSelectInput(session,"lineplot",choices=c("-",col_names()))
@@ -670,12 +685,12 @@ server= function(input,output,session) {
       
     } else if (temp_env$save_list$Version != "1.0.0") {
       
-      showModal(modalDialog(paste("This project file is not compatible with this version of ShinyVB."),
+      showModal(modalDialog(paste("This file is not compatible with this version of ShinyVB."),
                             easyClose = F,footer = div(modalButton('Close'))))
       
     } else if (!exists("save_list", envir = temp_env)) {
       
-      showModal(modalDialog(paste("No saved data in this project file."),
+      showModal(modalDialog(paste("No saved information in this file."),
                             easyClose = F,footer = div(modalButton('Close'))))
     }
   })
@@ -928,8 +943,22 @@ server= function(input,output,session) {
     
     response_var(2)
     
-    temp_data = init_data[,-1]
-    temp_data = temp_data[,-1]
+    if (init_ID_format == "YMD") {
+      init_data[,1] = ymd(init_data[,1])
+      date_format_string <<- "toLocaleDateString"
+    } else if (init_ID_format == "MDY") {
+      init_data[,1] = mdy(init_data[,1])
+      date_format_string <<- "toLocaleDateString"
+    } else if (init_ID_format == "MDYHM") {
+      init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
+      date_format_string <<- "toLocaleString"
+    } else if (init_ID_format == "Character") {
+      date_format_string <<- "Character"
+    } else if (init_ID_format == "Numeric") {
+      date_format_string <<- "Numeric"
+    }
+    
+    temp_data = init_data[,3:ncol(init_data)]
     
     feat_names(colnames(temp_data))
     feats_being_used(colnames(temp_data))
@@ -1094,17 +1123,22 @@ server= function(input,output,session) {
       changed_model(TRUE)
       
       if (input$IDasDate == "YMD") {
+        init_ID_format <<- "YMD"
         init_data[,1] = ymd(init_data[,1])
         date_format_string <<- "toLocaleDateString"
       } else if (input$IDasDate == "MDY") {
+        init_ID_format <<- "MDY"
         init_data[,1] = mdy(init_data[,1])
         date_format_string <<- "toLocaleDateString"
       } else if (input$IDasDate == "MDYHM") {
+        init_ID_format <<- "MDYHM"
         init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
         date_format_string <<- "toLocaleString"
       } else if (input$IDasDate == "Character") {
+        init_ID_format <<- "Character"
         date_format_string <<- "Character"
       } else if (input$IDasDate == "Numeric") {
+        init_ID_format <<- "Numeric"
         date_format_string <<- "Numeric"
       }
       
@@ -1126,8 +1160,7 @@ server= function(input,output,session) {
       iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
       iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
       
-      feat_data0 = init_data[,-1]
-      feat_data = feat_data0[,-1]
+      feat_data = init_data[,3:ncol(init_data)]
       
       feats_being_used(colnames(feat_data))
       feat_names(colnames(feat_data))
@@ -1142,8 +1175,7 @@ server= function(input,output,session) {
       
       updateNumericInput(session, "num_axes",
                          value = pca_axes_max(),
-                         max = pca_axes_max()
-      )
+                         max = pca_axes_max())
       
       updateSelectInput(session,"set_column_props",choices=c("-",col_names()))
       updateSelectInput(session,"rainplot",choices=c("-",col_names()))
@@ -4128,6 +4160,7 @@ server= function(input,output,session) {
       fs_feats_used = fs_feats_used(),
       init_data = init_data,
       ignored_rows = ignored_rows,
+      init_ID_format = init_ID_format,
       date_format_string = date_format_string,
       saved_lc_val = input$lc_val,
       saved_rc_val = input$rc_val,
@@ -4233,7 +4266,7 @@ server= function(input,output,session) {
     
     if (current_page != current_pred_page()) {
       current_pred_page(current_page)
-      renderpreddata(pred_data(),column_props,current_pred_page(),output)
+      renderpreddata(pred_data(),column_props,current_pred_page(),init_ID_format,output)
     }
   })
   
@@ -4333,7 +4366,22 @@ server= function(input,output,session) {
             EN_pred_data(temp_data)
           }
           
-          renderpreddata(temp_data,column_props,current_pred_page(),output)
+          if (init_ID_format == "YMD") {
+            temp_data[,1] = ymd(temp_data[,1])
+            date_format_string <<- "toLocaleDateString"
+          } else if (init_ID_format == "MDY") {
+            temp_data[,1] = mdy(temp_data[,1])
+            date_format_string <<- "toLocaleDateString"
+          } else if (init_ID_format == "MDYHM") {
+            temp_data[,1] = parse_date_time(temp_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
+            date_format_string <<- "toLocaleString"
+          } else if (init_ID_format == "Character") {
+            date_format_string <<- "Character"
+          } else if (init_ID_format == "Numeric") {
+            date_format_string <<- "Numeric"
+          }
+          
+          renderpreddata(temp_data,column_props,current_pred_page(),init_ID_format,output)
           
         }
       }
@@ -4769,7 +4817,7 @@ server= function(input,output,session) {
       colnames(feature_ranges) = c("Feature_Characteristic",model_features)
       model_feature_ranges(feature_ranges)
       
-      renderpreddata(pred_data(),column_props,current_pred_page(),output)
+      renderpreddata(pred_data(),column_props,current_pred_page(),init_ID_format,output)
       
       output$pd_feat_ranges = DT::renderDataTable(server = T, {
         datatable(
@@ -4865,11 +4913,11 @@ server= function(input,output,session) {
       
     }
     
-    renderpreddata(temp_data1,column_props,current_pred_page(),output)
+    renderpreddata(temp_data1,column_props,current_pred_page(),init_ID_format,output)
     
   })
   
-  # Prediction dataset cell value editing
+  # Prediction dataset cell editing
   observeEvent(input$pd_data_cell_edit, ignoreInit = T, {
     
     info = input$pd_data_cell_edit
@@ -4894,7 +4942,7 @@ server= function(input,output,session) {
     if (is.null(info) || info$value == "" || is.na(info$value)) {
       
       showModal(modalDialog(title = "Input Error",paste("Missing feature values are not allowed."),easyClose = FALSE,footer = div(modalButton('Close'))))
-      renderpreddata(data,column_props,current_pred_page(),output)
+      renderpreddata(data,column_props,current_pred_page(),init_ID_format,output)
       
     } else {
       
@@ -4921,7 +4969,7 @@ server= function(input,output,session) {
         EN_pred_data(data_new)
       }
       
-      renderpreddata(data_new,column_props,current_pred_page(),output)
+      renderpreddata(data_new,column_props,current_pred_page(),init_ID_format,output)
     }
   })
   
@@ -5138,7 +5186,7 @@ server= function(input,output,session) {
       colnames(new_pred_data) = c(iv_name,rv_name,model_features,"Prediction","Lower_Bound","Upper_Bound","Outcome")
       pred_data(new_pred_data)
       
-      output$pd_data = renderpreddata(pred_data(),column_props,current_pred_page(),output)
+      output$pd_data = renderpreddata(pred_data(),column_props,current_pred_page(),init_ID_format,output)
     }
   })
   
