@@ -113,13 +113,13 @@ server= function(input,output,session) {
       leafletProxy("map") %>% clearGroup('shore_markers')
       
       zoom = input$map_zoom
-      zoom_threshold = 13
+      zoom_threshold = 12
       bounds = input$map_bounds
       
       if (zoom < zoom_threshold) {
         
         updateSwitchInput(session,"show_shorelines",value = FALSE)
-        showModal(modalDialog(tags$h4("Zoom to at least level 13 to show beach shorelines."),easyClose = FALSE))
+        showModal(modalDialog(tags$h4("Zoom to at least level 12 to show beach shorelines."),easyClose = FALSE))
         
       } else {
         
@@ -230,6 +230,22 @@ server= function(input,output,session) {
   })
   
   output$zoom_level = renderText({input$map_zoom})
+  
+  observeEvent(input$map_zoom, ignoreInit = T, {
+    
+    zoom_shoreline_thresh = 12
+    zoom_marker_thresh = 11
+    
+    if (input$map_zoom < zoom_shoreline_thresh) {
+      updateSwitchInput(session,"show_shorelines",value = FALSE)
+      leafletProxy("map") %>% clearGroup('shore_markers')
+    }
+    
+    if (input$map_zoom < zoom_marker_thresh) {
+      updateSwitchInput(session,"show_stations",value = FALSE)
+      leafletProxy("map") %>% clearGroup('monitor_stations')
+    }
+  })
   
   output$beach_orient = renderText({bo()})
   
@@ -864,6 +880,11 @@ server= function(input,output,session) {
       if ((input$data_columns_selected+1) != response_var() && input$data_columns_selected != 0) {
         
         response_var(input$data_columns_selected + 1)
+        feat_data = current_data()[,-response_var()]
+        feat_data = feat_data[,-1]
+        feats_being_used(colnames(feat_data))
+        feat_names(colnames(feat_data))
+        updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
         
         # Filter the response variable to exclude left and right-censored tags
         exclude_values = c(input$lc_val, input$rc_val)

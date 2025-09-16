@@ -11,7 +11,7 @@ MapPanel = sidebarLayout(
                               tags$head(tags$style(HTML("#beach_orient {title:borient;width: 70px;height: 45px; position:left;}"))),
                               tags$hr(style = "border-color: #2c3e50; margin-top: 4px; margin-bottom: 4px;"),
                               fluidRow(column(6,h5(HTML("<i>Zoom Level >= 11</i>"))),
-                                       column(6,h5(HTML("<i>Zoom Level >= 13</i>")))),
+                                       column(6,h5(HTML("<i>Zoom Level >= 12</i>")))),
                               fluidRow(column(6, switchInput("show_stations", label="Show Stations?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small")),
                                        column(6, switchInput("show_shorelines", label="Show Beaches?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
                               fluidRow(
