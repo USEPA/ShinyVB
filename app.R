@@ -1,3 +1,4 @@
+library(shiny)
 library(bslib)
 library(bsplus)
 library(cluster)
@@ -14,11 +15,10 @@ library(isotree)
 library(leaflet)
 library(lubridate)
 library(magrittr)
+library(Matrix)
 library(Metrics)
 library(missForest)
 library(Nmisc)
-library(Matrix)
-library(missForest)
 library(openxlsx)
 library(plotly)
 library(plyr)
@@ -27,14 +27,12 @@ library(pso)
 library(purrr)
 library(RSQLite)
 library(SHAPforxgboost)
-library(shiny)
 library(shinyjs)
 library(shinythemes)
 library(shinyvalidate)
 library(shinyWidgets)
 library(stringr)
 library(tidyverse)
-library(tools)
 library(xgboost)
 library(DT)
 
@@ -2028,6 +2026,13 @@ server= function(input,output,session) {
       confuse_table[1,3] = LG_pred_confuse_results()$FP
       confuse_table[1,4] = LG_pred_confuse_results()$FN
       
+      precision = LG_pred_confuse_results()$TP/(LG_pred_confuse_results()$TP+LG_pred_confuse_results()$FP)
+      sensitivity = LG_pred_confuse_results()$TP/(LG_pred_confuse_results()$TP+LG_pred_confuse_results()$FN)
+      NPV = LG_pred_confuse_results()$TN/(LG_pred_confuse_results()$TN+LG_pred_confuse_results()$FN)
+      specificity = LG_pred_confuse_results()$TN/(LG_pred_confuse_results()$TN+LG_pred_confuse_results()$FP)
+      PF1_score = 2*(precision * sensitivity)/(precision + sensitivity)
+      NF1_score = 2*(NPV * specificity)/(NPV + specificity)
+      
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$LG_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
@@ -2037,7 +2042,9 @@ server= function(input,output,session) {
                   {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$LG_pred_confuse_text = renderText({paste0("Sensitivity = ",round(LG_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-                  round(LG_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_pred_confuse_results()$Accuracy,3))})
+                  round(LG_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_pred_confuse_results()$Accuracy,3),
+                  "; Positive F1 = ",round(PF1_score,3),
+                  "; Negative F1 = ",round(NF1_score,3))})
       
       refresh_trigger(FALSE)
       
@@ -2221,6 +2228,13 @@ server= function(input,output,session) {
       confuse_table[1,3] = LG_confuse_results()$FP
       confuse_table[1,4] = LG_confuse_results()$FN
       
+      precision = LG_confuse_results()$TP/(LG_confuse_results()$TP+LG_confuse_results()$FP)
+      sensitivity = LG_confuse_results()$TP/(LG_confuse_results()$TP+LG_confuse_results()$FN)
+      NPV = LG_confuse_results()$TN/(LG_confuse_results()$TN+LG_confuse_results()$FN)
+      specificity = LG_confuse_results()$TN/(LG_confuse_results()$TN+LG_confuse_results()$FP)
+      PF1_score = 2*(precision * sensitivity)/(precision + sensitivity)
+      NF1_score = 2*(NPV * specificity)/(NPV + specificity)
+      
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$LG_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
@@ -2230,7 +2244,9 @@ server= function(input,output,session) {
                   {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$LG_confuse_text = renderText({paste0("Sensitivity = ",round(LG_confuse_results()$Sensitivity,3),"; Specificity = ",
-                  round(LG_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_confuse_results()$Accuracy,3))})
+                  round(LG_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_confuse_results()$Accuracy,3),
+                  "; Positive F1 = ",round(PF1_score,3),
+                  "; Negative F1 = ",round(NF1_score,3))})
       
       refresh_trigger(FALSE)
       
@@ -2681,6 +2697,13 @@ server= function(input,output,session) {
       confuse_table[1,3] = XGBCL_pred_confuse_results()$FP
       confuse_table[1,4] = XGBCL_pred_confuse_results()$FN
       
+      precision = XGBCL_pred_confuse_results()$TP/(XGBCL_pred_confuse_results()$TP+XGBCL_pred_confuse_results()$FP)
+      sensitivity = XGBCL_pred_confuse_results()$TP/(XGBCL_pred_confuse_results()$TP+XGBCL_pred_confuse_results()$FN)
+      NPV = XGBCL_pred_confuse_results()$TN/(XGBCL_pred_confuse_results()$TN+XGBCL_pred_confuse_results()$FN)
+      specificity = XGBCL_pred_confuse_results()$TN/(XGBCL_pred_confuse_results()$TN+XGBCL_pred_confuse_results()$FP)
+      PF1_score = 2*(precision * sensitivity)/(precision + sensitivity)
+      NF1_score = 2*(NPV * specificity)/(NPV + specificity)
+      
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$XGBCL_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
@@ -2690,7 +2713,9 @@ server= function(input,output,session) {
                       {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGBCL_pred_confuse_text = renderText({paste0("Sensitivity = ",round(XGBCL_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-                      round(XGBCL_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_pred_confuse_results()$Accuracy,3))})
+                      round(XGBCL_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_pred_confuse_results()$Accuracy,3),
+                      "; Positive F1 = ",round(PF1_score,3),
+                      "; Negative F1 = ",round(NF1_score,3))})
       
       output$XGBCL_used_hp_pred = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
                       target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
@@ -2882,6 +2907,13 @@ server= function(input,output,session) {
       xgbcl_confuse_table[1,3] = XGBCL_confuse_results()$FP
       xgbcl_confuse_table[1,4] = XGBCL_confuse_results()$FN
       
+      precision = XGBCL_confuse_results()$TP/(XGBCL_confuse_results()$TP+XGBCL_confuse_results()$FP)
+      sensitivity = XGBCL_confuse_results()$TP/(XGBCL_confuse_results()$TP+XGBCL_confuse_results()$FN)
+      NPV = XGBCL_confuse_results()$TN/(XGBCL_confuse_results()$TN+XGBCL_confuse_results()$FN)
+      specificity = XGBCL_confuse_results()$TN/(XGBCL_confuse_results()$TN+XGBCL_confuse_results()$FP)
+      PF1_score = 2*(precision * sensitivity)/(precision + sensitivity)
+      NF1_score = 2*(NPV * specificity)/(NPV + specificity)
+      
       colnames(xgbcl_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$XGBCL_confuse = DT::renderDataTable(server = T, {data = datatable(xgbcl_confuse_table,rownames = F,selection = 
@@ -2891,7 +2923,9 @@ server= function(input,output,session) {
                     {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGBCL_confuse_text = renderText({paste0("Sensitivity = ",round(XGBCL_confuse_results()$Sensitivity,3),"; Specificity = ",
-                    round(XGBCL_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_confuse_results()$Accuracy,3))})
+                    round(XGBCL_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_confuse_results()$Accuracy,3),
+                    "; Positive F1 = ",round(PF1_score,3),
+                    "; Negative F1 = ",round(NF1_score,3))})
       
       output$XGBCL_used_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_CLHP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
                     target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
@@ -3371,14 +3405,21 @@ server= function(input,output,session) {
       
       output$XGB_pred_scatplot = renderPlotly(scatter_confuse(XGB_pred_scat_dat(),debounced_XGB_pred_stand(),debounced_XGB_pred_dc()))
       
-      XGB_confuse_results(confuse(XGB_pred_scat_dat()[,2:3],debounced_XGB_pred_stand(),debounced_XGB_pred_dc()))
+      XGB_pred_confuse_results(confuse(XGB_pred_scat_dat()[,2:3],debounced_XGB_pred_stand(),debounced_XGB_pred_dc()))
       
       confuse_table = matrix(0,nrow=1,ncol=4)
       
-      confuse_table[1,1] = XGB_confuse_results()$TP
-      confuse_table[1,2] = XGB_confuse_results()$TN
-      confuse_table[1,3] = XGB_confuse_results()$FP
-      confuse_table[1,4] = XGB_confuse_results()$FN
+      confuse_table[1,1] = XGB_pred_confuse_results()$TP
+      confuse_table[1,2] = XGB_pred_confuse_results()$TN
+      confuse_table[1,3] = XGB_pred_confuse_results()$FP
+      confuse_table[1,4] = XGB_pred_confuse_results()$FN
+      
+      precision = XGB_pred_confuse_results()$TP/(XGB_pred_confuse_results()$TP+XGB_pred_confuse_results()$FP)
+      sensitivity = XGB_pred_confuse_results()$TP/(XGB_pred_confuse_results()$TP+XGB_pred_confuse_results()$FN)
+      NPV = XGB_pred_confuse_results()$TN/(XGB_pred_confuse_results()$TN+XGB_pred_confuse_results()$FN)
+      specificity = XGB_pred_confuse_results()$TN/(XGB_pred_confuse_results()$TN+XGB_pred_confuse_results()$FP)
+      PF1_score = 2*(precision * sensitivity)/(precision + sensitivity)
+      NF1_score = 2*(NPV * specificity)/(NPV + specificity)
       
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
@@ -3388,9 +3429,10 @@ server= function(input,output,session) {
                       columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                       {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
-      output$XGB_pred_confuse_text = renderText({paste0("Sensitivity = ",round(XGB_confuse_results()$Sensitivity,3),"; Specificity = ",
-                      round(XGB_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_confuse_results()$Accuracy,3))})
-      
+      output$XGB_pred_confuse_text = renderText({paste0("Sensitivity = ",round(XGB_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
+                      round(XGB_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_pred_confuse_results()$Accuracy,3),
+                      "; Positive F1 = ",round(PF1_score,3),
+                      "; Negative F1 = ",round(NF1_score,3))})
       
       resid_data = XGB_pred_scat_dat()[,c(1,3)] %>% mutate(Residuals = round(XGB_pred_scat_dat()[,2]-XGB_pred_scat_dat()[,3],3))
       output$XGB_pred_resid_scatplot = renderPlotly(resid_scatter(resid_data))
@@ -3614,6 +3656,13 @@ server= function(input,output,session) {
       xgb_confuse_table[1,3] = XGB_confuse_results()$FP
       xgb_confuse_table[1,4] = XGB_confuse_results()$FN
       
+      precision = XGB_confuse_results()$TP/(XGB_confuse_results()$TP+XGB_confuse_results()$FP)
+      sensitivity = XGB_confuse_results()$TP/(XGB_confuse_results()$TP+XGB_confuse_results()$FN)
+      NPV = XGB_confuse_results()$TN/(XGB_confuse_results()$TN+XGB_confuse_results()$FN)
+      specificity = XGB_confuse_results()$TN/(XGB_confuse_results()$TN+XGB_confuse_results()$FP)
+      PF1_score = 2*(precision * sensitivity)/(precision + sensitivity)
+      NF1_score = 2*(NPV * specificity)/(NPV + specificity)
+      
       colnames(xgb_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$XGB_confuse = DT::renderDataTable(server = T, {data = datatable(xgb_confuse_table,rownames = F,selection = 
@@ -3623,7 +3672,9 @@ server= function(input,output,session) {
                     {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGB_confuse_text = renderText({paste0("Sensitivity = ",round(XGB_confuse_results()$Sensitivity,3),"; Specificity = ",
-                    round(XGB_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_confuse_results()$Accuracy,3))})
+                    round(XGB_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_confuse_results()$Accuracy,3),
+                    "; Positive F1 = ",round(PF1_score,3),
+                    "; Negative F1 = ",round(NF1_score,3))})
       
       output$XGB_used_hp = DT::renderDataTable(server=T,{data = datatable(Optimal_HP,rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
                     target = "row",mode="single"),editable=F,extensions='Buttons', options = list(autoWidth=F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,
@@ -3911,6 +3962,13 @@ server= function(input,output,session) {
       confuse_table[1,3] = EN_pred_confuse_results()$FP
       confuse_table[1,4] = EN_pred_confuse_results()$FN
       
+      precision = EN_pred_confuse_results()$TP/(EN_pred_confuse_results()$TP+EN_pred_confuse_results()$FP)
+      sensitivity = EN_pred_confuse_results()$TP/(EN_pred_confuse_results()$TP+EN_pred_confuse_results()$FN)
+      NPV = EN_pred_confuse_results()$TN/(EN_pred_confuse_results()$TN+EN_pred_confuse_results()$FN)
+      specificity = EN_pred_confuse_results()$TN/(EN_pred_confuse_results()$TN+EN_pred_confuse_results()$FP)
+      PF1_score = 2*(precision * sensitivity)/(precision + sensitivity)
+      NF1_score = 2*(NPV * specificity)/(NPV + specificity)
+      
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$EN_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
@@ -3920,7 +3978,9 @@ server= function(input,output,session) {
                       {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$EN_pred_confuse_text = renderText({paste0("Sensitivity = ",round(EN_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-                      round(EN_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_pred_confuse_results()$Accuracy,3))})
+                      round(EN_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_pred_confuse_results()$Accuracy,3),
+                      "; Positive F1 = ",round(PF1_score,3),
+                      "; Negative F1 = ",round(NF1_score,3))})
       
       refresh_trigger(FALSE) 
       
@@ -4104,6 +4164,13 @@ server= function(input,output,session) {
       EN_confuse_table[1,3] = EN_confuse_results()$FP
       EN_confuse_table[1,4] = EN_confuse_results()$FN
       
+      precision = EN_confuse_results()$TP/(EN_confuse_results()$TP+EN_confuse_results()$FP)
+      sensitivity = EN_confuse_results()$TP/(EN_confuse_results()$TP+EN_confuse_results()$FN)
+      NPV = EN_confuse_results()$TN/(EN_confuse_results()$TN+EN_confuse_results()$FN)
+      specificity = EN_confuse_results()$TN/(EN_confuse_results()$TN+EN_confuse_results()$FP)
+      PF1_score = 2*(precision * sensitivity)/(precision + sensitivity)
+      NF1_score = 2*(NPV * specificity)/(NPV + specificity)
+      
       colnames(EN_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$EN_confuse = DT::renderDataTable(server = T, {data = datatable(EN_confuse_table,rownames = F,selection = 
@@ -4113,7 +4180,9 @@ server= function(input,output,session) {
                   {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$EN_confuse_text = renderText({paste0("Sensitivity = ",round(EN_confuse_results()$Sensitivity,3),"; Specificity = ",
-                  round(EN_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_confuse_results()$Accuracy,3))})
+                  round(EN_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_confuse_results()$Accuracy,3),
+                  "; Positive F1 = ",round(PF1_score,3),
+                  "; Negative F1 = ",round(NF1_score,3))})
       
       refresh_trigger(FALSE)
       
