@@ -3390,6 +3390,11 @@ server= function(input,output,session) {
                          step = xgb_pred_stepdc
       )
       
+      results = XGB_pred_results()
+      results[,2] = round(results[,2],3)
+      results[,3] = round(results[,3],3)
+      XGB_pred_results(results)
+      
       output$XGB_predictions = DT::renderDataTable(server = T, {data = datatable(XGB_pred_results(),rownames = F,selection =
               list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions='Buttons',options = list(autoWidth = F,
               paging = TRUE,pageLength = num_rows_per_page,dom="ltBp",buttons = c('copy', 'csv', 'excel'),scrollX = TRUE,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',
@@ -3627,6 +3632,10 @@ server= function(input,output,session) {
                     list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
                     className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
                     "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+      
+      results = XGB_results()
+      results[,2] = round(results[,2],3)
+      XGB_results(results)
       
       output$XGB_fits = DT::renderDataTable(server = T, {data = datatable(XGB_results(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
                     target = "row",mode = "single"),editable = F,extensions="Buttons", options = list(autoWidth = F,dom="ltBp", buttons = c('copy', 'csv', 'excel'),
