@@ -26,19 +26,19 @@ DataPanel = sidebarLayout(
       
       bs_append (title="Feature Processing", content = card(
             
-        fluidRow(column(12,disabled(actionButton("corr_check", "Correlations",class = "btn-default custom2-btn", style = 'width:125px !important; padding:3px !important;')))),
-        fluidRow(column(6,disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",  style='width: 110px; vertical-align: -38px;'))),
-                 column(6,class="align-center", numericInput("num_axes", "# PCA Axes", value=2, min=2,max=20,step=1))),
+        fluidRow(column(12,disabled(actionButton("corr_check", "Correlations",class = "btn-default custom2-btn", style = 'width:150px !important; padding:2px !important;')))),
+        fluidRow(column(6,disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",  style='width: 150px; vertical-align: -38px;'))),
+                 column(6,class="align-center", numericInput("num_axes", "# Axes", value=2, min=2,max=20,step=1))),
         fluidRow(column(6,disabled(actionButton("run_iso_forest","Outliers: IsoForest", class = "btn-default custom-btn",  style='width: 150px; align: left; vertical-align: -38px;'))),
-                 column(6,numericInput("iso_ndim", "IF Dimensions", value=2, min=1,max=10,step=1))))) %>%
+                 column(6,numericInput("iso_ndim", "# Dimensions", value=2, min=1,max=10,step=1))))) %>%
       
       bs_append (title="Plotting", content = card(
         
-        div(style = "height: 400px",
+        div(style = "height: 420px",
             h5(HTML("<i>Censored Response Data</i>")),
             fluidRow(column(12,radioButtons(inline=T,"cens_choice",label=NULL,choices = c(Hide = "hide",Use = "use",Replace = "replace"),selected = "hide"))),
-            fluidRow(column(6,numericInput("lc_replace", "Replace LC", value=-1, step=0.1)),
-                     column(6,numericInput("rc_replace", "Replace RC", value=100, step=0.1))),
+            fluidRow(column(6,numericInput("lc_replace", "LC Replace Value", value=0, step=0.1)),
+                     column(6,numericInput("rc_replace", "RC Replace Value", value=100, step=0.1))),
             
             fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;")),
 

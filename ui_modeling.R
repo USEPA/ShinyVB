@@ -23,8 +23,6 @@ ModelingPanel = sidebarLayout(
       status = "custom"
     )),
 
-    tags$hr(style = "border-color: #2c3e50; margin-top: 4px; margin-bottom: 4px;"),
-    
     bs_accordion(id = "Modeling") %>%
       
       bs_set_opts(panel_type = "primary") %>%
@@ -32,17 +30,18 @@ ModelingPanel = sidebarLayout(
       bs_append (
         title = "General Options",
         content = card(
+          fluidRow(column(12,switchInput("loggy", label="Log10 Response?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
           h5(HTML("<i>Left-Censored Limits (Non-Detections)</i>")),
           fluidRow(column(6,numericInput("lc_lowval", label='Lower', value = 0)),
                    column(6, numericInput("lc_upval", label='Upper', value = 3))),
           h5(HTML("<i>Right-Censored Limits (TNTC)</i>")),
           fluidRow(column(6,numericInput("rc_lowval", label='Lower', value = 1000)),
                    column(6, numericInput("rc_upval", label='Upper', value = 10000))),
+          fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
           fluidRow(column(6, numericInput("train_pct",  label="% Training", value = 75, min=1,max=100,step=1)),
-                   column(6, numericInput("MC_runs",  label="Monte Carlo Runs", value = 2, min=2,max=10000,step=1))),
+                   column(6, numericInput("MC_runs",  label="MC Runs", value = 2, min=2,max=10000,step=1))),
           fluidRow(column(6, numericInput("num_folds",  label="CV Folds", value = 5, min=2,max=20,step=1)),
                    column(6, numericInput("model_seed",  label="Rnd Seed", value = 1234, min=1,step=1))),
-          fluidRow(column(12,switchInput("loggy", label="Log10 Response?", labelWidth=100, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
           fluidRow(column(12,switchInput("randomize", label="Shuffle Data?", labelWidth=100, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
@@ -72,11 +71,10 @@ ModelingPanel = sidebarLayout(
                    column(6,selectInput("XGBCL_eval",label = "Evaluation Metric",selected ="logloss",choices = c("logloss","auc")))),
           fluidRow(column(5,actionButton("XGBCL_params", "HP Values",class = "btn-default custom2-btn", style = 'width:90px !important; padding:2px !important;')),
                    column(7,actionButton("XGBCL_optimize_HP", "HP Optimization",class = "btn-default custom2-btn", style = 'width:130px !important; padding:2px !important;'))),
-          fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
+          # fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
           fluidRow(column(6,align="left",actionButton("run_XGBCL_select", "Feature Selection", class = "btn-default custom-btn", style = 'width:130px !important; padding:2px !important; vertical-align: -32px !important;')),
-                   column(6, div(style = "display: inline-block;",numericInput("testcl_weight", label = "Test Weight", value = 0.20, min = 0, max=1, step=0.05)))),
+                   column(6, div(style = "display: inline-block;",numericInput("testcl_weight", label = "Test Weight", value = 0.33, min = 0, max=1, step=0.02)))),
           # fluidRow(column(12,align="right",actionButton("XGBCL_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
-          fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
           fluidRow(column(6,actionButton("run_pred_XGBCL", "Predictions", class = "btn-default custom-btn",  style = 'width:100px !important; padding:2px !important;')),
                   column(6,actionButton("run_fit_XGBCL", "Fitting", class = "btn-default custom-btn",  style = 'width:100px !important; padding:2px !important;'))))) %>%
       
@@ -100,11 +98,10 @@ ModelingPanel = sidebarLayout(
           fluidRow(column(12, switchInput("XGB_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
           fluidRow(column(5,actionButton("XGB_params", "HP Values",class = "btn-default custom2-btn", style = 'width:90px !important; padding:2px !important;')),
                    column(7,actionButton("XGB_optimize_HP", "HP Optimization",class = "btn-default custom2-btn", style = 'width:130px !important; padding:2px !important;'))),
-          fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
+          # fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
           fluidRow(column(6,align="left",actionButton("run_XGB_select", "Feature Selection", class = "btn-default custom-btn", style = 'width:130px !important; padding:2px !important; vertical-align: -32px !important;')),
-                   column(6, div(style = "display: inline-block;",numericInput("test_weight", label = "Test Weight", value = 0.65, min = 0, max=1, step=0.05)))),
+                   column(6, div(style = "display: inline-block;",numericInput("test_weight", label = "Test Weight", value = 0.33, min = 0, max=1, step=0.02)))),
           # fluidRow(column(12,align="right",actionButton("XGB_select_cancel", "Cancel", style = 'width:90px; padding:2px;'))),
-          fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
           fluidRow(column(6,actionButton("run_XGB_predict", "Predictions", class = "btn-default custom-btn",  style = 'width:100px !important; padding:2px !important;')),
                    column(6,align="left",actionButton("XGB_final_fitting", class = "btn-default custom-btn",  "Fitting", style = 'width:100px !important; padding:2px !important;'))))) %>%
       

@@ -121,6 +121,7 @@ ui = fluidPage(
     
     .custom-btn {
        margin: 2px 2px !important;
+       height: 35px !important;
        font-size: 14px !important;
        color: white !important;
        background-color: #5A6E5A !important;
@@ -139,6 +140,7 @@ ui = fluidPage(
     
     .custom2-btn {
        margin: 2px 2px !important;
+       height: 35px !important;
        font-size: 14px !important;
        color: black !important;
        background-color: #E0F7FA !important;
@@ -290,7 +292,7 @@ ui = fluidPage(
     }
     
     #iso_ndim {
-      width: 70px;
+      width: 77px;
     }
     
     #lc_lowval, #lc_upval, #rc_lowval, #rc_upval {
@@ -298,9 +300,9 @@ ui = fluidPage(
       height: 35px;
     }
     
-    #test_weight {
+    #test_weight, #testcl_weight {
       width: 100px;
-      height: 35px;
+      height: 32px;
     }
     
     #logist_train_pct {

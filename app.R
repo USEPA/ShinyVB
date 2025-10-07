@@ -90,6 +90,119 @@ server= function(input,output,session) {
   add_validation_rules(iv)
   iv$enable()
   
+  # Upload excel/csv data file
+  observeEvent(input$file1, ignoreInit = T, {
+    
+    ext = tools::file_ext(input$file1$name)
+    
+    if (ext == "xlsx") {
+      init_data <<- read.xlsx(input$file1$datapath)
+    } else {
+      init_data <<- read.csv(input$file1$datapath,header = TRUE,sep = input$sep)
+    }
+    
+    if (any(duplicated(init_data[,1]))) {
+      showModal(modalDialog(paste("The ID (Column 1) is required to have unique values, but duplicate values were found. Please remedy prior to data importation."),
+                            easyClose = F,footer = div(modalButton('Close'))))
+    } else if (any(is.na(init_data[,1]))) {
+      
+      showModal(modalDialog(paste("The ID (Column 1) has missing values. Please remedy prior to data importation."),
+                            easyClose = F,footer = div(modalButton('Close'))))
+      
+    } else if (any(sapply(data.frame(init_data[,-1]), function(col) !is.numeric(col)))) {
+      
+      showModal(modalDialog(paste("This dataset contains non-numeric data. Please remedy prior to data importation."),
+                            easyClose = F,footer = div(modalButton('Close'))))
+      
+    } else {
+      col_props_temp = hash()
+      
+      for (i in 1:ncol(init_data)) {
+        .set(col_props_temp,keys=colnames(init_data)[i],values=2)
+        #.set(col_props_temp,keys=colnames(init_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA))
+      }
+      
+      init_column_props <<- col_props_temp
+      column_props <<- col_props_temp
+      ignored_rows <<- NULL
+      PCA_dataset(NULL)
+      changed_model(TRUE)
+      
+      if (input$IDasDate == "YMD") {
+        init_ID_format <<- "YMD"
+        init_data[,1] = ymd(init_data[,1])
+        date_format_string <<- "toLocaleDateString"
+      } else if (input$IDasDate == "MDY") {
+        init_ID_format <<- "MDY"
+        init_data[,1] = mdy(init_data[,1])
+        date_format_string <<- "toLocaleDateString"
+      } else if (input$IDasDate == "MDYHM") {
+        init_ID_format <<- "MDYHM"
+        init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
+        date_format_string <<- "toLocaleString"
+      } else if (input$IDasDate == "Character") {
+        init_ID_format <<- "Character"
+        date_format_string <<- "Character"
+      } else if (input$IDasDate == "Numeric") {
+        init_ID_format <<- "Numeric"
+        date_format_string <<- "Numeric"
+      }
+      
+      current_data(init_data)
+      col_names(colnames(init_data[,-1]))
+      
+      # Filter the response variable to exclude left and right-censored tags
+      exclude_values = c(input$lc_val, input$rc_val)
+      real_responses = na.omit(init_data[!init_data[,response_var()] %in% exclude_values,response_var()])
+      
+      updateNumericInput(session, "LG_binarize_crit_value",value = round(median(real_responses),2),
+                         min=min(real_responses),max=max(real_responses))
+      updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(real_responses),2),
+                         min=min(real_responses),max=max(real_responses))
+      
+      updateNumericInput(session,"lc_replace",value = round(min(real_responses),3))
+      updateNumericInput(session,"rc_replace",value = round(max(real_responses),3))
+      
+      iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
+      iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
+      
+      feat_data = init_data[,3:ncol(init_data)]
+      
+      feats_being_used(colnames(feat_data))
+      feat_names(colnames(feat_data))
+      
+      enable("restore")
+      enable("set_column_props")
+      enable("corr_check")
+      enable("pca_check")
+      enable("run_iso_forest")
+      
+      pca_axes_max(ncol(init_data)-2)
+      
+      updateNumericInput(session, "num_axes",
+                         value = pca_axes_max(),
+                         max = pca_axes_max())
+      
+      updateSelectInput(session,"set_column_props",choices=c("-",col_names()))
+      updateSelectInput(session,"rainplot",choices=c("-",col_names()))
+      updateSelectInput(session,"lineplot",choices=c("-",col_names()))
+      updateSelectInput(session,"scatterx",choices=c("-",col_names()))
+      updateSelectInput(session,"scattery",choices=c("-",col_names()))
+      updateSelectInput(session,"speed",choices=c("-",col_names()))
+      updateSelectInput(session,"direct",choices=c("-",col_names()))
+      
+      current_data_page(1)
+      
+      renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+      
+      clear_modeling(TRUE)
+      
+      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
+      
+    }
+  })
+  
   # Create a temporary SQL database
   temp_db = dbConnect(RSQLite::SQLite(), ":memory:")
   
@@ -1100,119 +1213,6 @@ server= function(input,output,session) {
       clear_modeling(FALSE)
       changed_model(TRUE)
       refresh_trigger(TRUE)
-    }
-  })
-  
-  # Upload excel/csv data file
-  observeEvent(input$file1, ignoreInit = T, {
-    
-    ext = tools::file_ext(input$file1$name)
-    
-    if (ext == "xlsx") {
-      init_data <<- read.xlsx(input$file1$datapath)
-    } else {
-      init_data <<- read.csv(input$file1$datapath,header = TRUE,sep = input$sep)
-    }
-    
-    if (any(duplicated(init_data[,1]))) {
-      showModal(modalDialog(paste("The ID (Column 1) is required to have unique values, but duplicate values were found. Please remedy prior to data importation."),
-                            easyClose = F,footer = div(modalButton('Close'))))
-    } else if (any(is.na(init_data[,1]))) {
-      
-      showModal(modalDialog(paste("The ID (Column 1) has missing values. Please remedy prior to data importation."),
-                            easyClose = F,footer = div(modalButton('Close'))))
-      
-    } else if (any(sapply(data.frame(init_data[,-1]), function(col) !is.numeric(col)))) {
-      
-      showModal(modalDialog(paste("This dataset contains non-numeric data. Please remedy prior to data importation."),
-                            easyClose = F,footer = div(modalButton('Close'))))
-      
-    } else {
-      col_props_temp = hash()
-      
-      for (i in 1:ncol(init_data)) {
-        .set(col_props_temp,keys=colnames(init_data)[i],values=2)
-        #.set(col_props_temp,keys=colnames(init_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA))
-      }
-      
-      init_column_props <<- col_props_temp
-      column_props <<- col_props_temp
-      ignored_rows <<- NULL
-      PCA_dataset(NULL)
-      changed_model(TRUE)
-      
-      if (input$IDasDate == "YMD") {
-        init_ID_format <<- "YMD"
-        init_data[,1] = ymd(init_data[,1])
-        date_format_string <<- "toLocaleDateString"
-      } else if (input$IDasDate == "MDY") {
-        init_ID_format <<- "MDY"
-        init_data[,1] = mdy(init_data[,1])
-        date_format_string <<- "toLocaleDateString"
-      } else if (input$IDasDate == "MDYHM") {
-        init_ID_format <<- "MDYHM"
-        init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
-        date_format_string <<- "toLocaleString"
-      } else if (input$IDasDate == "Character") {
-        init_ID_format <<- "Character"
-        date_format_string <<- "Character"
-      } else if (input$IDasDate == "Numeric") {
-        init_ID_format <<- "Numeric"
-        date_format_string <<- "Numeric"
-      }
-      
-      current_data(init_data)
-      col_names(colnames(init_data[,-1]))
-      
-      # Filter the response variable to exclude left and right-censored tags
-      exclude_values = c(input$lc_val, input$rc_val)
-      real_responses = na.omit(init_data[!init_data[,response_var()] %in% exclude_values,response_var()])
-      
-      updateNumericInput(session, "LG_binarize_crit_value",value = round(median(real_responses),2),
-                         min=min(real_responses),max=max(real_responses))
-      updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(real_responses),2),
-                         min=min(real_responses),max=max(real_responses))
-      
-      updateNumericInput(session,"lc_replace",value = round(min(real_responses),3))
-      updateNumericInput(session,"rc_replace",value = round(max(real_responses),3))
-      
-      iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
-      iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
-      
-      feat_data = init_data[,3:ncol(init_data)]
-      
-      feats_being_used(colnames(feat_data))
-      feat_names(colnames(feat_data))
-      
-      enable("restore")
-      enable("set_column_props")
-      enable("corr_check")
-      enable("pca_check")
-      enable("run_iso_forest")
-      
-      pca_axes_max(ncol(init_data)-2)
-      
-      updateNumericInput(session, "num_axes",
-                         value = pca_axes_max(),
-                         max = pca_axes_max())
-      
-      updateSelectInput(session,"set_column_props",choices=c("-",col_names()))
-      updateSelectInput(session,"rainplot",choices=c("-",col_names()))
-      updateSelectInput(session,"lineplot",choices=c("-",col_names()))
-      updateSelectInput(session,"scatterx",choices=c("-",col_names()))
-      updateSelectInput(session,"scattery",choices=c("-",col_names()))
-      updateSelectInput(session,"speed",choices=c("-",col_names()))
-      updateSelectInput(session,"direct",choices=c("-",col_names()))
-      
-      current_data_page(1)
-      
-      renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
-      
-      clear_modeling(TRUE)
-      
-      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-      updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
-      
     }
   })
   
