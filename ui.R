@@ -1,11 +1,3 @@
-# library(shinyWidgets)
-# library(leaflet)
-# library(shinyjs)
-# library(bsplus)
-# library(bslib)
-# library(plotly)
-# library(shinythemes)
-# 
 source("bs_multi.R")
 source("ui_map.R")
 source("ui_data.R")
@@ -41,10 +33,7 @@ ui = fluidPage(
     
     #scattery+ div>.selectize-input{width: 130px !important;padding: 3px;}
   
-    #pd_feat_ranges th, #pd_feat_ranges td {
-      min-width: 60px !important;
-    }
-    #pd_data th, #pd_data td {
+    #pd_feat_ranges th, #pd_feat_ranges td, #pd_data th, #pd_data td {
       min-width: 60px !important;
     }
     
@@ -120,7 +109,7 @@ ui = fluidPage(
     }
     
     .custom-btn {
-       margin: 2px 2px !important;
+       margin: 3px 3px !important;
        height: 35px !important;
        font-size: 14px !important;
        color: white !important;
@@ -139,7 +128,7 @@ ui = fluidPage(
     }
     
     .custom2-btn {
-       margin: 2px 2px !important;
+       margin: 3px 3px !important;
        height: 35px !important;
        font-size: 14px !important;
        color: black !important;
@@ -183,15 +172,15 @@ ui = fluidPage(
     }
     
     .btn-default.btn-file {
-      height: 42px;
+      height: 40px;
       width: 80px !important;
       padding: 6px;
     }
     
     .shiny-download-link {
       display: flex;
-      justify-content: center; /* Centers horizontally */
-      align-items: center; /* Centers vertically */
+      justify-content: center;
+      align-items: center;
       height: 40px;
       text-align: center;
       padding: 0;
@@ -211,113 +200,34 @@ ui = fluidPage(
       clear: left;
     }
     
-    #sig_digies {
-      width: 75px;
-    }
-    
-    #MC_runs {
+    #MC_runs, num_preds, #conf_bound, #lc_val, #rc_val, #pcr_prop, #model_seed, #test_weight, #testcl_weight, #logist_train_pct {
       width: 100px;
       height: 35px;
     }
     
-    #num_folds {
-      width: 80px;
+    #num_folds, #train_pct, #num_axes, #iso_ndim, #sig_digies, #num_axes_using, #XGBCL_binarize_crit_value, #beach_angle, #LG_binarize_crit_value {
+      width: 85px;
       height: 35px;
     }
     
-    #num_preds {
-      width: 100px;
-      height: 40px;
-    }
-    
-    #conf_bound {
-      width: 100px;
-      height: 40px;
-    }
-    
-    #lc_val {
-      width: 100px;
-      height: 35px;
-    }
-    
-    #rc_val {
-      width: 100px;
-      height: 35px;
-    }
-    
-    #lc_replace {
-      width: 90px;
-      height: 35px;
-    }
-    
-    #rc_replace {
-      width: 90px;
-      height: 35px;
-    }
-    
-    #pcr_prop {
-      width: 100px;
-      height: 35px;
-    }
-    
-    #train_pct {
-      width: 80px;
+    #lc_replace, #rc_replace {
+      width: 95px;
       height: 35px;
     }
     
     #num_axes_using {
-      width: 80px;
-      height: 35px;
       vertical-align: -30px;
     }
     
-    #XGBCL_binarize_crit_value, #beach_angle {
-      width: 90px;
-      height: 35px;
-    }
-    
-    #model_seed {
-      width: 100px;
-      height: 35px;
-    }
-    
-    #EN_pred_stand, #EN_pred_dc, #EN_stand, #EN_dec_crit, #LG_pred_dc, #LG_fit_dc, #XGBCL_pred_dc, #XGBCL_dec_crit, #XGB_pred_stand, #XGB_stand, #XGB_pred_dc, #XGB_dec_crit {
-      width: 120px;
-      height: 35px;
-    }
-    
-    #LG_binarize_crit_value {
-      width: 90px;
-      height: 35px;
-    }
-    
-    #iso_ndim {
-      width: 77px;
-    }
-    
-    #lc_lowval, #lc_upval, #rc_lowval, #rc_upval {
-      width: 110px;
-      height: 35px;
-    }
-    
-    #test_weight, #testcl_weight {
-      width: 100px;
-      height: 32px;
-    }
-    
-    #logist_train_pct {
-      width: 100px;
+    #EN_pred_stand, #lc_lowval, #lc_upval, #LG_eval, #rc_lowval, #rc_upval, #XGBCL_eval, #EN_pred_dc, #EN_stand, #EN_dec_crit, #LG_pred_dc, #LG_fit_dc, #XGBCL_pred_dc, #XGBCL_dec_crit, #XGB_pred_stand, #XGB_stand, #XGB_pred_dc, #XGB_dec_crit {
+      width: 115px;
       height: 35px;
     }
     
     #LG_eval {
-      width: 125px;
-      height: 40px;
+      padding: 0px 0px;
     }
     
-    #XGBCL_eval {
-      width: 125px;
-    }
   ")),
   
   tags$script(HTML(

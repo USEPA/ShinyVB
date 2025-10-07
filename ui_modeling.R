@@ -67,8 +67,8 @@ ModelingPanel = sidebarLayout(
         content = card(
           fluidRow(column(12, switchInput("XGBCL_standard", label="Standardize Features?", labelWidth=125, value = FALSE, onLabel = "Yes", offLabel = "No", size = "small"))),
           fluidRow(column(12, switchInput("XGBCL_binarize", label="Binarize Response?", labelWidth=125, value = TRUE, onLabel = "Yes", offLabel = "No", size = "small"))),
-          fluidRow(column(6,numericInput("XGBCL_binarize_crit_value", label = "Threshold", value = 2,step=0.25)),
-                   column(6,selectInput("XGBCL_eval",label = "Evaluation Metric",selected ="logloss",choices = c("logloss","auc")))),
+          fluidRow(column(5,numericInput("XGBCL_binarize_crit_value", label = "Threshold", value = 2,step=0.25)),
+                   column(7,selectInput("XGBCL_eval",label = "Evaluation Metric",selected ="logloss",choices = c("logloss","auc")))),
           fluidRow(column(5,actionButton("XGBCL_params", "HP Values",class = "btn-default custom2-btn", style = 'width:90px !important; padding:2px !important;')),
                    column(7,actionButton("XGBCL_optimize_HP", "HP Optimization",class = "btn-default custom2-btn", style = 'width:130px !important; padding:2px !important;'))),
           # fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 2px; margin-bottom: 2px;")),
