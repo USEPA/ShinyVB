@@ -5,7 +5,7 @@ DataPanel = sidebarLayout(
     tags$style(type = "text/css", "#datasidepanel {height: calc(100vh - 70px) !important; width: 385px !important;}"),
     
     fluidRow(column(6,inputPanel(selectInput("IDasDate",label = "ID/Date Format",selected ="MDY",choices = c("MDY","YMD","MDYHM","Numeric","Character")))),
-             column(6,disabled(actionButton("restore", "Restore Inputs", class = "btn-default custom-btn", style='width: 120px; padding:8px; vertical-align: -33px;')))),
+             column(6,disabled(actionButton("restore", "Restore Inputs", class = "btn-default custom-btn", style='width: 120px; padding:5px; vertical-align: -33px;')))),
     fluidRow(column(12,radioButtons(inline=T,"sep","Separator",choices = c("Comma" = ",","Semicolon" = ";","Space" = " ","Tab" = "\t"),selected = ","))),
     
     div(fileInput("file1", "Select your data file", buttonLabel = "Browse",accept = c("text/csv",
@@ -16,8 +16,8 @@ DataPanel = sidebarLayout(
     fluidRow(column(6,disabled(inputPanel(selectInput("set_column_props",label = "Column Properties",selected ="-",choices = c("-"))))),
              column(6,radioButtons(inline=F,"select_choice",label="",choices = c("Change Response"="Change_Response","Edit Cells"="Edit_Cells",
                               "[Dis/En]able Rows" = "D/E_Rows"),selected = "Change_Response"))),
-    fluidRow(column(6,disabled(actionButton("ignore_rows", "Disable Selected Rows", class = "btn-default custom-btn",  style='padding: 6px;'))),
-             column(6,disabled(actionButton("enable_rows", "Enable Selected Rows", class = "btn-default custom-btn",  style='padding: 6px;')))),
+    fluidRow(column(6,disabled(actionButton("ignore_rows", "Disable Selected Rows", class = "btn-default custom-btn",  style='padding: 5px;'))),
+             column(6,disabled(actionButton("enable_rows", "Enable Selected Rows", class = "btn-default custom-btn",  style='padding: 5px;')))),
 
     
     bs_accordion(id="plotting") %>%
@@ -68,8 +68,9 @@ DataPanel = sidebarLayout(
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
-      fluidRow(column(12,downloadButton("save_project", "Save Project File"))),
-      fluidRow(column(12,fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData")))
+      fluidRow(column(12,actionButton("save_project_data", "Save Project File"))),
+      fluidRow(column(12,fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData"))),
+
   ),
   
   mainPanel = mainPanel(width=9, id = "data_main_panel",

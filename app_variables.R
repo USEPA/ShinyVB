@@ -41,7 +41,7 @@ current_data_page = reactiveVal(1)
 current_pred_page = reactiveVal(1)
 
 # General non-reactive variables
-init_data = data.frame()
+init_data = NULL
 init_column_props = hash()
 column_props = hash()
 init_ID_format = NULL

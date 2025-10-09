@@ -109,7 +109,7 @@ ui = fluidPage(
     }
     
     .custom-btn {
-       margin: 3px 3px !important;
+       margin: 5px 5px !important;
        height: 35px !important;
        font-size: 14px !important;
        color: white !important;
@@ -128,7 +128,7 @@ ui = fluidPage(
     }
     
     .custom2-btn {
-       margin: 3px 3px !important;
+       margin: 5px 5px !important;
        height: 35px !important;
        font-size: 14px !important;
        color: black !important;
@@ -174,7 +174,7 @@ ui = fluidPage(
     .btn-default.btn-file {
       height: 40px;
       width: 80px !important;
-      padding: 6px;
+      padding: 5px;
     }
     
     .shiny-download-link {
@@ -200,7 +200,7 @@ ui = fluidPage(
       clear: left;
     }
     
-    #MC_runs, num_preds, #conf_bound, #lc_val, #rc_val, #pcr_prop, #model_seed, #test_weight, #testcl_weight, #logist_train_pct {
+    #MC_runs, #num_preds, #conf_bound, #lc_val, #rc_val, #pcr_prop, #model_seed, #test_weight, #testcl_weight, #logist_train_pct {
       width: 100px;
       height: 35px;
     }
@@ -232,6 +232,15 @@ ui = fluidPage(
   
   tags$script(HTML(
     
+    "Shiny.addCustomMessageHandler('download', function(message) {
+      var link = document.createElement('a');
+      link.href = message.url;
+      link.download = message.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });",
+    
     "$(document).ready(function() {
         $('#pd_data').on('focus', 'td', function(e) {
           var cell = $(this);
@@ -252,8 +261,7 @@ ui = fluidPage(
             }
           }
         });
-      });
-    ",
+      });",
     
     "Shiny.addCustomMessageHandler('disableTabs', function(message) {
         if (message.action === 'disable') {

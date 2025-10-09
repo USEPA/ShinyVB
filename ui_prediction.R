@@ -23,10 +23,10 @@ PredictionPanel = sidebarLayout(
                         3) File MUST contain columns with names EXACTLY equal to any features present in the chosen model<br><br>
                         4) Any ordering of feature columns is OK; all unmatched feature columns will be ignored")),
   fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;")),
-  fluidRow(column(12,downloadButton("save_project", "Save Project File", style = "margin-bottom:8px;"))),
-  fluidRow(column(12,div(downloadButton("save_prediction", "Save Prediction File", style = "margin-bottom:8px;")))),
-  fluidRow(column(12,div(fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData"),
-                               style="font-family:Arial; width: 350px;")))),
+  fluidRow(column(12,actionButton("save_project_prediction", "Save Project File", style = "margin-bottom:8px;"))),
+  fluidRow(column(12,downloadButton("save_prediction", "Save Prediction File", style = "margin-bottom:8px;"))),
+  fluidRow(column(12,fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData"),
+                               style="font-family:Arial; width: 350px;"))),
   
   mainPanel = mainPanel(width=9, id = "prediction_main_panel",
                     fluidRow(column(12,uiOutput("model_text"))),

@@ -361,117 +361,145 @@ server= function(input,output,session) {
   output$beach_orient = renderText({bo()})
   
   # Save Project File
-  output$save_project = downloadHandler(filename = function() {paste("Project_File.RData")}, content = function(file) {
+  observeEvent(c(input$save_project_data,input$save_project_modeling,input$save_project_prediction), ignoreInit=T, {
     
-    save_list = list(
-      type = "Project",
-      Version = version,
-      temp_db = temp_db,
-      bo = bo(),
-      current_data = current_data(),
-      response_var = response_var(),
-      col_names = col_names(),
-      feat_names = feat_names(),
-      feats_being_used = feats_being_used(),
-      fs_feats_used = fs_feats_used(),
-      init_data = init_data,
-      ignored_rows = ignored_rows,
-      init_ID_format = init_ID_format,
-      date_format_string = date_format_string,
-      saved_lc_val = input$lc_val,
-      saved_rc_val = input$rc_val,
-      saved_num_axes = input$num_axes,
-      init_column_props = init_column_props,
-      column_props = column_props,
-      PCA_scaling_mean = reactiveVal(),
-      PCA_scaling_sd = reactiveVal(),
-      PCA_dataset = PCA_dataset(),
-      PCA_summary_df = PCA_summary_df(),
-      PCA_coefficients = PCA_coefficients(),
-      pca_axes_max = pca_axes_max(),
-      pca_axes = pca_axes(),
-      pcax_being_used = pcax_being_used(),
-      fs_pcax_used = fs_pcax_used(),
-      final_model_PCA = final_model_PCA(),
+    if (is.null(init_data)) {
+      showModal(modalDialog(
+        title = NULL,
+        "No data have been imported yet.",
+        footer = NULL,
+        easyClose = TRUE
+      ))
       
-      LG_pred_results = LG_pred_results(),
-      LG_pred_coeffs = LG_pred_coeffs(),
-      LG_pred_confuse_results = LG_pred_confuse_results(),
-      LG_pred_scat_dat = LG_pred_scat_dat(),
-      LG_pred_standardize = LG_pred_standardize(),
-      LG_pred_thresh = LG_pred_thresh(),
-      LG_results = LG_results(),
-      LG_coeffs = LG_coeffs(),
-      LG_confuse_results = LG_confuse_results(),
-      LG_scat_dat = LG_scat_dat(),
-      LG_model = LG_model,
-      LG_thresh = LG_thresh(),
-      LG_crit_prob = LG_crit_prob(),
-      LG_standardize = LG_pred_standardize(),
-      LG_model_PCA = LG_model_PCA(),
-      LG_final_features = LG_final_features(),
-      LG_pred_data = LG_pred_data(),
+    } else {
+
+      tempFile = tempfile(fileext = ".RData")
       
-      XGBCL_pred_results = XGBCL_pred_results(),
-      XGBCL_pred_coeffs = XGBCL_pred_coeffs(),
-      XGBCL_pred_confuse_results = XGBCL_pred_confuse_results(),
-      XGBCL_pred_scat_dat = XGBCL_pred_scat_dat(),
-      XGBCL_pred_standardize = XGBCL_pred_standardize(),
-      XGBCL_pred_thresh = XGBCL_pred_thresh(),
-      XGBCL_selection_results = XGBCL_selection_results(),
-      XGBCL_results = XGBCL_results(),
-      XGBCL_coeffs = XGBCL_coeffs(),
-      XGBCL_confuse_results = XGBCL_confuse_results(),
-      XGBCL_scat_dat = XGBCL_scat_dat(),
-      XGBCL_model = XGBCL_model,
-      XGBCL_thresh = XGBCL_thresh(),
-      XGBCL_crit_prob = XGBCL_crit_prob(),
-      XGBCL_standardize = XGBCL_standardize(),
-      XGBCL_model_PCA = XGBCL_model_PCA(),
-      XGBCL_final_features = XGBCL_final_features(),
-      XGBCL_pred_data = XGBCL_pred_data(),
-      XGBCL_final_data = XGBCL_final_data(),
-      Optimal_CLHP = Optimal_CLHP,
+      save_list = list(
+        type = "Project",
+        Version = version,
+        temp_db = temp_db,
+        bo = bo(),
+        current_data = current_data(),
+        response_var = response_var(),
+        col_names = col_names(),
+        feat_names = feat_names(),
+        feats_being_used = feats_being_used(),
+        fs_feats_used = fs_feats_used(),
+        init_data = init_data,
+        ignored_rows = ignored_rows,
+        init_ID_format = init_ID_format,
+        date_format_string = date_format_string,
+        saved_lc_val = input$lc_val,
+        saved_rc_val = input$rc_val,
+        saved_num_axes = input$num_axes,
+        init_column_props = init_column_props,
+        column_props = column_props,
+        PCA_scaling_mean = reactiveVal(),
+        PCA_scaling_sd = reactiveVal(),
+        PCA_dataset = PCA_dataset(),
+        PCA_summary_df = PCA_summary_df(),
+        PCA_coefficients = PCA_coefficients(),
+        pca_axes_max = pca_axes_max(),
+        pca_axes = pca_axes(),
+        pcax_being_used = pcax_being_used(),
+        fs_pcax_used = fs_pcax_used(),
+        final_model_PCA = final_model_PCA(),
+        
+        LG_pred_results = LG_pred_results(),
+        LG_pred_coeffs = LG_pred_coeffs(),
+        LG_pred_confuse_results = LG_pred_confuse_results(),
+        LG_pred_scat_dat = LG_pred_scat_dat(),
+        LG_pred_standardize = LG_pred_standardize(),
+        LG_pred_thresh = LG_pred_thresh(),
+        LG_results = LG_results(),
+        LG_coeffs = LG_coeffs(),
+        LG_confuse_results = LG_confuse_results(),
+        LG_scat_dat = LG_scat_dat(),
+        LG_model = LG_model,
+        LG_thresh = LG_thresh(),
+        LG_crit_prob = LG_crit_prob(),
+        LG_standardize = LG_pred_standardize(),
+        LG_model_PCA = LG_model_PCA(),
+        LG_final_features = LG_final_features(),
+        LG_pred_data = LG_pred_data(),
+        
+        XGBCL_pred_results = XGBCL_pred_results(),
+        XGBCL_pred_coeffs = XGBCL_pred_coeffs(),
+        XGBCL_pred_confuse_results = XGBCL_pred_confuse_results(),
+        XGBCL_pred_scat_dat = XGBCL_pred_scat_dat(),
+        XGBCL_pred_standardize = XGBCL_pred_standardize(),
+        XGBCL_pred_thresh = XGBCL_pred_thresh(),
+        XGBCL_selection_results = XGBCL_selection_results(),
+        XGBCL_results = XGBCL_results(),
+        XGBCL_coeffs = XGBCL_coeffs(),
+        XGBCL_confuse_results = XGBCL_confuse_results(),
+        XGBCL_scat_dat = XGBCL_scat_dat(),
+        XGBCL_model = XGBCL_model,
+        XGBCL_thresh = XGBCL_thresh(),
+        XGBCL_crit_prob = XGBCL_crit_prob(),
+        XGBCL_standardize = XGBCL_standardize(),
+        XGBCL_model_PCA = XGBCL_model_PCA(),
+        XGBCL_final_features = XGBCL_final_features(),
+        XGBCL_pred_data = XGBCL_pred_data(),
+        XGBCL_final_data = XGBCL_final_data(),
+        Optimal_CLHP = Optimal_CLHP,
+        
+        XGB_pred_results = XGB_pred_results(),
+        XGB_pred_coeffs = XGB_pred_coeffs(),
+        XGB_pred_confuse_results = XGB_pred_confuse_results(),
+        XGB_pred_scat_dat = XGB_pred_scat_dat(),
+        XGB_pred_standardize = XGB_pred_standardize(),
+        XGB_selection_results = XGB_selection_results(),
+        XGB_results = XGB_results(),
+        XGB_coeffs = XGB_coeffs(),
+        XGB_confuse_results = XGB_confuse_results(),
+        XGB_stand = input$XGB_stand,
+        XGB_dec_crit = input$XGB_dec_crit,
+        XGB_scat_dat = XGB_scat_dat(),
+        XGB_model = XGB_model,
+        XGB_standardize = XGB_standardize(),
+        XGB_model_PCA = XGB_model_PCA(),
+        XGB_final_features = XGB_final_features(),
+        XGB_pred_data = XGB_pred_data(),
+        XGB_final_data = XGB_final_data(),
+        Optimal_HP = Optimal_HP,
+        
+        EN_pred_results = EN_pred_results(),
+        EN_pred_coeffs = EN_pred_coeffs(),
+        EN_pred_confuse_results = EN_pred_confuse_results(),
+        EN_pred_scat_dat = EN_pred_scat_dat(),
+        EN_pred_standardize = EN_pred_standardize(),
+        EN_results = EN_results(),
+        EN_coeffs = EN_coeffs(),
+        EN_confuse_results = EN_confuse_results(),
+        EN_stand = input$EN_stand,
+        EN_dec_crit = input$EN_dec_crit,
+        EN_scat_dat = EN_scat_dat(),
+        EN_model = EN_model,
+        EN_standardize = EN_standardize(),
+        EN_model_PCA = EN_model_PCA(),
+        EN_final_features = EN_final_features(),
+        EN_pred_data = EN_pred_data()
+      )
       
-      XGB_pred_results = XGB_pred_results(),
-      XGB_pred_coeffs = XGB_pred_coeffs(),
-      XGB_pred_confuse_results = XGB_pred_confuse_results(),
-      XGB_pred_scat_dat = XGB_pred_scat_dat(),
-      XGB_pred_standardize = XGB_pred_standardize(),
-      XGB_selection_results = XGB_selection_results(),
-      XGB_results = XGB_results(),
-      XGB_coeffs = XGB_coeffs(),
-      XGB_confuse_results = XGB_confuse_results(),
-      XGB_stand = input$XGB_stand,
-      XGB_dec_crit = input$XGB_dec_crit,
-      XGB_scat_dat = XGB_scat_dat(),
-      XGB_model = XGB_model,
-      XGB_standardize = XGB_standardize(),
-      XGB_model_PCA = XGB_model_PCA(),
-      XGB_final_features = XGB_final_features(),
-      XGB_pred_data = XGB_pred_data(),
-      XGB_final_data = XGB_final_data(),
-      Optimal_HP = Optimal_HP,
+      save(save_list, file = tempFile)
       
-      EN_pred_results = EN_pred_results(),
-      EN_pred_coeffs = EN_pred_coeffs(),
-      EN_pred_confuse_results = EN_pred_confuse_results(),
-      EN_pred_scat_dat = EN_pred_scat_dat(),
-      EN_pred_standardize = EN_pred_standardize(),
-      EN_results = EN_results(),
-      EN_coeffs = EN_coeffs(),
-      EN_confuse_results = EN_confuse_results(),
-      EN_stand = input$EN_stand,
-      EN_dec_crit = input$EN_dec_crit,
-      EN_scat_dat = EN_scat_dat(),
-      EN_model = EN_model,
-      EN_standardize = EN_standardize(),
-      EN_model_PCA = EN_model_PCA(),
-      EN_final_features = EN_final_features(),
-      EN_pred_data = EN_pred_data()
-    )
-    
-    save(save_list, file = file)
+      resourcePath = paste0("download_", basename(tempFile))
+      addResourcePath(resourcePath, dirname(tempFile))
+      
+      url = paste0(
+        session$clientData$url_protocol, "//",
+        session$clientData$url_hostname, ":",
+        session$clientData$url_port, "/",
+        resourcePath, "/", basename(tempFile)
+      )
+      
+      session$sendCustomMessage(type = 'download', list(
+        filename = "Project_File.RData",
+        url = url
+      ))
+    }
   })
   
   # Save Prediction File
@@ -769,6 +797,7 @@ server= function(input,output,session) {
           enable("corr_check")
           enable("pca_check")
           enable("run_iso_forest")
+          enable("save_project")
           
           updateNumericInput(session, "num_axes",value = pca_axes_max(),max = pca_axes_max())
           updateSelectInput(session,"set_column_props",choices=c("-",col_names()))
@@ -1705,6 +1734,7 @@ server= function(input,output,session) {
         
       } else {
         
+        shinyjs::enable("save_project")
         updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
         
         if (input$use_pca_data) {

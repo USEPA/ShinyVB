@@ -107,7 +107,7 @@ ModelingPanel = sidebarLayout(
       
       bs_accordion_multi(multi=FALSE,open=c()),
   
-  fluidRow(column(12,downloadButton("save_project", "Save Project File"))),
+  fluidRow(column(12,actionButton("save_project_modeling", "Save Project File", style = "margin-bottom:8px;"))),
   fluidRow(column(12,fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData")))),
   
   mainPanel = mainPanel(
