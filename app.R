@@ -4881,7 +4881,7 @@ server= function(input,output,session) {
       
       if (final_model_PCA()) {
         
-        output$pca_model_text = renderText({HTML("PCA axes used as features.")})
+        output$pca_model_text = renderText({HTML("PCA axes used as features+")})
         
       } else {
         
@@ -4916,15 +4916,15 @@ server= function(input,output,session) {
       pred_model_features(model_features)
       
       if (no_resids()) {
-        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; run a prediction model for confidence intervals</div>")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS: Run a prediction model for confidence intervals</div>")})
       } else if (standard_mismatch()) {
-        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; Prediction/Fitted models use different feature standardizations</div>")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS: Prediction/Fitted models use different feature standardizations</div>")})
       } else if (feature_mismatch()) {
-        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; Prediction/Fitted models use different features</div>")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS: Prediction/Fitted models use different features</div>")})
       } else if (thresh_mismatch()) {
-        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; Prediction/Fitted models use different binarize thresholds</div>")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS: Prediction/Fitted models use different binarize thresholds</div>")})
       } else if (is.null(resids)) {
-        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS; run a prediction model for confidence intervals</div>")})
+        output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS: Run a prediction model for confidence intervals</div>")})
       } else {
         output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>PREDICTION RESIDUALS AVAILABLE for confidence interval calculations</div>")})
       }
@@ -4947,6 +4947,23 @@ server= function(input,output,session) {
       model_feature_ranges(feature_ranges)
       
       renderpreddata(pred_data(),column_props,current_pred_page(),init_ID_format,output)
+      
+      if (input$model_choice == "Logistic_Regression") {
+        
+        LG_pred_data(pred_data())
+        
+      } else if (input$model_choice == "XGB_Classifier") {
+        
+        XGBCL_pred_data(pred_data())
+        
+      } else if (input$model_choice == "XGBoost") {
+        
+        XGB_pred_data(pred_data())
+        
+      } else if (input$model_choice == "Elastic_Net") {
+        
+        EN_pred_data(pred_data())
+      }
       
       output$pd_feat_ranges = DT::renderDataTable(server = T, {
         datatable(

@@ -109,7 +109,7 @@ ui = fluidPage(
     }
     
     .custom-btn {
-       margin: 5px 5px !important;
+       padding: 5px !important;
        height: 35px !important;
        font-size: 14px !important;
        color: white !important;
