@@ -29,7 +29,7 @@ DataPanel = sidebarLayout(
         fluidRow(column(12,disabled(actionButton("corr_check", "Correlations",class = "btn-default custom2-btn", style = 'width:150px !important; padding:2px !important;')))),
         fluidRow(column(6,disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",  style='width: 150px; vertical-align: -38px;'))),
                  column(6,class="align-center", numericInput("num_axes", "# Axes", value=2, min=2,max=20,step=1))),
-        fluidRow(column(6,disabled(actionButton("run_iso_forest","Outliers: IsoForest", class = "btn-default custom-btn",  style='width: 150px; align: left; vertical-align: -38px;'))),
+        fluidRow(column(6,disabled(actionButton("run_iso_forest","IsoForest Leverage", class = "btn-default custom-btn",  style='width: 150px; align: left; vertical-align: -38px;'))),
                  column(6,numericInput("iso_ndim", "# Dimensions", value=2, min=1,max=10,step=1))))) %>%
       
       bs_append (title="Plotting", content = card(
@@ -81,8 +81,8 @@ DataPanel = sidebarLayout(
                                              fluidRow(column(12,DT::dataTableOutput('PCA_coeffs')),
                                                       column(12,DT::dataTableOutput('PCA_summary')))),
                                     tabPanel("PCA Data Table",DT::dataTableOutput('PCAdata'),tags$style(type = "text/css", "#pcatables {height: calc(100vh - 70px) !important;}")),
-                                    tabPanel("IsoForest Outliers",DT::dataTableOutput('iso_outliers'),
-                                             tags$style(type = "text/css", "#iso_outliers {height: calc(100vh - 70px) !important;}")),
+                                    tabPanel("IsoForest Leverage",DT::dataTableOutput('iso_leverage'),
+                                             tags$style(type = "text/css", "#iso_leverage {height: calc(100vh - 70px) !important;}")),
                                     tabPanel("Correlations",plotOutput("corrplot",width="100%",height="700px")),
                                     tabPanel("Raincloud",plotOutput("rainplot", height = "700px", width="100%")),
                                     tabPanel("Line Plot",plotlyOutput("lineplott", height="700px",width="100%")),

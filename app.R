@@ -1069,8 +1069,8 @@ server= function(input,output,session) {
     if (input$data_tabs == "Data Table") {
       add_in = input$data_rows_selected[-1]
     }
-    if (input$data_tabs == "IsoForest Outliers") {
-      add_in = input$iso_outliers_rows_selected
+    if (input$data_tabs == "IsoForest Leverage") {
+      add_in = input$iso_leverage_rows_selected
     }
     
     if(identical(unique(append(ignored_rows,add_in)),integer(0))) {
@@ -1086,8 +1086,8 @@ server= function(input,output,session) {
     if (input$data_tabs == "Data Table") {
       add_back = input$data_rows_selected[-1]
     }
-    if (input$data_tabs == "IsoForest Outliers") {
-      add_back = input$iso_outliers_rows_selected
+    if (input$data_tabs == "IsoForest Leverage") {
+      add_back = input$iso_leverage_rows_selected
     }
     
     if(identical(ignored_rows[!ignored_rows %in% add_back],integer(0))) {
@@ -1276,7 +1276,7 @@ server= function(input,output,session) {
     
   })
   
-  # Isolation Forest analysis for outlier detection
+  # Isolation Forest analysis for high leverage detection
   observeEvent(input$run_iso_forest, ignoreInit = T, {
     
     req(iv$is_valid())
@@ -1346,13 +1346,13 @@ server= function(input,output,session) {
     
     iso_results[,6] = round((iso_results[,2] * iso_results[,3] * iso_results[,4] * iso_results[,5])^0.25 - 0.7071,3)
     
-    output$iso_outliers = DT::renderDataTable(server = T, {data = datatable(iso_results,rownames = F,selection = list(selection = "multiple",
+    output$iso_leverage = DT::renderDataTable(server = T, {data = datatable(iso_results,rownames = F,selection = list(selection = "multiple",
                       selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
                       buttons = c('copy', 'csv', 'excel'),pageLength = num_rows_per_page,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
                       initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-    updateTabsetPanel(session, inputId = 'data_tabs', selected = 'IsoForest Outliers')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = 'IsoForest Leverage')
     
   })
   
