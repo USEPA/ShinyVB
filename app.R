@@ -41,11 +41,11 @@ library(DT)
 
 plan(multicore)
 
+source("global_functions.R")
 source("ui.R")
 source("app_variables.R")
 source("createAO.R")
 source("confusion.R")
-source("global_functions.R")
 source("input_validation.R")
 source("lineplot.R")
 source("map_click.R")
@@ -89,6 +89,21 @@ server= function(input,output,session) {
   iv = InputValidator$new()
   add_validation_rules(iv)
   iv$enable()
+
+  # Prediction tab text directions
+  output$directions = renderUI({
+    req(bo())
+    tagList(
+      tags$h5("IMPORTANT INFO:"),
+      tags$ul(
+        style = "list-style-type: disc; padding-left: 1.2em;",
+        tags$li("Left-most columns of imported data file MUST be 1) Unique ID and 2) Response Variable. These 2 columns can have any name and can contain missing data."),
+        tags$li("Imported data file MUST include column names EXACTLY equal to the name of features present in the chosen model."),
+        tags$li("Ordering of feature columns in the imported data file not important; all unmatched feature columns will be ignored."),
+        tags$li("If the chosen model contains A/O components, enter magnitude/direction data; the needed A/O components will be computed by VB."),
+        tags$li("If the chosen model contains transformed features, enter only the raw, untransformed feature data; the needed transform will be done by VB.")
+        ))
+  })
   
   # Upload excel/csv data file
   observeEvent(input$file1, ignoreInit = T, {
@@ -151,6 +166,8 @@ server= function(input,output,session) {
       current_data(init_data)
       col_names(colnames(init_data[,-1]))
       
+      clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = TRUE)
+      
       # Filter the response variable to exclude left and right-censored tags
       exclude_values = c(input$lc_val, input$rc_val)
       real_responses = na.omit(init_data[!init_data[,response_var()] %in% exclude_values,response_var()])
@@ -174,6 +191,8 @@ server= function(input,output,session) {
       enable("restore")
       enable("set_column_props")
       enable("corr_check")
+      enable("transforms")
+      enable("interacts")
       enable("pca_check")
       enable("run_iso_forest")
       
@@ -196,7 +215,7 @@ server= function(input,output,session) {
       renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
       
       clear_modeling(TRUE)
-      
+
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = "Data Table")
       
@@ -313,7 +332,10 @@ server= function(input,output,session) {
   # Manually change beach orientation
   observeEvent(input$beach_angle, ignoreInit = T, {
     bo(input$beach_angle)
-    output$beach_orient = renderText({bo()})
+    output$beach_orient = renderText({
+      req(bo())
+      sprintf("%d", as.integer(round(bo(), 0)))
+    })
   })
   
   # Other map stuff
@@ -358,7 +380,10 @@ server= function(input,output,session) {
     }
   })
   
-  output$beach_orient = renderText({bo()})
+  output$beach_orient = renderText({
+    req(bo())
+    sprintf("%d", as.integer(round(bo(), 0)))
+  })
   
   # Save Project File
   observeEvent(c(input$save_project_data,input$save_project_modeling,input$save_project_prediction), ignoreInit=T, {
@@ -395,8 +420,8 @@ server= function(input,output,session) {
         saved_num_axes = input$num_axes,
         init_column_props = init_column_props,
         column_props = column_props,
-        PCA_scaling_mean = reactiveVal(),
-        PCA_scaling_sd = reactiveVal(),
+        PCA_scaling_mean = PCA_scaling_mean(),
+        PCA_scaling_sd   = PCA_scaling_sd(),
         PCA_dataset = PCA_dataset(),
         PCA_summary_df = PCA_summary_df(),
         PCA_coefficients = PCA_coefficients(),
@@ -405,6 +430,9 @@ server= function(input,output,session) {
         pcax_being_used = pcax_being_used(),
         fs_pcax_used = fs_pcax_used(),
         final_model_PCA = final_model_PCA(),
+        rv_ao_map = shiny::reactiveValuesToList(rv_ao_map, all.names = TRUE),
+        rv_pred = { p <- shiny::reactiveValuesToList(rv_pred, all.names = TRUE); p$pending <- NULL; p },
+        poly_coeffs = as.list(POLY_COEFFS),
         
         LG_pred_results = LG_pred_results(),
         LG_pred_coeffs = LG_pred_coeffs(),
@@ -525,8 +553,8 @@ server= function(input,output,session) {
       saved_num_axes = input$num_axes,
       init_column_props = init_column_props,
       column_props = column_props,
-      PCA_scaling_mean = reactiveVal(),
-      PCA_scaling_sd = reactiveVal(),
+      PCA_scaling_mean = PCA_scaling_mean(),
+      PCA_scaling_sd   = PCA_scaling_sd(),
       PCA_dataset = PCA_dataset(),
       PCA_summary_df = PCA_summary_df(),
       PCA_coefficients = PCA_coefficients(),
@@ -535,6 +563,9 @@ server= function(input,output,session) {
       pcax_being_used = pcax_being_used(),
       fs_pcax_used = fs_pcax_used(),
       final_model_PCA = final_model_PCA(),
+      rv_ao_map = shiny::reactiveValuesToList(rv_ao_map, all.names = TRUE),
+      rv_pred = { p <- shiny::reactiveValuesToList(rv_pred, all.names = TRUE); p$pending <- NULL; p },
+      poly_coeffs = as.list(POLY_COEFFS),
       
       LG_pred_results = LG_pred_results(),
       LG_pred_coeffs = LG_pred_coeffs(),
@@ -617,118 +648,149 @@ server= function(input,output,session) {
   })
   
   # Load project/prediction file
-  observeEvent(input$load_file, ignoreInit = T, {
+  observeEvent(input$load_file, ignoreInit = TRUE, {
+    req(input$load_file)
     
-    req(!is.null(input$load_file))
-    
-    if (!is.null(input$load_file)) {
-      load_element = input$load_file
-    }
-    
-    temp_env = new.env()
+    load_element <- input$load_file
+    temp_env <- new.env()
     load(load_element$datapath, envir = temp_env)
     
-    if (temp_env$save_list$Version == "1.0.0" && exists("save_list", envir = temp_env)) {
+    if (!exists("save_list", envir = temp_env)) {
+      showModal(modalDialog(title = NULL, "Invalid project file.", footer = NULL, easyClose = TRUE))
+      return()
+    }
+    
+    sl <- temp_env$save_list
+    
+    if (!identical(sl$Version, "1.0.0")) {
+      showModal(modalDialog(title = NULL, "Unsupported project file version.", footer = NULL, easyClose = TRUE))
+      return()
+    }
+    
+    # Restore polynomial coefficients (remove duplicate block using save_list)
+    if (!is.null(sl$poly_coeffs)) {
+      rm(list = ls(envir = POLY_COEFFS), envir = POLY_COEFFS)
+      for (feat in names(sl$poly_coeffs)) {
+        vals <- sl$poly_coeffs[[feat]]
+        if (is.numeric(vals) && length(vals) == 3L) {
+          set_poly_coeffs(feat, vals[1], vals[2], vals[3])
+        }
+      }
+    }
+    
+      temp_db <<- sl$temp_db
+      bo(sl$bo)
+      current_data(sl$current_data)
+      response_var(sl$response_var)
+      col_names(sl$col_names)
+      feat_names(sl$feat_names)
+      feats_being_used(sl$feats_being_used)
+      fs_feats_used(sl$fs_feats_used)
+      init_data <<- sl$init_data
+      ignored_rows <<- sl$ignored_rows
+      init_ID_format <<- sl$init_ID_format
+      date_format_string <<- sl$date_format_string
+      saved_lc_val = sl$saved_lc_val
+      saved_rc_val = sl$saved_rc_val
+      saved_num_axes = sl$saved_num_axes
+      init_column_props <<- sl$init_column_props
+      column_props <<- sl$column_props
+      PCA_scaling_mean(sl$PCA_scaling_mean)
+      PCA_scaling_sd(sl$PCA_scaling_sd)
+      PCA_dataset(sl$PCA_dataset)
+      PCA_summary_df(sl$PCA_summary_df)
+      PCA_coefficients(sl$PCA_coefficients)
+      pca_axes_max(sl$pca_axes_max)
+      pca_axes(sl$pca_axes)
+      pcax_being_used(sl$pcax_being_used)
+      fs_pcax_used(sl$fs_pcax_used)
+      final_model_PCA(sl$final_model_PCA)
       
-      temp_db <<- temp_env$save_list$temp_db
-      bo(temp_env$save_list$bo)
-      current_data(temp_env$save_list$current_data)
-      response_var(temp_env$save_list$response_var)
-      col_names(temp_env$save_list$col_names)
-      feat_names(temp_env$save_list$feat_names)
-      feats_being_used(temp_env$save_list$feats_being_used)
-      fs_feats_used(temp_env$save_list$fs_feats_used)
-      init_data <<- temp_env$save_list$init_data
-      ignored_rows <<- temp_env$save_list$ignored_rows
-      init_ID_format <<- temp_env$save_list$init_ID_format
-      date_format_string <<- temp_env$save_list$date_format_string
-      saved_lc_val = temp_env$save_list$saved_lc_val
-      saved_rc_val = temp_env$save_list$saved_rc_val
-      saved_num_axes = temp_env$save_list$saved_num_axes
-      init_column_props <<- temp_env$save_list$init_column_props
-      column_props <<- temp_env$save_list$column_props
-      PCA_scaling_mean(temp_env$save_list$PCA_scaling_mean)
-      PCA_scaling_sd(temp_env$save_list$PCA_scaling_sd)
-      PCA_dataset(temp_env$save_list$PCA_dataset)
-      PCA_summary_df(temp_env$save_list$PCA_summary_df)
-      PCA_coefficients(temp_env$save_list$PCA_coefficients)
-      pca_axes_max(temp_env$save_list$pca_axes_max)
-      pca_axes(temp_env$save_list$pca_axes)
-      pcax_being_used(temp_env$save_list$pcax_being_used)
-      fs_pcax_used(temp_env$save_list$fs_pcax_used)
-      final_model_PCA(temp_env$save_list$final_model_PCA)
+      if (!is.null(sl$rv_pred) && is.list(sl$rv_pred)) {
+        pred_state = sl$rv_pred
+        for (nm in names(pred_state)) {
+          rv_pred[[nm]] = pred_state[[nm]]
+        }
+      }
       
-      LG_pred_results(temp_env$save_list$LG_pred_results)
-      LG_pred_coeffs(temp_env$save_list$LG_pred_coeffs)
-      LG_pred_confuse_results(temp_env$save_list$LG_pred_confuse_results)
-      LG_pred_scat_dat(temp_env$save_list$LG_pred_scat_dat)
-      LG_pred_standardize(temp_env$save_list$LG_pred_standardize)
-      LG_pred_thresh(temp_env$save_list$LG_pred_thresh)
-      LG_results(temp_env$save_list$LG_results)
-      LG_coeffs(temp_env$save_list$LG_coeffs)
-      LG_confuse_results(temp_env$save_list$LG_confuse_results)
-      LG_scat_dat(temp_env$save_list$LG_scat_dat)
-      LG_model <<- temp_env$save_list$LG_model
-      LG_thresh(temp_env$save_list$LG_thresh)
-      LG_crit_prob(temp_env$save_list$LG_crit_prob)
-      LG_standardize(temp_env$save_list$LG_standardize)
-      LG_model_PCA(temp_env$save_list$LG_model_PCA)
-      LG_final_features(temp_env$save_list$LG_final_features)
-      LG_pred_data(temp_env$save_list$LG_pred_data)
+      if (!is.null(sl$rv_ao_map) && is.list(sl$rv_ao_map)) {
+        ao_map = sl$rv_ao_map
+        for (nm in names(ao_map)) {
+          rv_ao_map[[nm]] = ao_map[[nm]]
+        }
+      }
       
-      XGBCL_pred_results(temp_env$save_list$XGBCL_pred_results)
-      XGBCL_pred_coeffs(temp_env$save_list$XGBCL_pred_coeffs)
-      XGBCL_pred_confuse_results(temp_env$save_list$XGBCL_pred_confuse_results)
-      XGBCL_pred_scat_dat(temp_env$save_list$XGBCL_pred_scat_dat)
-      XGBCL_pred_standardize(temp_env$save_list$XGBCL_pred_standardize)
-      XGBCL_pred_thresh(temp_env$save_list$XGBCL_pred_thresh)
-      XGBCL_selection_results(temp_env$save_list$XGBCL_selection_results)
-      XGBCL_results(temp_env$save_list$XGBCL_results)
-      XGBCL_coeffs(temp_env$save_list$XGBCL_coeffs)
-      XGBCL_confuse_results(temp_env$save_list$XGBCL_confuse_results)
-      XGBCL_scat_dat(temp_env$save_list$XGBCL_scat_dat)
-      XGBCL_model <<- temp_env$save_list$XGBCL_model
-      XGBCL_thresh(temp_env$save_list$XGBCL_thresh)
-      XGBCL_crit_prob(temp_env$save_list$XGBCL_crit_prob)
-      XGBCL_standardize(temp_env$save_list$XGBCL_standardize)
-      XGBCL_model_PCA(temp_env$save_list$XGBCL_model_PCA)
-      XGBCL_final_features(temp_env$save_list$XGBCL_final_features)
-      XGBCL_pred_data(temp_env$save_list$XGBCL_pred_data)
-      XGBCL_final_data(temp_env$save_list$XGBCL_final_data)
-      Optimal_CLHP <<- temp_env$save_list$Optimal_CLHP
+      LG_pred_results(sl$LG_pred_results)
+      LG_pred_coeffs(sl$LG_pred_coeffs)
+      LG_pred_confuse_results(sl$LG_pred_confuse_results)
+      LG_pred_scat_dat(sl$LG_pred_scat_dat)
+      LG_pred_standardize(sl$LG_pred_standardize)
+      LG_pred_thresh(sl$LG_pred_thresh)
+      LG_results(sl$LG_results)
+      LG_coeffs(sl$LG_coeffs)
+      LG_confuse_results(sl$LG_confuse_results)
+      LG_scat_dat(sl$LG_scat_dat)
+      LG_model <<- sl$LG_model
+      LG_thresh(sl$LG_thresh)
+      LG_crit_prob(sl$LG_crit_prob)
+      LG_standardize(sl$LG_standardize)
+      LG_model_PCA(sl$LG_model_PCA)
+      LG_final_features(sl$LG_final_features)
+      LG_pred_data(sl$LG_pred_data)
       
-      XGB_pred_results(temp_env$save_list$XGB_pred_results)
-      XGB_pred_coeffs(temp_env$save_list$XGB_pred_coeffs)
-      XGB_pred_confuse_results(temp_env$save_list$XGB_pred_confuse_results)
-      XGB_pred_scat_dat(temp_env$save_list$XGB_pred_scat_dat)
-      XGB_pred_standardize(temp_env$save_list$XGB_pred_standardize)
-      XGB_selection_results(temp_env$save_list$XGB_selection_results)
-      XGB_results(temp_env$save_list$XGB_results)
-      XGB_coeffs(temp_env$save_list$XGB_coeffs)
-      XGB_confuse_results(temp_env$save_list$XGB_confuse_results)
-      XGB_scat_dat(temp_env$save_list$XGB_scat_dat)
-      XGB_model <<- temp_env$save_list$XGB_model
-      XGB_standardize(temp_env$save_list$XGB_standardize)
-      XGB_model_PCA(temp_env$save_list$XGB_model_PCA)
-      XGB_final_features(temp_env$save_list$XGB_final_features)
-      XGB_pred_data(temp_env$save_list$XGB_pred_data)
-      XGB_final_data(temp_env$save_list$XGB_final_data)
-      Optimal_HP <<- temp_env$save_list$Optimal_HP
+      XGBCL_pred_results(sl$XGBCL_pred_results)
+      XGBCL_pred_coeffs(sl$XGBCL_pred_coeffs)
+      XGBCL_pred_confuse_results(sl$XGBCL_pred_confuse_results)
+      XGBCL_pred_scat_dat(sl$XGBCL_pred_scat_dat)
+      XGBCL_pred_standardize(sl$XGBCL_pred_standardize)
+      XGBCL_pred_thresh(sl$XGBCL_pred_thresh)
+      XGBCL_selection_results(sl$XGBCL_selection_results)
+      XGBCL_results(sl$XGBCL_results)
+      XGBCL_coeffs(sl$XGBCL_coeffs)
+      XGBCL_confuse_results(sl$XGBCL_confuse_results)
+      XGBCL_scat_dat(sl$XGBCL_scat_dat)
+      XGBCL_model <<- sl$XGBCL_model
+      XGBCL_thresh(sl$XGBCL_thresh)
+      XGBCL_crit_prob(sl$XGBCL_crit_prob)
+      XGBCL_standardize(sl$XGBCL_standardize)
+      XGBCL_model_PCA(sl$XGBCL_model_PCA)
+      XGBCL_final_features(sl$XGBCL_final_features)
+      XGBCL_pred_data(sl$XGBCL_pred_data)
+      XGBCL_final_data(sl$XGBCL_final_data)
+      Optimal_CLHP <<- sl$Optimal_CLHP
       
-      EN_pred_results(temp_env$save_list$EN_pred_results)
-      EN_pred_coeffs(temp_env$save_list$EN_pred_coeffs)
-      EN_pred_confuse_results(temp_env$save_list$EN_pred_confuse_results)
-      EN_pred_scat_dat(temp_env$save_list$EN_pred_scat_dat)
-      EN_pred_standardize(temp_env$save_list$EN_pred_standardize)
-      EN_results(temp_env$save_list$EN_results)
-      EN_coeffs(temp_env$save_list$EN_coeffs)
-      EN_confuse_results(temp_env$save_list$EN_confuse_results)
-      EN_scat_dat(temp_env$save_list$EN_scat_dat)
-      EN_model <<- temp_env$save_list$EN_model
-      EN_model_PCA(temp_env$save_list$EN_model_PCA)
-      EN_standardize(temp_env$save_list$EN_standardize)
-      EN_final_features(temp_env$save_list$EN_final_features)
-      EN_pred_data(temp_env$save_list$EN_pred_data)
+      XGB_pred_results(sl$XGB_pred_results)
+      XGB_pred_coeffs(sl$XGB_pred_coeffs)
+      XGB_pred_confuse_results(sl$XGB_pred_confuse_results)
+      XGB_pred_scat_dat(sl$XGB_pred_scat_dat)
+      XGB_pred_standardize(sl$XGB_pred_standardize)
+      XGB_selection_results(sl$XGB_selection_results)
+      XGB_results(sl$XGB_results)
+      XGB_coeffs(sl$XGB_coeffs)
+      XGB_confuse_results(sl$XGB_confuse_results)
+      XGB_scat_dat(sl$XGB_scat_dat)
+      XGB_model <<- sl$XGB_model
+      XGB_standardize(sl$XGB_standardize)
+      XGB_model_PCA(sl$XGB_model_PCA)
+      XGB_final_features(sl$XGB_final_features)
+      XGB_pred_data(sl$XGB_pred_data)
+      XGB_final_data(sl$XGB_final_data)
+      Optimal_HP <<- sl$Optimal_HP
+      
+      EN_pred_results(sl$EN_pred_results)
+      EN_pred_coeffs(sl$EN_pred_coeffs)
+      EN_pred_confuse_results(sl$EN_pred_confuse_results)
+      EN_pred_scat_dat(sl$EN_pred_scat_dat)
+      EN_pred_standardize(sl$EN_pred_standardize)
+      EN_results(sl$EN_results)
+      EN_coeffs(sl$EN_coeffs)
+      EN_confuse_results(sl$EN_confuse_results)
+      EN_scat_dat(sl$EN_scat_dat)
+      EN_model <<- sl$EN_model
+      EN_model_PCA(sl$EN_model_PCA)
+      EN_standardize(sl$EN_standardize)
+      EN_final_features(sl$EN_final_features)
+      EN_pred_data(sl$EN_pred_data)
       
       if (init_ID_format == "YMD") {
         init_data[,1] = ymd(init_data[,1])
@@ -772,7 +834,7 @@ server= function(input,output,session) {
       
       refresh_trigger(TRUE)
       
-      if (temp_env$save_list$type == "Project") {
+      if (sl$type == "Project") {
         
         session$sendCustomMessage(type = 'enableTabs', message = list(action = 'enable'))
         updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Prediction')
@@ -795,6 +857,7 @@ server= function(input,output,session) {
           enable("restore")
           enable("set_column_props")
           enable("corr_check")
+          enable("transforms")
           enable("pca_check")
           enable("run_iso_forest")
           enable("save_project")
@@ -833,22 +896,11 @@ server= function(input,output,session) {
         
         session$sendCustomMessage(type = 'enableTabs', message = list(action = 'enable'))
         
-      } else if (temp_env$save_list$type == "Prediction") {
+      } else if (sl$type == "Prediction") {
         
         session$sendCustomMessage(type = 'disableTabs', message = list(action = 'disable'))
         updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Prediction')
       }
-      
-    } else if (temp_env$save_list$Version != "1.0.0") {
-      
-      showModal(modalDialog(paste("This file is not compatible with this version of ShinyVB."),
-                            easyClose = F,footer = div(modalButton('Close'))))
-      
-    } else if (!exists("save_list", envir = temp_env)) {
-      
-      showModal(modalDialog(paste("No saved information in this file."),
-                            easyClose = F,footer = div(modalButton('Close'))))
-    }
   })
   
   # Create a feature correlation matrix
@@ -885,9 +937,607 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'data_tabs', selected = "Correlations")
   })
   
+  # Create a feature transformation data table
+  observeEvent(input$transforms, ignoreInit = TRUE, {
+    # IMPORTANT: clear only transformed columns; KEEP interactions and A/O so they can be transformed
+    clear_trans_table(drop_transforms = TRUE, drop_interactions = FALSE, drop_AO = FALSE)
+    
+    # Transform with index assignment to avoid evaluating logs on invalid values
+    transform_feature <- function(x, type) {
+      n   <- length(x)
+      out <- rep(NA_real_, n)
+      if (!is.numeric(x)) return(out)
+      
+      if (type == "None") {
+        out <- x
+        
+      } else if (type == "Log10") {
+        idx_pos  <- which(is.finite(x) & x > 0)
+        idx_neg  <- which(is.finite(x) & x < 0)
+        idx_zero <- which(is.finite(x) & x == 0)
+        if (length(idx_pos))  out[idx_pos]  <- log10(x[idx_pos])
+        if (length(idx_neg))  out[idx_neg]  <- -log10(abs(x[idx_neg]))
+        if (length(idx_zero)) out[idx_zero] <- 0
+        
+      } else if (type == "Inverse") {
+        x2 <- x
+        idx_fin <- is.finite(x2)
+        idx_nz  <- which(idx_fin & x2 != 0)
+        if (length(idx_nz)) {
+          min_nz <- min(abs(x2[idx_nz]), na.rm = TRUE)
+          idx0   <- which(idx_fin & x2 == 0)
+          if (length(idx0)) x2[idx0] <- 0.5 * min_nz
+          idx_inv <- which(is.finite(x2) & x2 != 0)
+          if (length(idx_inv)) out[idx_inv] <- 1 / x2[idx_inv]
+        }
+        
+      } else if (type == "Square") {
+        out <- x^2
+        
+      } else if (type == "Square Root") {
+        idx_fin <- is.finite(x)
+        out[idx_fin] <- sign(x[idx_fin]) * sqrt(abs(x[idx_fin]))
+        
+      } else if (type == "Quad Root") {
+        idx_fin <- is.finite(x)
+        out[idx_fin] <- sign(x[idx_fin]) * (abs(x[idx_fin])^(1/4))
+      }
+      
+      out
+    }
+    
+    # Prepare data (exclude ignored rows)
+    cd <- current_data()
+    if (!is.null(ignored_rows) && length(ignored_rows) > 0) {
+      cd <- cd[-ignored_rows, , drop = FALSE]
+    }
+    
+    # Response variable (exclude by name, not index)
+    rv_name <- colnames(cd)[response_var()]
+    y <- cd[[rv_name]]
+    
+    # Numeric feature candidates (exclude ID and the current response by name)
+    num_cols <- vapply(cd, is.numeric, logical(1))
+    id_name  <- colnames(cd)[1]
+    feature_names <- setdiff(names(cd)[num_cols], c(id_name, rv_name))
+    
+    # EXPLICIT: exclude transformed columns by TRANS_PREFIXES; KEEP interactions (Int..FeatA__FeatB)
+    # Uses your global TRANS_PREFIXES (e.g., Log.., Inverse.., etc.)
+    if (exists("TRANS_PREFIXES", inherits = FALSE)) {
+      trans_pat <- sprintf("^(%s)", paste(escape_regex(TRANS_PREFIXES), collapse = "|"))
+      feature_names <- feature_names[!grepl(trans_pat, feature_names, perl = TRUE)]
+    }
+    
+    # At this point, interactions remain in feature_names by design
+    
+    transforms <- c("None", "Log10", "Inverse", "Square", "Square Root", "Quad Root", "Polynomial")
+    
+    results <- vector("list", length = length(feature_names) * length(transforms))
+    k <- 1L
+    
+    for (fname in feature_names) {
+      x <- cd[[fname]]
+      
+      for (tf in transforms) {
+        corr <- NA_real_
+        pval <- NA_real_
+        
+        if (tf == "Polynomial") {
+          # Quadratic: correlate y with yhat from y ~ x + x^2
+          mask <- is.finite(x) & is.finite(y)
+          if (sum(mask) >= 3) {
+            xt <- x[mask]; yt <- y[mask]
+            if (stats::sd(xt) > 0 && stats::sd(yt) > 0) {
+              fit <- try(stats::lm(yt ~ stats::poly(xt, degree = 2, raw = TRUE)), silent = TRUE)
+              if (!inherits(fit, "try-error")) {
+                yhat <- as.numeric(stats::fitted(fit))
+                if (length(yhat) >= 3 && stats::sd(yhat) > 0) {
+                  ct <- suppressWarnings(stats::cor.test(yt, yhat, method = "pearson"))
+                  corr <- unname(ct$estimate)
+                  pval <- unname(ct$p.value)
+                }
+              }
+            }
+          }
+        } else {
+          xt <- transform_feature(x, tf)  # must return numeric
+          mask <- is.finite(xt) & is.finite(y)
+          if (sum(mask) >= 3 && stats::sd(xt[mask]) > 0 && stats::sd(y[mask]) > 0) {
+            ct <- suppressWarnings(stats::cor.test(xt[mask], y[mask], method = "pearson"))
+            corr <- unname(ct$estimate)
+            pval <- unname(ct$p.value)
+          }
+        }
+        
+        # Store numeric p-value as p_val; format later into p_Value
+        results[[k]] <- data.frame(
+          Feature     = fname,
+          Transform   = tf,
+          Correlation = corr,
+          p_val       = pval,
+          stringsAsFactors = FALSE
+        )
+        k <- k + 1L
+      }
+    }
+    
+    # Bind results
+    trans_table <- if (length(results)) {
+      do.call(rbind, results)
+    } else {
+      data.frame(
+        Feature     = character(0),
+        Transform   = character(0),
+        Correlation = numeric(0),
+        p_val       = numeric(0),
+        stringsAsFactors = FALSE
+      )
+    }
+    
+    # Ensure numeric types and apply formatting
+    trans_table$Correlation <- round(as.numeric(trans_table$Correlation), 4)
+    trans_table$p_val       <- as.numeric(trans_table$p_val)  # keep raw numeric; do not round
+    
+    # Add a formatted p-value column for display (keep numeric p_val for sorting/calcs)
+    trans_table$p_Value <- format_pval(trans_table$p_val)
+    
+    # Order transforms and group rows so Feature is shown once (for "None"), with a blank row before each feature
+    trans_table$Transform <- factor(trans_table$Transform, levels = transforms)
+    trans_table <- trans_table[order(trans_table$Feature, trans_table$Transform), ]
+    
+    feat_order <- unique(trans_table$Feature)
+    final_list <- lapply(seq_along(feat_order), function(i) {
+      f  <- feat_order[i]
+      df <- trans_table[trans_table$Feature == f, , drop = FALSE]
+      df$Feature     <- as.character(df$Feature)
+      df$Feature[-1] <- ""          # show feature name only on the first row
+      df$FeatureKey  <- f           # hidden key for all rows of this feature
+      df$IsSep       <- FALSE
+      if (i > 1) {
+        blank <- data.frame(
+          Feature     = "",
+          Transform   = "",
+          Correlation = NA_real_,
+          p_val       = NA_real_,     # keep numeric for consistency
+          p_Value     = NA_character_,
+          FeatureKey  = f,
+          IsSep       = TRUE,
+          stringsAsFactors = FALSE
+        )
+        rbind(blank, df)
+      } else {
+        df
+      }
+    })
+    
+    final_table <- do.call(rbind, final_list)
+    
+    # For display: visible columns only; make blank separator rows truly blank
+    display_table <- final_table[, c("Feature", "Transform", "Correlation", "p_Value")]
+    display_table$Correlation[is.na(display_table$Correlation)] <- ""
+    display_table$p_Value[is.na(display_table$p_Value)]         <- ""
+    
+    # Save full table (with hidden metadata) for apply button handler
+    rv_trans$full <- final_table
+    
+    output$trans_table <- DT::renderDataTable(server = FALSE, {
+      # Bind hidden metadata columns so JS can enforce one selection per feature
+      dt_data <- cbind(
+        display_table,
+        FeatureKey = final_table$FeatureKey,
+        IsSep      = final_table$IsSep
+      )
+      
+      DT::datatable(
+        dt_data,
+        rownames   = FALSE,
+        selection  = "none",        # DT’s own selection disabled; we manage via JS
+        extensions = "Select",
+        colnames   = c("Feature", "Transform", "Correlation", "P-Value", "FeatureKey", "IsSep"),
+        width      = "100%",
+        options = list(
+          autoWidth  = FALSE,
+          paging     = TRUE,
+          dom        = 'tip',
+          pageLength = 100,
+          ordering   = FALSE,
+          scrollX    = TRUE,
+          select     = list(style = "api"),  # use API-only selection
+          columnDefs = list(
+            list(targets = 0:3, className = "dt-center"),
+            list(targets = 4, visible = FALSE),  # FeatureKey
+            list(targets = 5, visible = FALSE)   # IsSep
+          ),
+          rowCallback = DT::JS(
+            "function(row, data){",
+            "  if (String(data[5]) === 'true' || data[5] === true) {",
+            "    $(row).addClass('sep-row');",
+            "  } else {",
+            "    $(row).removeClass('sep-row');",
+            "  }",
+            "}"
+          ),
+          initComplete = DT::JS(
+            "function(settings){",
+            "  var dt = this.api();",
+            "  var $node = $(dt.table().node());",
+            "  // Remove previous handlers to avoid duplicates on re-render",
+            "  $node.off('.singleSel');",
+            "  // Clear selection and preselect 'None' per feature (skip separators)",
+            "  dt.rows().deselect();",
+            "  dt.rows().every(function(){",
+            "    var d = this.data();",
+            "    if (!(String(d[5]) === 'true' || d[5] === true) && d[1] === 'None') { this.select(); }",
+            "  });",
+            "  // Block DT default user-select; we control selection ourselves",
+            "  $node.on('user-select.dt.singleSel', function(e){ e.preventDefault(); });",
+            "  // Click to select exactly one row per FeatureKey",
+            "  $node.on('click.singleSel', 'tbody tr', function(){",
+            "    var r = dt.row(this);",
+            "    var d = r.data();",
+            "    if (!d) return;",
+            "    if (String(d[5]) === 'true' || d[5] === true) return; // separator row",
+            "    var key = d[4];",
+            "    // Deselect all rows for this feature, then select the clicked row",
+            "    dt.rows(function(i, dd){ return dd && dd[4] === key; }).deselect();",
+            "    r.select();",
+            "    // Push selected indices (1-based) to Shiny",
+            "    var sel = dt.rows({selected:true}).indexes().toArray().map(function(i){ return i + 1; });",
+            "    Shiny.setInputValue('trans_table_rows_selected', sel, {priority:'event'});",
+            "  });",
+            "  // Push initial selection ('None' rows) to Shiny",
+            "  var initial = dt.rows({selected:true}).indexes().toArray().map(function(i){ return i + 1; });",
+            "  Shiny.setInputValue('trans_table_rows_selected', initial, {priority:'event'});",
+            "}"
+          ),
+          columns = list(
+            list(width = "235px"),
+            list(width = "90px"),
+            list(width = "90px"),
+            list(width = "90px")
+          )
+        )
+      )
+    })
+    
+    # Navigate to Transformations tab
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = "Transformations")
+  })
+  
+  #Make new columns of selected feature transformations
+  observeEvent(input$apply_transforms, {
+    req(rv_trans$full)
+    full_tbl <- rv_trans$full
+    
+    sel <- input$trans_table_rows_selected
+    if (is.null(sel) || length(sel) == 0) {
+      showNotification("No rows selected. Please choose one transform per feature.", type = "warning")
+      return()
+    }
+    
+    chosen <- full_tbl[sel, , drop = FALSE]
+    chosen$Transform <- as.character(chosen$Transform)
+    chosen <- chosen[!chosen$IsSep & nzchar(chosen$Transform), , drop = FALSE]
+    if (nrow(chosen) == 0) {
+      showNotification("No valid transform rows selected.", type = "warning")
+      return()
+    }
+    chosen <- chosen[!duplicated(chosen$FeatureKey), , drop = FALSE]
+    
+    # Transform rules
+    transform_apply <- function(x, y, type) {
+      n <- length(x)
+      out <- rep(NA_real_, n)
+      if (!is.numeric(x)) return(out)
+      
+      if (type %in% c("Log10")) {
+        idx_pos  <- which(is.finite(x) & x > 0)
+        idx_neg  <- which(is.finite(x) & x < 0)
+        idx_zero <- which(is.finite(x) & x == 0)
+        if (type == "Log10") {
+          if (length(idx_pos))  out[idx_pos]  <- log10(x[idx_pos])
+          if (length(idx_neg))  out[idx_neg]  <- -log10(abs(x[idx_neg]))
+        } else {
+          if (length(idx_pos))  out[idx_pos]  <- log(x[idx_pos])
+          if (length(idx_neg))  out[idx_neg]  <- -log(abs(x[idx_neg]))
+        }
+        if (length(idx_zero)) out[idx_zero] <- 0
+        
+      } else if (type == "Inverse") {
+        x2 <- x
+        idx_fin <- is.finite(x2)
+        idx_nz <- which(idx_fin & x2 != 0)
+        if (length(idx_nz)) {
+          min_nz <- min(abs(x2[idx_nz]), na.rm = TRUE)
+          idx_zero <- which(idx_fin & x2 == 0)
+          if (length(idx_zero)) x2[idx_zero] <- 0.5 * min_nz
+          idx_inv <- which(is.finite(x2) & x2 != 0)
+          if (length(idx_inv)) out[idx_inv] <- 1 / x2[idx_inv]
+        }
+        
+      } else if (type == "Square") {
+        out <- x^2
+        
+      } else if (type == "Square Root") {
+        idx_fin <- is.finite(x)
+        out[idx_fin] <- sign(x[idx_fin]) * sqrt(abs(x[idx_fin]))
+        
+      } else if (type == "Quad Root") {
+        idx_fin <- is.finite(x)
+        out[idx_fin] <- sign(x[idx_fin]) * (abs(x[idx_fin])^(1/4))
+        
+      } else if (type == "Polynomial") {
+        out[] <- NA_real_
+        if (!is.null(y)) {
+          mask <- is.finite(x) & is.finite(y)
+          if (sum(mask) >= 3 && sd(x[mask]) > 0 && sd(y[mask]) > 0) {
+            fit <- try(lm(y[mask] ~ poly(x[mask], degree = 2, raw = TRUE)), silent = TRUE)
+            if (!inherits(fit, "try-error")) {
+              idx_fin <- is.finite(x)
+              if (any(idx_fin)) {
+                co <- coef(fit)
+                if (length(co) >= 3) {
+                  out[idx_fin] <- co[1] + co[2] * x[idx_fin] + co[3] * x[idx_fin]^2
+                }
+              }
+            }
+          }
+        }
+      }
+      out
+    }
+    
+    df <- current_data()
+    rv_name <- colnames(df)[response_var()]
+    y_full  <- df[[rv_name]]
+    
+    # Add/overwrite each new column and register it in column_props; place it after the source feature
+    for (i in seq_len(nrow(chosen))) {
+      feat <- chosen$FeatureKey[i]
+      tf   <- chosen$Transform[i]
+      if (tf == "None") next
+      
+      # Validate transform name against global prefix_map
+      if (!tf %in% names(prefix_map)) {
+        showNotification(sprintf("Unknown transform '%s' for feature '%s'. Skipping.", tf, feat), type = "warning")
+        next
+      }
+      
+      vals <- transform_apply(df[[feat]], y_full, tf)
+      
+      # Build new column name using global prefix_map
+      new_name <- paste0(prefix_map[[tf]], feat)
+      
+      # Replace any existing transformed column for this feature, keep position
+      existing_old <- intersect(paste0(TRANS_PREFIXES, feat), names(df))
+      if (length(existing_old)) {
+        pos_target <- which(names(df) %in% existing_old)[1]
+        df <- df[, setdiff(names(df), existing_old), drop = FALSE]
+        if (exists(".del", mode = "function")) {
+          for (nm_old in existing_old) try(.del(column_props, keys = nm_old), silent = TRUE)
+        }
+      } else {
+        pos_feat  <- match(feat, names(df))
+        pos_target <- if (!is.na(pos_feat)) pos_feat + 1L else length(names(df)) + 1L
+      }
+      
+      # Add/overwrite new column and register props
+      df[[new_name]] <- vals
+      .set(column_props, keys = new_name, values = 2)
+      
+      # Reorder to place new column immediately after target position
+      nm <- names(df)
+      idx_new   <- match(new_name, nm)
+      nm_wo_new <- nm[-idx_new]
+      pos_target <- max(1L, min(pos_target, length(nm_wo_new) + 1L))
+      df <- df[, append(nm_wo_new, new_name, after = pos_target - 1L), drop = FALSE]
+    }
+    
+    current_data(df)
+    
+    # Refresh selectable column lists (optional but recommended)
+    new_column_names <- colnames(current_data())[-1]  # exclude ID
+    rv <- response_var() - 1
+    feat_names(new_column_names[-rv])
+    feats_being_used(feat_names())
+    
+    updateSelectInput(session, "set_column_props", choices = c("-", new_column_names))
+    updateSelectInput(session, "rainplot",         choices = c("-", new_column_names))
+    updateSelectInput(session, "lineplot",         choices = c("-", new_column_names))
+    updateSelectInput(session, "scatterx", selected = input$scatterx, choices = c("-", new_column_names))
+    updateSelectInput(session, "scattery", selected = input$scattery, choices = c("-", new_column_names))
+    
+    renderdata(current_data(), response_var(), id_var, input$select_choice,
+               date_format_string, column_props, ignored_rows, current_data_page(), output)
+    
+    showNotification("Selected transforms added to the dataset.", type = "message")
+  })
+  
+  # Create an interactions data table
+  observeEvent(input$interacts, {
+    
+    # Empty skeleton with new column names
+    output$interactions_table <- DT::renderDataTable(server = FALSE, {
+      DT::datatable(
+        data.frame(Feat1 = character(0), Feat2 = character(0),
+                   Correlation = numeric(0), p_Value = character(0)),
+        rownames = FALSE, selection = "none",
+        options = list(dom = 't', paging = FALSE)
+      )
+    })
+    
+    df <- current_data()
+    if (is.null(df) || ncol(df) < 3L) return()
+    
+    # Exclude rows the user ignored
+    rows_keep <- seq_len(nrow(df))
+    if (!is.null(ignored_rows) && length(ignored_rows) > 0) {
+      rows_keep <- setdiff(rows_keep, ignored_rows)
+    }
+    df <- df[rows_keep, , drop = FALSE]
+    
+    # Identify response and candidate numeric features by name (exclude ID + response + derived)
+    rv_name <- colnames(df)[response_var()]
+    y <- df[[rv_name]]
+    id_name <- colnames(df)[1L]
+    
+    num_names <- names(df)[vapply(df, is.numeric, logical(1))]
+    base_feats <- get_interaction_candidates(df, include_AO = TRUE)
+    
+    if (length(base_feats) < 2L) {
+      showNotification("Not enough numeric features to compute interactions.", type = "warning")
+      return()
+    }
+    
+    # Threshold
+    thr <- input$r_thresh %||% 0.5
+    
+    # Compute correlations for all pairs i < j
+    res <- list()
+    k <- 1L
+    for (ii in seq_len(length(base_feats) - 1L)) {
+      for (jj in (ii + 1L):length(base_feats)) {
+        a <- base_feats[ii]; b <- base_feats[jj]
+        prod <- df[[a]] * df[[b]]
+        mask <- is.finite(prod) & is.finite(y)
+        if (sum(mask) >= 3 && sd(prod[mask]) > 0 && sd(y[mask]) > 0) {
+          ct <- suppressWarnings(cor.test(prod[mask], y[mask], method = "pearson"))
+          r  <- unname(ct$estimate)
+          p  <- unname(ct$p.value)
+          if (abs(r) >= thr) {
+            res[[k]] <- data.frame(
+              Feat1      = a,
+              Feat2      = b,
+              Correlation = round(r, 4),
+              p_Value     = ifelse(
+                is.na(p),
+                NA_character_,
+                ifelse(p < 1e-4, "<0.0001", format(signif(p, 4), scientific = FALSE, trim = TRUE))
+              ),
+              stringsAsFactors = FALSE
+            )
+            k <- k + 1L
+          }
+        }
+      }
+    }
+    
+    inter_tbl <- if (length(res)) do.call(rbind, res) else NULL
+    rv_inter$table <- inter_tbl
+    
+    output$interactions_table <- DT::renderDataTable(server = FALSE, {
+      if (is.null(inter_tbl) || nrow(inter_tbl) == 0) {
+        DT::datatable(
+          data.frame(Message = "No interactions exceed the threshold."),
+          rownames = FALSE, selection = "none",
+          options = list(dom = 't', paging = FALSE)
+        )
+      } else {
+        DT::datatable(
+          inter_tbl,
+          rownames  = FALSE,
+          selection = "multiple",
+          options = list(
+            autoWidth  = FALSE,
+            dom        = 'tip',
+            paging     = TRUE,
+            pageLength = 50,
+            ordering   = FALSE,
+            scrollX    = TRUE,
+            columnDefs = list(list(targets = 0:3, className = "dt-center"))
+          )
+        )
+      }
+    })
+    
+    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = "Interactions")
+  })
+  
+  # Add selected interactions to the data table
+  observeEvent(input$add_interactions, {
+    inter_tbl <- rv_inter$table
+    sel <- input$interactions_table_rows_selected
+    if (is.null(inter_tbl) || length(sel) == 0) {
+      showNotification("No interactions selected.", type = "warning")
+      return()
+    }
+    
+    df <- current_data()
+    if (is.null(df) || !is.data.frame(df)) {
+      showNotification("No active dataset.", type = "error")
+      return()
+    }
+    cols <- names(df)
+    
+    for (i in sel) {
+      a <- inter_tbl$Feat1[i]
+      b <- inter_tbl$Feat2[i]
+      
+      # Validate presence and numeric types
+      if (!a %in% cols || !b %in% cols) next
+      if (!is.numeric(df[[a]]) || !is.numeric(df[[b]])) next
+      
+      # Create a canonical interaction name (e.g., "A*B"); adjust make_inter_name if needed
+      name <- make_inter_name(a, b)
+      
+      # Compute product on full current_data
+      v <- df[[a]] * df[[b]]
+      
+      # Replace if exists; keep position if replacing
+      if (name %in% cols) {
+        # Overwrite values in place
+        df[[name]] <- v
+      } else {
+        # Place after the later of a/b
+        pos_target <- max(match(a, cols), match(b, cols), na.rm = TRUE) + 1L
+        
+        # Add column and register props
+        df[[name]] <- v
+        if (exists(".set", mode = "function")) {
+          try(.set(column_props, keys = name, values = 2), silent = TRUE)
+        }
+        
+        # Reorder to target position
+        nm <- names(df)
+        idx_new <- match(name, nm)
+        nm_wo_new <- nm[-idx_new]
+        pos_target <- max(1L, min(pos_target, length(nm_wo_new) + 1L))
+        df <- df[, append(nm_wo_new, name, after = pos_target - 1L), drop = FALSE]
+        cols <- names(df)
+      }
+    }
+    
+    current_data(df)
+    
+    # Refresh selectors (exclude ID and response)
+    new_column_names <- colnames(df)[-1]
+    rv_idx <- response_var()
+    if (!is.null(rv_idx) && rv_idx > 1 && rv_idx <= ncol(df)) {
+      feat_names(new_column_names[-(rv_idx - 1L)])
+    } else {
+      feat_names(new_column_names)
+    }
+    feats_being_used(feat_names())
+    
+    choices_vec <- c("-", new_column_names)
+    updateSelectInput(session, "set_column_props", choices = choices_vec)
+    updateSelectInput(session, "rainplot",         choices = choices_vec)
+    updateSelectInput(session, "lineplot",         choices = choices_vec)
+    updateSelectInput(session, "scatterx", selected = input$scatterx, choices = choices_vec)
+    updateSelectInput(session, "scattery", selected = input$scattery, choices = choices_vec)
+    
+    renderdata(current_data(), response_var(), id_var, input$select_choice,
+               date_format_string, column_props, ignored_rows, current_data_page(), output)
+    
+    showNotification("Selected interactions added to the dataset.", type = "message")
+  })
+  
   # Create PCA dataset for later analysis
   observeEvent(input$pca_check, ignoreInit = T, {
     
+    clear_trans_table(drop_transforms = TRUE, drop_interactions = FALSE, drop_AO = TRUE)
     data = current_data()
     feats = feats_being_used()
     feat_data = data[,feats,drop = FALSE]
@@ -999,6 +1649,8 @@ server= function(input,output,session) {
   # Provide dataset cell editing
   observeEvent(input$data_cell_edit, ignoreInit = T, {
     
+    clear_trans_table(drop_transforms = TRUE, drop_interactions = FALSE, drop_AO = FALSE)
+    
     info = input$data_cell_edit
     temp_data=current_data()
     
@@ -1013,96 +1665,159 @@ server= function(input,output,session) {
   })
   
   # Change the response variable
-  observeEvent(input$data_columns_selected, ignoreInit = T, {
+  observeEvent(input$data_columns_selected, ignoreInit = TRUE, {
+    if (!identical(input$select_choice, "Change_Response")) return()
     
-    if (input$select_choice == "Change_Response") {
+    df <- current_data()
+    if (is.null(df) || !is.data.frame(df) || ncol(df) < 2L) return()
+    
+    all_cols <- colnames(df)
+    id_name  <- all_cols[1L]
+    
+    # Selected feature index is 1-based over features (excluding ID)
+    sel_idx_ui <- as.integer(input$data_columns_selected)
+    if (!is.finite(sel_idx_ui)) return()
+    
+    # Map to absolute column index in df: add 1 for the ID offset
+    new_rv_idx <- sel_idx_ui + 1L
+    
+    cur_rv_idx <- response_var()
+    if (new_rv_idx == cur_rv_idx || new_rv_idx < 2L || new_rv_idx > ncol(df)) return()
+    
+    # Preserve previous response for this clear operation (Option A)
+    options(ShinyVB.prev_resp_name = all_cols[cur_rv_idx])
+    
+    # Set the new response and clear transforms + interactions + A/O immediately
+    response_var(new_rv_idx)
+    clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = FALSE)
+    
+    # Fallback: explicitly drop star-named interactions if they weren't prefixed
+    df <- current_data()
+    inter_cols <- find_interaction_cols(df)
+    if (length(inter_cols)) {
+      # Protect current and previous response names
+      rv_name   <- colnames(df)[response_var()]
+      prev_resp <- getOption("ShinyVB.prev_resp_name", NULL)
+      options(ShinyVB.prev_resp_name = NULL)  # clear once used
+      protect <- unique(stats::na.omit(as.character(c(rv_name, prev_resp))))
       
-      if ((input$data_columns_selected+1) != response_var() && input$data_columns_selected != 0) {
-        
-        response_var(input$data_columns_selected + 1)
-        feat_data = current_data()[,-response_var()]
-        feat_data = feat_data[,-1]
-        feats_being_used(colnames(feat_data))
-        feat_names(colnames(feat_data))
-        updateCheckboxGroupButtons(session,"feats_to_use",choices=feat_names(),selected=feats_being_used(),size="xs",status = "custom")
-        
-        # Filter the response variable to exclude left and right-censored tags
-        exclude_values = c(input$lc_val, input$rc_val)
-        
-        real_responses = na.omit(current_data()[!current_data()[,response_var()] %in% exclude_values,response_var()])
-        
-        updateNumericInput(session, "LG_binarize_crit_value",value = round(median(real_responses),2),
-                           min=min(real_responses),max=max(real_responses))
-        updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(real_responses),2),
-                           min=min(real_responses),max=max(real_responses))
-        
-        iv$remove_rules("LG_binarize_crit_value")
-        iv$remove_rules("XGBCL_binarize_crit_value")
-        
-        iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
-        iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses),max(real_responses)))
-        
-        updateNumericInput(session, "lc_replace",value = round(min(real_responses),3))
-        updateNumericInput(session, "rc_replace",value = round(max(real_responses),3))
-        
-        renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
-        
-        pca_axes_max(ncol(init_data)-2)
-        pca_axes(NULL)
-        pcax_being_used(NULL)
-        PCA_dataset(NULL)
-        
-        clear_modeling(TRUE)
-        changed_model(TRUE)
-        
-        updateNumericInput(session, "num_axes",value = pca_axes_max(),max = pca_axes_max())
+      inter_cols <- setdiff(inter_cols, protect)
+      if (length(inter_cols)) {
+        df[inter_cols] <- NULL
+        if (exists(".del", mode = "function")) {
+          for (nm in inter_cols) try(.del(column_props, keys = nm), silent = TRUE)
+        }
+        current_data(df)
       }
-      
-    } else {
-      return()
     }
+    
+    # Rebuild feature list by name (exclude ID and the NEW response)
+    all_cols <- colnames(current_data())
+    rv_name  <- all_cols[response_var()]
+    feature_names_now <- setdiff(all_cols, c(id_name, rv_name))
+    
+    feats_being_used(feature_names_now)
+    feat_names(feature_names_now)
+    updateCheckboxGroupButtons(
+      session, "feats_to_use",
+      choices  = feat_names(),
+      selected = feats_being_used(),
+      size = "xs", status = "custom"
+    )
+    
+    # Response stats excluding left/right-censored tags
+    exclude_values <- c(input$lc_val, input$rc_val)
+    resp_vec <- current_data()[[rv_name]]
+    real_responses <- stats::na.omit(resp_vec[!(resp_vec %in% exclude_values)])
+    
+    safe_min    <- function(x) if (length(x)) min(x) else NA_real_
+    safe_max    <- function(x) if (length(x)) max(x) else NA_real_
+    safe_median <- function(x) if (length(x)) stats::median(x) else NA_real_
+    
+    rmin <- round(safe_min(real_responses), 3)
+    rmax <- round(safe_max(real_responses), 3)
+    rmed <- round(safe_median(real_responses), 2)
+    
+    updateNumericInput(session, "LG_binarize_crit_value",   value = rmed, min = rmin, max = rmax)
+    updateNumericInput(session, "XGBCL_binarize_crit_value", value = rmed, min = rmin, max = rmax)
+    
+    iv$remove_rules("LG_binarize_crit_value")
+    iv$remove_rules("XGBCL_binarize_crit_value")
+    if (is.finite(rmin) && is.finite(rmax) && rmin <= rmax) {
+      iv$add_rule("LG_binarize_crit_value",    sv_between(rmin, rmax))
+      iv$add_rule("XGBCL_binarize_crit_value", sv_between(rmin, rmax))
+    }
+    
+    updateNumericInput(session, "lc_replace", value = rmin)
+    updateNumericInput(session, "rc_replace", value = rmax)
+    
+    renderdata(current_data(), response_var(), id_var, input$select_choice,
+               date_format_string, column_props, ignored_rows, current_data_page(), output)
+    
+    # Reset PCA-related state
+    pca_axes_max(max(0L, ncol(init_data) - 2L))
+    pca_axes(NULL)
+    pcax_being_used(NULL)
+    PCA_dataset(NULL)
+    
+    clear_modeling(TRUE)
+    changed_model(TRUE)
+    
+    updateNumericInput(session, "num_axes", value = pca_axes_max(), max = pca_axes_max())
   })
   
   # Enabling/disabling rows
-  observeEvent(input$ignore_rows, ignoreInit = T, {
+  observeEvent(input$ignore_rows, ignoreInit = TRUE, {
+    # Drop transformed + interaction + A/O columns
+    clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = FALSE)
     
-    if (input$data_tabs == "Data Table") {
-      add_in = input$data_rows_selected[-1]
-    }
-    if (input$data_tabs == "IsoForest Outliers") {
-      add_in = input$iso_outliers_rows_selected
+    # Determine which rows to add to ignored set based on active tab
+    add_in <- integer(0)
+    if (identical(input$data_tabs, "Data Table")) {
+      sel <- input$data_rows_selected %||% integer(0)
+      add_in <- if (length(sel) > 1L) sel[-1L] else integer(0)  # guard for empty/1-length
+    } else if (identical(input$data_tabs, "IsoForest Leverage")) {
+      add_in <- input$iso_leverage_rows_selected %||% integer(0)
     }
     
-    if(identical(unique(append(ignored_rows,add_in)),integer(0))) {
-      ignored_rows <<- NULL
-    } else {
-      ignored_rows <<- unique(append(ignored_rows,add_in))
-    }
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+    # Update ignored_rows
+    new_ignored <- unique(c(ignored_rows %||% integer(0), add_in))
+    ignored_rows <<- if (length(new_ignored)) new_ignored else NULL
+    
+    # Re-render
+    renderdata(current_data(), response_var(), id_var, input$select_choice,
+               date_format_string, column_props, ignored_rows, current_data_page(), output)
   })
   
-  observeEvent(input$enable_rows, ignoreInit = T, {
+  observeEvent(input$enable_rows, ignoreInit = TRUE, {
+    # Drop transformed + interaction + A/O columns
+    clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = FALSE)
     
-    if (input$data_tabs == "Data Table") {
-      add_back = input$data_rows_selected[-1]
-    }
-    if (input$data_tabs == "IsoForest Outliers") {
-      add_back = input$iso_outliers_rows_selected
-    }
-    
-    if(identical(ignored_rows[!ignored_rows %in% add_back],integer(0))) {
-      ignored_rows <<- NULL
-    } else {
-      ignored_rows <<- ignored_rows[!ignored_rows %in% add_back]
+    # Determine which rows to remove from ignored set based on active tab
+    add_back <- integer(0)
+    if (identical(input$data_tabs, "Data Table")) {
+      sel <- input$data_rows_selected %||% integer(0)
+      add_back <- if (length(sel) > 1L) sel[-1L] else integer(0)
+    } else if (identical(input$data_tabs, "IsoForest Leverage")) {
+      add_back <- input$iso_leverage_rows_selected %||% integer(0)
     }
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+    # Update ignored_rows
+    cur_ignored <- ignored_rows %||% integer(0)
+    new_ignored <- cur_ignored[!(cur_ignored %in% add_back)]
+    ignored_rows <<- if (length(new_ignored)) new_ignored else NULL
+    
+    # Re-render
+    renderdata(current_data(), response_var(), id_var, input$select_choice,
+               date_format_string, column_props, ignored_rows, current_data_page(), output)
   })
   
   # Restore the original dataset
   observeEvent(input$restore, ignoreInit = T, {
     
     response_var(2)
+    
+    clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = TRUE)
     
     if (init_ID_format == "YMD") {
       init_data[,1] = ymd(init_data[,1])
@@ -1276,7 +1991,7 @@ server= function(input,output,session) {
     
   })
   
-  # Isolation Forest analysis for outlier detection
+  # Isolation Forest analysis for high leverage detection
   observeEvent(input$run_iso_forest, ignoreInit = T, {
     
     req(iv$is_valid())
@@ -1346,13 +2061,13 @@ server= function(input,output,session) {
     
     iso_results[,6] = round((iso_results[,2] * iso_results[,3] * iso_results[,4] * iso_results[,5])^0.25 - 0.7071,3)
     
-    output$iso_outliers = DT::renderDataTable(server = T, {data = datatable(iso_results,rownames = F,selection = list(selection = "multiple",
+    output$iso_leverage = DT::renderDataTable(server = T, {data = datatable(iso_results,rownames = F,selection = list(selection = "multiple",
                       selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
                       buttons = c('copy', 'csv', 'excel'),pageLength = num_rows_per_page,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
                       initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-    updateTabsetPanel(session, inputId = 'data_tabs', selected = 'IsoForest Outliers')
+    updateTabsetPanel(session, inputId = 'data_tabs', selected = 'IsoForest Leverage')
     
   })
   
@@ -1637,70 +2352,107 @@ server= function(input,output,session) {
     }
   })
   
+  # Update A/O component column names
+  observeEvent(input$component_type, {
+    vals = switch(
+      input$component_type,
+      "Wind"     = c(A = "WindA",    O = "WindO"),
+      "Currents" = c(A = "CurrentA", O = "CurrentO"),
+      "Waves"    = c(A = "WaveA",    O = "WaveO")
+    )
+    updateTextInput(session, "A_name", value = vals[["A"]])
+    updateTextInput(session, "O_name", value = vals[["O"]])
+  }, ignoreInit = TRUE)
+  
   # Create wind/wave/current A/O components
-  observeEvent(input$create_ao, ignoreInit = T, {
+  observeEvent(input$create_ao, ignoreInit = TRUE, {
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Data Table')
     
     if (input$speed != "-" & input$direct != "-") {
       
-      column_names = colnames(current_data())
+      # Determine A/O names from radio button
+      nm <- switch(
+        input$component_type,
+        "Wind"     = c(A = "WindA",    O = "WindO"),
+        "Currents" = c(A = "CurrentA", O = "CurrentO"),
+        "Waves"    = c(A = "WaveA",    O = "WaveO"),
+        c(A = "A_comp", O = "O_comp") # fallback
+      )
+      Aname = nm[["A"]]
+      Oname = nm[["O"]]
       
-      if (!(input$A_name %in% column_names) & !(input$O_name %in% column_names)) {
-        
-        Aname = input$A_name
-        Oname = input$O_name
-        
-        speed_dat = current_data()[,input$speed]
-        dir_dat = current_data()[,input$direct]
-        
-        A_comp = -speed_dat*cos((dir_dat - bo())*pi/180)
-        O_comp = speed_dat*sin((dir_dat - bo())*pi/180)
-        
-        new_data = cbind(current_data(),A_comp,O_comp)
-        colnames(new_data) = c(column_names,Aname,Oname)
-        
-        for (i in (ncol(new_data)-1):ncol(new_data)) {
-          .set(column_props,keys=colnames(new_data)[i],values=2)
-          #.set(column_props,keys=colnames(new_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA))
-        }
-        
-        current_data(new_data)
-        
-        rv = response_var()-1
-        
-        new_column_names = colnames(current_data())[-1]
-        feat_names(new_column_names[-rv])
-        feats_being_used(feat_names())
-        
-        # updateSelectInput(session,"id",choices=c(col_names()))
-        updateSelectInput(session,"set_column_props",choices=c("-",new_column_names))
-        updateSelectInput(session,"rainplot",choices=c("-",new_column_names))
-        updateSelectInput(session,"lineplot",choices=c("-",new_column_names))
-        updateSelectInput(session,"scatterx",selected=input$scatterx,choices=c("-",new_column_names))
-        updateSelectInput(session,"scattery",selected=input$scattery,choices=c("-",new_column_names))
-        
-        pca_axes_max(ncol(current_data())-2)
-        PCA_dataset(NULL)
-        changed_model(TRUE)
-        
-        updateNumericInput(session, "num_axes",
-                           value = pca_axes_max(),
-                           max = pca_axes_max()
-        )
-        
-        clear_modeling(TRUE)
-        
-        renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
-        
-      } else {
-        showModal(modalDialog(div("ERROR: BOTH new component columns must have different names 
-                                  than any currently existing column names.",style="font-size:160%"),easyClose = T))
+      df = current_data()
+      column_names = names(df)
+      
+      # Save the mapping of what the user selected to create A/O
+      if (input$component_type == "Wind") {
+        rv_ao_map$wind_speed = input$speed
+        rv_ao_map$wind_dir   = input$direct
+      } else if (input$component_type == "Currents") {
+        rv_ao_map$current_speed = input$speed
+        rv_ao_map$current_dir   = input$direct
+      } else if (input$component_type == "Waves") {
+        # For waves the magnitude is height; we still use the same select for magnitude
+        rv_ao_map$wave_height = input$speed
+        rv_ao_map$wave_dir    = input$direct
       }
       
+      # Compute A/O
+      speed_dat = df[, input$speed]
+      dir_dat   = df[, input$direct]
+      A_comp = -speed_dat * cos((dir_dat - bo()) * pi/180)
+      O_comp =  speed_dat * sin((dir_dat - bo()) * pi/180)
+      
+      hasA = Aname %in% column_names
+      hasO = Oname %in% column_names
+      
+      # Overwrite if exists; append if not
+      if (hasA) {
+        df[[Aname]] = A_comp
+      } else {
+        df[[Aname]] = A_comp
+        .set(column_props, keys = Aname, values = 2)
+      }
+      if (hasO) {
+        df[[Oname]] = O_comp
+      } else {
+        df[[Oname]] = O_comp
+        .set(column_props, keys = Oname, values = 2)
+      }
+      
+      current_data(df)
+      
+      rv = response_var() - 1
+      
+      new_column_names = names(current_data())[-1]
+      feat_names(new_column_names[-rv])
+      feats_being_used(feat_names())
+      
+      updateSelectInput(session, "set_column_props", choices = c("-", new_column_names))
+      updateSelectInput(session, "rainplot", choices = c("-", new_column_names))
+      updateSelectInput(session, "lineplot", choices = c("-", new_column_names))
+      updateSelectInput(session, "scatterx", selected = input$scatterx, choices = c("-", new_column_names))
+      updateSelectInput(session, "scattery", selected = input$scattery, choices = c("-", new_column_names))
+      
+      pca_axes_max(ncol(current_data()) - 2)
+      PCA_dataset(NULL)
+      changed_model(TRUE)
+      
+      updateNumericInput(session, "num_axes",
+                         value = pca_axes_max(),
+                         max   = pca_axes_max())
+      
+      clear_modeling(TRUE)
+      
+      renderdata(current_data(), response_var(), id_var, input$select_choice, date_format_string, column_props, ignored_rows, current_data_page(), output)
+      
     } else {
-      showModal(modalDialog(div("ERROR: A speed and direction data column must be specified.",style="font-size:160%"),easyClose = T))
+      showModal(modalDialog(
+        div("ERROR: A speed and direction data column must be specified.", style = "font-size:160%"),
+        easyClose = TRUE
+      ))
     }
   })
   
@@ -4296,8 +5048,8 @@ server= function(input,output,session) {
       saved_num_axes = input$num_axes,
       init_column_props = init_column_props,
       column_props = column_props,
-      PCA_scaling_mean = reactiveVal(),
-      PCA_scaling_sd = reactiveVal(),
+      PCA_scaling_mean = PCA_scaling_mean(),
+      PCA_scaling_sd   = PCA_scaling_sd(),
       PCA_dataset = PCA_dataset(),
       PCA_summary_df = PCA_summary_df(),
       PCA_coefficients = PCA_coefficients(),
@@ -4306,6 +5058,9 @@ server= function(input,output,session) {
       pcax_being_used = pcax_being_used(),
       fs_pcax_used = fs_pcax_used(),
       final_model_PCA = final_model_PCA(),
+      rv_ao_map = shiny::reactiveValuesToList(rv_ao_map, all.names = TRUE),
+      rv_pred = { p <- shiny::reactiveValuesToList(rv_pred, all.names = TRUE); p$pending <- NULL; p },
+      poly_coeffs = as.list(POLY_COEFFS),
       
       LG_pred_results = LG_pred_results(),
       LG_pred_coeffs = LG_pred_coeffs(),
@@ -4400,121 +5155,423 @@ server= function(input,output,session) {
   })
   
   # Upload data file into prediction data table
-  observeEvent(input$pred_file, ignoreInit = T, {
+  observeEvent(input$pred_file, ignoreInit = TRUE, {
     
     if (input$model_choice == "None") {
-      showModal(modalDialog(paste("No model has been chosen."), easyClose = F,footer = div(modalButton('Close'))))
+      showModal(modalDialog("No model has been chosen.", easyClose = FALSE,
+                            footer = div(modalButton('Close'))))
       return()
-      
+    }
+    
+    ext <- tools::file_ext(input$pred_file$name)
+    if (ext == "xlsx") {
+      pred_file_data <<- read.xlsx(input$pred_file$datapath)
     } else {
-      
-      ext = tools::file_ext(input$pred_file$name)
-      
-      if (ext == "xlsx") {
-        pred_file_data <<- read.xlsx(input$pred_file$datapath)
-      } else {
-        pred_file_data <<- read.csv(input$pred_file$datapath,header = TRUE,sep = input$sep)
-      }
-      
-      if (any(sapply(data.frame(pred_file_data[,-c(1:2)]), function(col) !is.numeric(col)))) {
-        
-        showModal(modalDialog(paste("Features values in this dataset are either non-numeric or missing. Please remedy prior to data importation."),
-                              easyClose = F,footer = div(modalButton('Close'))))
-        return()
-        
-      }  else if (nrow(pred_file_data) < 2) {
-        
-        showModal(modalDialog(paste("File must contain more than 1 data row."), easyClose = F,footer = div(modalButton('Close'))))
-        
-        return()
-        
-      } else {
-        
-        if (input$model_choice == "Logistic_Regression") {
-          
-          columns_to_grab = LG_final_features()
-          
-        } else if (input$model_choice == "XGB_Classifier") {
-          
-          columns_to_grab = XGBCL_final_features()
-          
-        } else if (input$model_choice == "XGBoost") {
-          
-          columns_to_grab = XGB_final_features()
-          
-        } else if (input$model_choice == "Elastic_Net") {
-          
-          columns_to_grab = EN_final_features()
-          
-        }
-        
-        temp_data = data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = length(columns_to_grab)+6))
-        missing_columns = setdiff(columns_to_grab, colnames(pred_file_data))
-        
-        if (length(missing_columns) > 0) {
-          showModal(modalDialog(
-            title = "Error",
-            paste("The following required columns are missing in the imported prediction data:", paste(missing_columns, collapse = ", ")),
-            easyClose = TRUE
-          ))
-          
-          return()
-          
-        } else {
-          
-          temp_data[,1:2] = pred_file_data[,1:2, drop = FALSE]
-          
-          temp_data[,3:(2+length(columns_to_grab))] = pred_file_data[,columns_to_grab,drop = FALSE]
-          
-          temp_data[,(ncol(temp_data)-3):ncol(temp_data)] = -999
-          
-          colnames(temp_data) = c(
-            "Sample_ID", #colnames(current_data()[1]),
-            colnames(current_data()[response_var()]),
-            columns_to_grab,
-            "Prediction", "Lower_Bound", "Upper_Bound", "Outcome"
+      pred_file_data <<- read.csv(input$pred_file$datapath, header = TRUE, sep = input$sep)
+    }
+    
+    # Basic validations
+    if (any(sapply(data.frame(pred_file_data[, -c(1:2), drop = FALSE]),
+                   function(col) !is.numeric(col)))) {
+      showModal(modalDialog(
+        "Features values in this dataset are either non-numeric or missing. Please remedy prior to data importation.",
+        easyClose = FALSE, footer = div(modalButton('Close'))
+      ))
+      return()
+    }
+    if (nrow(pred_file_data) < 2) {
+      showModal(modalDialog("File must contain more than 1 data row.",
+                            easyClose = FALSE, footer = div(modalButton('Close'))))
+      return()
+    }
+    
+    # Determine model features
+    if (input$model_choice == "Logistic_Regression") {
+      columns_to_grab <- LG_final_features()
+    } else if (input$model_choice == "XGB_Classifier") {
+      columns_to_grab <- XGBCL_final_features()
+    } else if (input$model_choice == "XGBoost") {
+      columns_to_grab <- XGB_final_features()
+    } else if (input$model_choice == "Elastic_Net") {
+      columns_to_grab <- EN_final_features()
+    }
+    
+    # Ensure feature names are unique characters
+    columns_to_grab <- unique(as.character(columns_to_grab))
+    
+    # Identify interaction terms up front
+    inter_terms <- columns_to_grab[grepl(INTER_PATTERN, columns_to_grab, perl = TRUE)]
+    
+    # Helpers for interactions
+    get_inter_components <- function(term) {
+      # Strip "Int.." prefix, then split by "__" to get component names
+      s <- sub(INTER_PATTERN, "", term, perl = TRUE)
+      strsplit(s, INTER_SEP, fixed = TRUE)[[1]]
+    }
+    get_base <- function(x) {
+      if (grepl(TRANS_PATTERN, x, perl = TRUE)) {
+        if (exists("base_name", mode = "function")) base_name(x) else sub(TRANS_PATTERN, "", x, perl = TRUE)
+      } else x
+    }
+    
+    # Detect A/O needs, including transformed A/O and interactions involving A/O
+    ao_all <- c("WindA","WindO","CurrentA","CurrentO","WaveA","WaveO")
+    need_wind    <- any(c("WindA","WindO") %in% columns_to_grab) ||
+      any(grepl(paste0(TRANS_PATTERN, "(WindA|WindO)$"), columns_to_grab, perl = TRUE))
+    need_current <- any(c("CurrentA","CurrentO") %in% columns_to_grab) ||
+      any(grepl(paste0(TRANS_PATTERN, "(CurrentA|CurrentO)$"), columns_to_grab, perl = TRUE))
+    need_wave    <- any(c("WaveA","WaveO") %in% columns_to_grab) ||
+      any(grepl(paste0(TRANS_PATTERN, "(WaveA|WaveO)$"), columns_to_grab, perl = TRUE))
+    
+    # Include interaction terms in A/O need detection
+    inter_terms <- columns_to_grab[grepl(INTER_PATTERN, columns_to_grab, perl = TRUE)]
+    if (length(inter_terms)) {
+      comps <- lapply(inter_terms, get_inter_components)
+      bases <- unlist(lapply(comps, function(pair) vapply(pair, get_base, FUN.VALUE = character(1))), use.names = FALSE)
+      need_wind    <- need_wind    || any(bases %in% c("WindA","WindO"))
+      need_current <- need_current || any(bases %in% c("CurrentA","CurrentO"))
+      need_wave    <- need_wave    || any(bases %in% c("WaveA","WaveO"))
+    }
+    
+    rv_pred$pending <- list(
+      df     = pred_file_data,
+      cols   = columns_to_grab,
+      trans  = columns_to_grab[grepl(TRANS_PATTERN, columns_to_grab, perl = TRUE)],
+      inter  = inter_terms,
+      needs  = list(wind = need_wind, current = need_current, wave = need_wave),
+      model  = input$model_choice
+    )
+    
+    if (need_wind || need_current || need_wave) {
+      # Ask user to map raw columns for the required group(s)
+      showModal(modalDialog(
+        title = "Assign columns for A/O components",
+        easyClose = FALSE,
+        size = "m",
+        tagList(
+          tags$style(HTML("
+          .ao-map .form-group { width: 75%; }
+          .ao-map .selectize-control { width: 75% !important; max-width: none !important; }
+          .ao-map .selectize-control .selectize-input { width: 75% !important; max-width: none !important; }
+          .ao-map .selectize-dropdown { width: 75% !important; max-width: none !important; }
+          .ao-map select.form-control { width: 75% !important; max-width: none !important; }
+        ")),
+          div(class = "ao-map",
+              if (need_wind) tagList(
+                selectInput("map_wind_speed", "Wind Speed",
+                            choices = colnames(pred_file_data), width = "75%"),
+                selectInput("map_wind_dir", "Wind Direction",
+                            choices = colnames(pred_file_data), width = "75%")
+              ),
+              if (need_current) tagList(
+                selectInput("map_current_speed", "Current Speed",
+                            choices = colnames(pred_file_data), width = "75%"),
+                selectInput("map_current_dir", "Current Direction",
+                            choices = colnames(pred_file_data), width = "75%")
+              ),
+              if (need_wave) tagList(
+                selectInput("map_wave_height", "Wave Height",
+                            choices = colnames(pred_file_data), width = "75%"),
+                selectInput("map_wave_dir", "Wave Direction",
+                            choices = colnames(pred_file_data), width = "75%")
+              )
           )
-          
-          updateNumericInput(session, "num_preds",value = nrow(temp_data))
-          current_pred_page(1)
-          
-          if (input$model_choice == "Logistic_Regression") {
-            
-            LG_pred_data(temp_data)
-            
-          } else if (input$model_choice == "XGB_Classifier") {
-            
-            XGBCL_pred_data(temp_data)
-            
-          } else if (input$model_choice == "XGBoost") {
-            
-            XGB_pred_data(temp_data)
-            
-          } else if (input$model_choice == "Elastic_Net") {
-            
-            EN_pred_data(temp_data)
+        ),
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("pred_map_confirm", "Continue")
+        )
+      ))
+      
+      # Stash state to continue after user confirms
+      rv_pred$pending <- list(
+        df    = pred_file_data,
+        cols  = columns_to_grab,
+        needs = list(wind = need_wind, current = need_current, wave = need_wave),
+        model = input$model_choice
+      )
+      return()
+    }
+    
+    # No A/O mapping needed: require only raw bases for transformed AND interaction features
+    # Exclude transformed and interaction feature names themselves from ui_required
+    trans_in_model <- columns_to_grab[grepl(TRANS_PATTERN, columns_to_grab, perl = TRUE)]
+    ui_required    <- columns_to_grab[
+      !grepl(TRANS_PATTERN, columns_to_grab, perl = TRUE) &
+        !grepl(INTER_PATTERN, columns_to_grab, perl = TRUE)
+    ]
+    
+    # Add bases for transformed features
+    if (length(trans_in_model)) {
+      bases <- if (exists("base_name", mode = "function")) {
+        vapply(trans_in_model, base_name, FUN.VALUE = character(1))
+      } else {
+        sub(TRANS_PATTERN, "", trans_in_model, perl = TRUE)
+      }
+      ui_required <- unique(c(ui_required, bases))
+    }
+    
+    # Add bases for interaction terms (exclude AO bases since no A/O mapping in this branch)
+    if (length(inter_terms)) {
+      inter_bases <- unlist(lapply(inter_terms, function(t) {
+        comps <- get_inter_components(t)
+        vapply(comps, get_base, FUN.VALUE = character(1))
+      }), use.names = FALSE)
+      inter_bases <- inter_bases[!(inter_bases %in% ao_all)]
+      ui_required <- unique(c(ui_required, inter_bases))
+    }
+    
+    # Validate raw columns exist in imported file
+    missing_columns <- setdiff(ui_required, colnames(pred_file_data))
+    if (length(missing_columns) > 0) {
+      showModal(modalDialog(
+        title = "Error",
+        paste("The following required columns are missing in the imported prediction data:",
+              paste(missing_columns, collapse = ", ")),
+        easyClose = TRUE
+      ))
+      return()
+    }
+    
+    # Build prediction-entry table with only raw inputs (no transformed/interaction columns)
+    rv_name <- colnames(current_data())[response_var()]
+    temp_data <- data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = length(ui_required) + 6))
+    temp_data[, 1:2] <- pred_file_data[, 1:2, drop = FALSE]
+    temp_data[, 3:(2 + length(ui_required))] <- pred_file_data[, ui_required, drop = FALSE]
+    temp_data[, (ncol(temp_data) - 3):ncol(temp_data)] <- -999
+    colnames(temp_data) <- c("Sample_ID", rv_name, ui_required, "Prediction","Lower_Bound","Upper_Bound","Outcome")
+    
+    updateNumericInput(session, "num_preds", value = nrow(temp_data))
+    current_pred_page(1)
+    
+    if (input$model_choice == "Logistic_Regression") {
+      LG_pred_data(temp_data)
+    } else if (input$model_choice == "XGB_Classifier") {
+      XGBCL_pred_data(temp_data)
+    } else if (input$model_choice == "XGBoost") {
+      XGB_pred_data(temp_data)
+    } else if (input$model_choice == "Elastic_Net") {
+      EN_pred_data(temp_data)
+    }
+    
+    # Date formatting (unchanged)
+    if (init_ID_format == "YMD") {
+      temp_data[, 1] <- ymd(temp_data[, 1]);        date_format_string <<- "toLocaleDateString"
+    } else if (init_ID_format == "MDY") {
+      temp_data[, 1] <- mdy(temp_data[, 1]);        date_format_string <<- "toLocaleDateString"
+    } else if (init_ID_format == "MDYHM") {
+      temp_data[, 1] <- parse_date_time(temp_data[, 1], c('%m/%d/%y %H:%M'), exact = TRUE)
+      date_format_string <<- "toLocaleString"
+    } else if (init_ID_format == "Character") {
+      date_format_string <<- "Character"
+    } else if (init_ID_format == "Numeric") {
+      date_format_string <<- "Numeric"
+    }
+    
+    renderpreddata(temp_data, column_props, current_pred_page(), init_ID_format, output)
+  })
+  
+  # Compute A/O components from mapped Magnitude/Direction columns in imported prediction file
+  observeEvent(input$pred_map_confirm, {
+    req(rv_pred$pending)
+    df    <- rv_pred$pending$df
+    needs <- rv_pred$pending$needs
+    model <- rv_pred$pending$model
+    cols  <- unique(as.character(rv_pred$pending$cols))
+    
+    `%||%` <- function(a, b) if (!is.null(a) && nzchar(a)) a else b
+    
+    # Helpers for interactions and transformed bases
+    get_inter_components <- function(term) {
+      s <- sub(INTER_PATTERN, "", term, perl = TRUE)
+      strsplit(s, INTER_SEP, fixed = TRUE)[[1]]
+    }
+    get_base <- function(x) {
+      if (grepl(TRANS_PATTERN, x, perl = TRUE)) {
+        if (exists("base_name", mode = "function")) base_name(x) else sub(TRANS_PATTERN, "", x, perl = TRUE)
+      } else x
+    }
+    
+    # Ensure canonical names from training are known (rv_ao_map should have canonical names)
+    canon_missing <- c(
+      if (needs$wind    && (is.null(rv_ao_map$wind_speed)    || is.null(rv_ao_map$wind_dir)))   "Wind",
+      if (needs$current && (is.null(rv_ao_map$current_speed) || is.null(rv_ao_map$current_dir))) "Currents",
+      if (needs$wave    && (is.null(rv_ao_map$wave_height)   || is.null(rv_ao_map$wave_dir)))   "Waves"
+    )
+    if (length(canon_missing)) {
+      showModal(modalDialog(
+        title = "Missing component column names",
+        HTML(sprintf(
+          "The following groups do not have A/O component raw column names from the training data: %s.<br>
+         Please create A/O components from the training data first (or define component names) before importing predictions.",
+          paste(unique(canon_missing), collapse = ", ")
+        )),
+        easyClose = TRUE
+      ))
+      return()
+    }
+    
+    # Validate user mapping selections
+    if (needs$wind && (is.null(input$map_wind_speed) || is.null(input$map_wind_dir))) {
+      showNotification("Please select both Wind Speed and Wind Direction.", type = "error"); return()
+    }
+    if (needs$current && (is.null(input$map_current_speed) || is.null(input$map_current_dir))) {
+      showNotification("Please select both Current Speed and Current Direction.", type = "error"); return()
+    }
+    if (needs$wave && (is.null(input$map_wave_height) || is.null(input$map_wave_dir))) {
+      showNotification("Please select both Wave Height and Wave Direction.", type = "error"); return()
+    }
+    
+    # Copy/rename imported columns into canonical (training) names and compute A/O
+    if (needs$wind) {
+      sp_name <- rv_ao_map$wind_speed
+      dr_name <- rv_ao_map$wind_dir
+      df[[sp_name]] <- as.numeric(df[[input$map_wind_speed]])
+      df[[dr_name]] <- as.numeric(df[[input$map_wind_dir]])
+      df[["WindA"]] <- -df[[sp_name]] * cos((df[[dr_name]] - bo()) * pi/180)
+      df[["WindO"]] <-  df[[sp_name]] * sin((df[[dr_name]] - bo()) * pi/180)
+    }
+    if (needs$current) {
+      sp_name <- rv_ao_map$current_speed
+      dr_name <- rv_ao_map$current_dir
+      df[[sp_name]] <- as.numeric(df[[input$map_current_speed]])
+      df[[dr_name]] <- as.numeric(df[[input$map_current_dir]])
+      df[["CurrentA"]] <- -df[[sp_name]] * cos((df[[dr_name]] - bo()) * pi/180)
+      df[["CurrentO"]] <-  df[[sp_name]] * sin((df[[dr_name]] - bo()) * pi/180)
+    }
+    if (needs$wave) {
+      ht_name <- rv_ao_map$wave_height
+      dr_name <- rv_ao_map$wave_dir
+      df[[ht_name]] <- as.numeric(df[[input$map_wave_height]])
+      df[[dr_name]] <- as.numeric(df[[input$map_wave_dir]])
+      df[["WaveA"]] <- -df[[ht_name]] * cos((df[[dr_name]] - bo()) * pi/180)
+      df[["WaveO"]] <-  df[[ht_name]] * sin((df[[dr_name]] - bo()) * pi/180)
+    }
+    
+    # Build list of RAW columns required for the prediction UI (not transformed/interaction names)
+    ao_groups <- list(
+      wind    = list(ao = c("WindA","WindO"),
+                     raw = c(rv_ao_map$wind_speed %||% "Wind Speed",
+                             rv_ao_map$wind_dir   %||% "Wind Direction")),
+      current = list(ao = c("CurrentA","CurrentO"),
+                     raw = c(rv_ao_map$current_speed %||% "Current Speed",
+                             rv_ao_map$current_dir   %||% "Current Direction")),
+      wave    = list(ao = c("WaveA","WaveO"),
+                     raw = c(rv_ao_map$wave_height %||% "Wave Height",
+                             rv_ao_map$wave_dir    %||% "Wave Direction"))
+    )
+    ao_all <- unlist(lapply(ao_groups, `[[`, "ao"), use.names = FALSE)
+    
+    # Identify transformed and interaction terms in the model
+    trans_in_model <- cols[grepl(TRANS_PATTERN, cols, perl = TRUE)]
+    inter_terms    <- cols[grepl(INTER_PATTERN, cols, perl = TRUE)]
+    
+    # Start with non-transformed, non-interaction, non-A/O model features
+    ui_required <- cols[
+      !grepl(TRANS_PATTERN, cols, perl = TRUE) &
+        !grepl(INTER_PATTERN, cols, perl = TRUE) &
+        !(cols %in% ao_all)
+    ]
+    
+    # For any A/O groups needed (in model), add their canonical raw inputs (mapped)
+    if (any(cols %in% ao_groups$wind$ao))    ui_required <- c(ui_required, ao_groups$wind$raw)
+    if (any(cols %in% ao_groups$current$ao)) ui_required <- c(ui_required, ao_groups$current$raw)
+    if (any(cols %in% ao_groups$wave$ao))    ui_required <- c(ui_required, ao_groups$wave$raw)
+    
+    # Add bases for transformed features (skip A/O bases; raw inputs for A/O already added)
+    if (length(trans_in_model)) {
+      bases <- if (exists("base_name", mode = "function")) {
+        vapply(trans_in_model, base_name, FUN.VALUE = character(1))
+      } else {
+        sub(TRANS_PATTERN, "", trans_in_model, perl = TRUE)
+      }
+      for (b in bases) {
+        if (b %in% ao_all) next
+        ui_required <- c(ui_required, b)
+      }
+    }
+    
+    # Add bases for interaction terms
+    if (length(inter_terms)) {
+      for (t in inter_terms) {
+        parts <- get_inter_components(t)
+        for (p in parts) {
+          b <- get_base(p)
+          if (b %in% c("WindA","WindO")) {
+            ui_required <- c(ui_required, ao_groups$wind$raw)
+          } else if (b %in% c("CurrentA","CurrentO")) {
+            ui_required <- c(ui_required, ao_groups$current$raw)
+          } else if (b %in% c("WaveA","WaveO")) {
+            ui_required <- c(ui_required, ao_groups$wave$raw)
+          } else {
+            ui_required <- c(ui_required, b)
           }
-          
-          if (init_ID_format == "YMD") {
-            temp_data[,1] = ymd(temp_data[,1])
-            date_format_string <<- "toLocaleDateString"
-          } else if (init_ID_format == "MDY") {
-            temp_data[,1] = mdy(temp_data[,1])
-            date_format_string <<- "toLocaleDateString"
-          } else if (init_ID_format == "MDYHM") {
-            temp_data[,1] = parse_date_time(temp_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
-            date_format_string <<- "toLocaleString"
-          } else if (init_ID_format == "Character") {
-            date_format_string <<- "Character"
-          } else if (init_ID_format == "Numeric") {
-            date_format_string <<- "Numeric"
-          }
-          
-          renderpreddata(temp_data,column_props,current_pred_page(),init_ID_format,output)
-          
         }
       }
     }
+    
+    # Validate RAW columns exist in imported file (do NOT require transformed/interaction names)
+    ui_required <- unique(ui_required)
+    ui_required <- ui_required[!is.null(ui_required) & nzchar(ui_required)]
+    missing_columns <- setdiff(ui_required, colnames(df))
+    if (length(missing_columns) > 0) {
+      showModal(modalDialog(
+        title = "Error",
+        paste("The following required RAW columns are missing in the imported prediction data:",
+              paste(missing_columns, collapse = ", ")),
+        easyClose = TRUE
+      ))
+      return()
+    }
+    
+    # Build and populate the displayed prediction table from df using RAW ui_required
+    iv_name <- "Sample_ID"
+    rv_name <- colnames(current_data())[response_var()]
+    
+    temp_data <- data.frame(matrix(NA, nrow = nrow(df), ncol = length(ui_required) + 6))
+    temp_data[, 1:2] <- df[, 1:2, drop = FALSE]  # assumes first two cols are ID/RV in imported data
+    temp_data[, 3:(2 + length(ui_required))] <- df[, ui_required, drop = FALSE]
+    temp_data[, (ncol(temp_data) - 3):ncol(temp_data)] <- -999
+    
+    colnames(temp_data) <- c(
+      iv_name,
+      rv_name,
+      ui_required,
+      "Prediction", "Lower_Bound", "Upper_Bound", "Outcome"
+    )
+    
+    updateNumericInput(session, "num_preds", value = nrow(temp_data))
+    current_pred_page(1)
+    
+    # Store the displayed prediction table (RAW UI columns), not model columns
+    if (model == "Logistic_Regression") {
+      LG_pred_data(temp_data)
+    } else if (model == "XGB_Classifier") {
+      XGBCL_pred_data(temp_data)
+    } else if (model == "XGBoost") {
+      XGB_pred_data(temp_data)
+    } else if (model == "Elastic_Net") {
+      EN_pred_data(temp_data)
+    }
+    
+    # Date formatting (unchanged)
+    if (init_ID_format == "YMD") {
+      temp_data[, 1] <- ymd(temp_data[, 1]);        date_format_string <<- "toLocaleDateString"
+    } else if (init_ID_format == "MDY") {
+      temp_data[, 1] <- mdy(temp_data[, 1]);        date_format_string <<- "toLocaleDateString"
+    } else if (init_ID_format == "MDYHM") {
+      temp_data[, 1] <- parse_date_time(temp_data[, 1], c('%m/%d/%y %H:%M'), exact = TRUE)
+      date_format_string <<- "toLocaleString"
+    } else if (init_ID_format == "Character") {
+      date_format_string <<- "Character"
+    } else if (init_ID_format == "Numeric") {
+      date_format_string <<- "Numeric"
+    }
+    
+    renderpreddata(temp_data, column_props, current_pred_page(), init_ID_format, output)
+    
+    removeModal()
+    rv_pred$pending <- NULL
   })
   
   # Load a model for prediction
@@ -4537,16 +5594,25 @@ server= function(input,output,session) {
       if (input$model_choice == "Logistic_Regression") {
         
         output$model_text = renderUI({
-          
           threshold = LG_thresh()
           ifelse(is.null(LG_crit_prob()), LG_crit_prob(0.5), LG_crit_prob())
           probability = LG_crit_prob()
-
+          
+          feats = if (isTRUE(LG_model_PCA())) {
+            nm = names(PCA_scaling_mean())
+            if (is.null(nm) || !length(nm)) LG_final_features() else nm
+          } else {
+            LG_final_features()
+          }
+          feats = unique(feats)
+          feats_str = if (length(feats)) paste(feats, collapse = ", ") else "(none)"
+          
           HTML(paste0(
             "<div style='font-size: 20px; font-weight: bold;'>Model: Logistic Regression</div>",
+            "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ",feats_str,"</div>",
             "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
             "<div>Binarize Threshold: ", threshold, "</div>",
-            "<div>Critical Probality: ", probability, "</div>"
+            "<div>Critical Probability: ", probability, "</div>"
           ))
         })
         
@@ -4633,16 +5699,25 @@ server= function(input,output,session) {
       } else if (input$model_choice == "XGB_Classifier") {
         
         output$model_text = renderUI({
-          
           threshold = XGBCL_thresh()
           ifelse(is.null(XGBCL_crit_prob()), XGBCL_crit_prob(0.5), XGBCL_crit_prob())
           probability = XGBCL_crit_prob()
           
+          feats = if (isTRUE(XGBCL_model_PCA())) {
+            nm = names(PCA_scaling_mean())
+            if (is.null(nm) || !length(nm)) XGBCL_final_features() else nm
+          } else {
+            XGBCL_final_features()
+          }
+          feats = unique(feats)
+          feats_str = if (length(feats)) paste(feats, collapse = ", ") else "(none)"
+          
           HTML(paste0(
             "<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost Classifier</div>",
+            "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ",feats_str,"</div>",
             "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
             "<div>Binarize Threshold: ", threshold, "</div>",
-            "<div>Critical Probality: ", probability, "</div>"
+            "<div>Critical Probability: ", probability, "</div>"
           ))
         })
         
@@ -4728,11 +5803,25 @@ server= function(input,output,session) {
         
       } else if (input$model_choice == "XGBoost") {
         
-        output$model_text = renderUI({HTML("<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost</div>",
-                                           "<div style='font-style: italic;'>Predictions: Response Variable Units</div>",
-                                           "<div>Regulatory Standard: ", input$XGB_stand, "</div>",
-                                           "<div>Decision Criterion: ", input$XGB_dec_crit, "</div>"
-        )})
+        output$model_text = renderUI({
+          
+          feats = if (isTRUE(XGB_model_PCA())) {
+            nm = names(PCA_scaling_mean())
+            if (is.null(nm) || !length(nm)) XGB_final_features() else nm
+          } else {
+            XGB_final_features()
+          }
+          feats = unique(feats)
+          feats_str = if (length(feats)) paste(feats, collapse = ", ") else "(none)"
+          
+          HTML(paste0(
+            "<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost</div>",
+            "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ",feats_str,"</div>",
+            "<div style='font-style: italic;'>Predictions: Response Variable Units</div>",
+            "<div>Regulatory Standard: ", input$XGB_stand, "</div>",
+            "<div>Decision Criterion: ", input$XGB_dec_crit, "</div>"
+          ))
+        })
         
         model_to_use(XGB_model)
         model_features = XGB_final_features()
@@ -4804,11 +5893,25 @@ server= function(input,output,session) {
         
       } else if (input$model_choice == "Elastic_Net") {
         
-        output$model_text = renderUI({HTML("<div style='font-size: 20px; font-weight: bold;'>Model: Elastic Net</div>",
-                                           "<div style='font-style: italic;'>Predictions: Response Variable Units</div>",
-                                           "<div>Regulatory Standard: ", input$EN_stand, "</div>",
-                                           "<div>Decision Criterion: ", input$EN_dec_crit, "</div>"
-        )})
+        output$model_text = renderUI({
+          
+          feats = if (isTRUE(EN_model_PCA())) {
+            nm = names(PCA_scaling_mean())
+            if (is.null(nm) || !length(nm)) EN_final_features() else nm
+          } else {
+            EN_final_features()
+          }
+          feats = unique(feats)
+          feats_str = if (length(feats)) paste(feats, collapse = ", ") else "(none)"
+          
+          HTML(paste0(
+            "<div style='font-size: 20px; font-weight: bold;'>Model: Elastic Net</div>",
+            "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ",feats_str,"</div>",
+            "<div style='font-style: italic;'>Predictions: Response Variable Units</div>",
+            "<div>Regulatory Standard: ", input$EN_stand, "</div>",
+            "<div>Decision Criterion: ", input$EN_dec_crit, "</div>"
+          ))
+        })
         
         model_to_use(EN_model)
         model_features = EN_final_features()
@@ -4887,12 +5990,110 @@ server= function(input,output,session) {
         
         output$pca_model_text = NULL
       }
+
+      iv_name <- "Sample_ID"
+      rv_name <- colnames(current_data())[response_var()]
       
-      #iv_name = colnames(current_data())[1]
-      iv_name = "Sample_ID"
-      rv_name = colnames(current_data())[response_var()]
+      `%||%` <- function(a, b) if (!is.null(a) && nzchar(a)) a else b
       
-      temp_data = data.frame(matrix(-999, nrow = input$num_preds, ncol = length(model_features)+6))
+      # A/O groups and mapping to raw inputs
+      ao_groups <- list(
+        wind    = list(ao = c("WindA","WindO"),
+                       raw = c(rv_ao_map$wind_speed   %||% "Wind Speed",
+                               rv_ao_map$wind_dir     %||% "Wind Direction")),
+        current = list(ao = c("CurrentA","CurrentO"),
+                       raw = c(rv_ao_map$current_speed %||% "Current Speed",
+                               rv_ao_map$current_dir   %||% "Current Direction")),
+        wave    = list(ao = c("WaveA","WaveO"),
+                       raw = c(rv_ao_map$wave_height %||% "Wave Height",
+                               rv_ao_map$wave_dir    %||% "Wave Direction"))
+      )
+      ao_all <- unlist(lapply(ao_groups, `[[`, "ao"), use.names = FALSE)
+      
+      get_inter_components <- function(term) {
+        s <- sub(INTER_PATTERN, "", term, perl = TRUE)
+        strsplit(s, INTER_SEP, fixed = TRUE)[[1]]
+      }
+      
+      get_base <- function(x) {
+        if (grepl(TRANS_PATTERN, x, perl = TRUE)) {
+          if (exists("base_name", mode = "function")) base_name(x) else sub(TRANS_PATTERN, "", x, perl = TRUE)
+        } else x
+      }
+      
+      # Start with model features excluding A/O components
+      ui_features <- model_features[!model_features %in% ao_all]
+      
+      # Add A/O raw inputs once if the model uses that A/O group
+      for (g in names(ao_groups)) {
+        if (any(model_features %in% ao_groups[[g]]$ao)) {
+          for (nm in ao_groups[[g]]$raw) {
+            if (!nm %in% ui_features) ui_features <- c(ui_features, nm)
+          }
+        }
+      }
+      
+      inter_terms <- model_features[grepl(INTER_PATTERN, model_features, perl = TRUE)]
+      if (length(inter_terms)) {
+        comps  <- lapply(inter_terms, get_inter_components)
+        bases  <- unlist(lapply(comps, function(parts) vapply(parts, get_base, FUN.VALUE = character(1))), use.names = FALSE)
+        
+        need_wind    <- any(bases %in% c("WindA","WindO"))
+        need_current <- any(bases %in% c("CurrentA","CurrentO"))
+        need_wave    <- any(bases %in% c("WaveA","WaveO"))
+        
+        if (need_wind) {
+          for (nm in ao_groups$wind$raw) if (!nm %in% ui_features) ui_features <- c(ui_features, nm)
+        }
+        if (need_current) {
+          for (nm in ao_groups$current$raw) if (!nm %in% ui_features) ui_features <- c(ui_features, nm)
+        }
+        if (need_wave) {
+          for (nm in ao_groups$wave$raw) if (!nm %in% ui_features) ui_features <- c(ui_features, nm)
+        }
+      }
+      
+      # Remove any transformed features AND interaction terms from the UI list
+      ui_features <- ui_features[!grepl(TRANS_PATTERN, ui_features, perl = TRUE)]
+      ui_features <- ui_features[!grepl(INTER_PATTERN, ui_features, perl = TRUE)]
+      
+      # Ensure raw base features are shown for each transformed feature in the model (unchanged)
+      trans_in_model <- model_features[grepl(TRANS_PATTERN, model_features, perl = TRUE)]
+      if (length(trans_in_model)) {
+        bases <- sub(TRANS_PATTERN, "", trans_in_model, perl = TRUE)
+        for (b in bases) {
+          if (b %in% ao_all) next
+          if (!b %in% ui_features) ui_features <- c(ui_features, b)
+        }
+      }
+      
+      # NEW: ensure raw base features are shown for each interaction term in the model
+      if (length(inter_terms)) {
+        for (t in inter_terms) {
+          parts <- get_inter_components(t)
+          for (p in parts) {
+            b <- get_base(p)
+            # Skip A/O bases—raw speed/dir or height/dir were already added above
+            if (b %in% ao_all) next
+            if (!b %in% ui_features) ui_features <- c(ui_features, b)
+          }
+        }
+      }
+      
+      # Deduplicate while preserving order
+      ui_features <- unique(ui_features)
+      
+      # Build the prediction-entry table using UI features
+      temp_data <- data.frame(matrix(-999, nrow = input$num_preds, ncol = length(ui_features) + 6))
+      colnames(temp_data) <- c(iv_name, rv_name, ui_features, "Prediction","Lower_Bound","Upper_Bound","Outcome")
+      
+      if (is.null(pred_data()) || changed_model()) {
+        pred_data(temp_data)
+        changed_model(FALSE)
+      }
+      
+      pred_residuals(resids)
+      pred_model_features(model_features)
       
       # if (input$num_preds == 1) {
       #   
@@ -4904,16 +6105,6 @@ server= function(input,output,session) {
       #   temp_data[,1:2] = 0
       #   temp_data[,(ncol(temp_data)-2):ncol(temp_data)] = 0
       # }
-      
-      colnames(temp_data) = c(iv_name,rv_name,model_features,"Prediction","Lower_Bound","Upper_Bound","Outcome")
-      
-      if (is.null(pred_data()) || changed_model()) {
-        pred_data(temp_data)
-        changed_model(FALSE)
-      }
-      
-      pred_residuals(resids)
-      pred_model_features(model_features)
       
       if (no_resids()) {
         output$resid_text = renderUI({HTML("<div style='font-size: 16px; font-weight: bold;'>NO PREDICTION RESIDUALS: Run a prediction model for confidence intervals</div>")})
@@ -4931,136 +6122,164 @@ server= function(input,output,session) {
       
       current_pred_page(1)
       
-      selected_data = current_data()[,model_features]
-      num_cols = length(model_features)
+      # Build the columns to display in the Feature Ranges table; use model_features for non-A/O features; for any A/O groups present in the model, replace with the canonical raw columns
+      ao_groups = list(
+        wind    = list(ao = c("WindA","WindO"),
+                       raw = c(rv_ao_map$wind_speed,    rv_ao_map$wind_dir)),
+        current = list(ao = c("CurrentA","CurrentO"),
+                       raw = c(rv_ao_map$current_speed, rv_ao_map$current_dir)),
+        wave    = list(ao = c("WaveA","WaveO"),
+                       raw = c(rv_ao_map$wave_height,   rv_ao_map$wave_dir))
+      )
       
-      min_feats = apply(selected_data, 2, min, na.rm = TRUE)
-      max_feats = apply(selected_data, 2, max, na.rm = TRUE)
+      ao_all = unlist(lapply(ao_groups, `[[`, "ao"), use.names = FALSE)
       
-      feature_ranges = data.frame(matrix(NA, nrow = 2, ncol = num_cols+1))
-      feature_ranges[1,1] = "Minimum"
-      feature_ranges[2,1] = "Maximum"
-      feature_ranges[1, 2:(1 + num_cols)] = magnitude_round(min_feats)
-      feature_ranges[2, 2:(1 + num_cols)] = magnitude_round(max_feats)
+      # Start with model features excluding A/O features
+      ui_features_ranges = model_features[!model_features %in% ao_all]
       
-      colnames(feature_ranges) = c("Feature_Characteristic",model_features)
+      # For each group with A/O in the model, append its canonical raw columns (once)
+      for (g in names(ao_groups)) {
+        if (any(model_features %in% ao_groups[[g]]$ao)) {
+          raws = ao_groups[[g]]$raw
+          # keep only non-null names that actually exist in current_data()
+          raws = raws[!vapply(raws, is.null, logical(1))]
+          raws = raws[raws %in% colnames(current_data())]
+          if (length(raws) == 0) {
+            # Fallback: if raw mapping not available, keep the A/O names so table isn't empty
+            for (ao in ao_groups[[g]]$ao) {
+              if (!(ao %in% ui_features_ranges)) ui_features_ranges = c(ui_features_ranges, ao)
+            }
+          } else {
+            for (nm in raws) {
+              if (!(nm %in% ui_features_ranges)) ui_features_ranges = c(ui_features_ranges, nm)
+            }
+          }
+        }
+      }
+      
+      # Deduplicate while preserving order and keep only columns present in current_data
+      present_cols = unique(ui_features_ranges)
+      present_cols = present_cols[present_cols %in% colnames(current_data())]
+      
+      # Compute ranges on these columns
+      if (length(present_cols) > 0) {
+        selected_data = current_data()[, present_cols, drop = FALSE]
+        num_cols = length(present_cols)
+        
+        min_feats = apply(selected_data, 2, min, na.rm = TRUE)
+        max_feats = apply(selected_data, 2, max, na.rm = TRUE)
+        
+        feature_ranges = data.frame(matrix(NA, nrow = 2, ncol = num_cols + 1))
+        feature_ranges[1, 1] <- "Minimum"
+        feature_ranges[2, 1] <- "Maximum"
+        feature_ranges[1, 2:(1 + num_cols)] = magnitude_round(min_feats)
+        feature_ranges[2, 2:(1 + num_cols)] = magnitude_round(max_feats)
+        
+        colnames(feature_ranges) = c("Feature_Characteristic", present_cols)
+      } else {
+        # Graceful fallback: only the label column
+        feature_ranges = data.frame(Feature_Characteristic = c("Minimum", "Maximum"))
+      }
+      
       model_feature_ranges(feature_ranges)
       
-      renderpreddata(pred_data(),column_props,current_pred_page(),init_ID_format,output)
+      renderpreddata(pred_data(), column_props, current_pred_page(), init_ID_format, output)
       
       if (input$model_choice == "Logistic_Regression") {
-        
         LG_pred_data(pred_data())
-        
       } else if (input$model_choice == "XGB_Classifier") {
-        
         XGBCL_pred_data(pred_data())
-        
       } else if (input$model_choice == "XGBoost") {
-        
         XGB_pred_data(pred_data())
-        
       } else if (input$model_choice == "Elastic_Net") {
-        
         EN_pred_data(pred_data())
       }
       
-      output$pd_feat_ranges = DT::renderDataTable(server = T, {
+      output$pd_feat_ranges = DT::renderDataTable(server = TRUE, {
         datatable(
           data.frame(feature_ranges),
-          rownames = F,
+          rownames = FALSE,
           selection = "none",
-          colnames = c("Feature Characteristic",colnames(feature_ranges)[2:ncol(feature_ranges)]),
-          editable = F,
+          colnames = c("Feature Characteristic", colnames(feature_ranges)[2:ncol(feature_ranges)]),
+          editable = FALSE,
           options = list(
-            autoWidth = F,
-            dom='t',
-            paging = F,
+            autoWidth = FALSE,
+            dom = 't',
+            paging = FALSE,
             pageLength = 5,
             scrollX = TRUE,
-            scrollY = F,
-            columnDefs = list(list(targets = 0, width = "170px"),list(targets = '_all', className = 'dt-center')),
+            scrollY = FALSE,
+            columnDefs = list(
+              list(targets = 0, width = "170px"),
+              list(targets = '_all', className = 'dt-center')
+            ),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
               "}"
-            )))
+            )
+          )
+        )
       })
     }
   })
   
   # Change the number of desired predictions
-  observeEvent(input$num_preds, ignoreInit = T, {
-    
+  observeEvent(input$num_preds, ignoreInit = TRUE, {
     req(iv$is_valid())
     
-    if (input$model_choice == "Logistic_Regression") {
+    temp_data <- switch(input$model_choice,
+                        "Logistic_Regression" = LG_pred_data(),
+                        "XGB_Classifier"      = XGBCL_pred_data(),
+                        "XGBoost"             = XGB_pred_data(),
+                        "Elastic_Net"         = EN_pred_data(),
+                        NULL
+    )
+    req(!is.null(temp_data))
+    
+    cols      <- colnames(temp_data)
+    n_current <- nrow(temp_data)
+    n_target  <- input$num_preds
+    n_new     <- n_target - n_current
+    
+    if (n_new > 0) {
+      # Append rows with the same columns as temp_data
+      new_rows <- as.data.frame(matrix(-999, nrow = n_new, ncol = length(cols)))
+      names(new_rows) <- cols
+      temp_data1 <- rbind(temp_data, new_rows)
       
-      temp_data = LG_pred_data()
-      model_features = LG_final_features()
+      # Fill ID/Response for the appended rows with "-999"
+      temp_data1[(n_current + 1):nrow(temp_data1), 1] <- "-999"
+      temp_data1[(n_current + 1):nrow(temp_data1), 2] <- "-999"
+      # Coerce those two columns to character so "-999" shows and avoids NA
+      temp_data1[, 1] <- as.character(temp_data1[, 1])
+      temp_data1[, 2] <- as.character(temp_data1[, 2])
       
-    } else if (input$model_choice == "XGB_Classifier") {
+    } else if (n_target == 1) {
+      # Rebuild as a single-row table with same columns
+      temp_data1 <- as.data.frame(matrix(-999, nrow = 1, ncol = length(cols)))
+      names(temp_data1) <- cols
       
-      temp_data = XGBCL_pred_data()
-      model_features = XGBCL_final_features()
-      
-    } else if (input$model_choice == "XGBoost") {
-      
-      temp_data = XGB_pred_data()
-      model_features = XGB_final_features()
-      
-    } else if (input$model_choice == "Elastic_Net") {
-      
-      temp_data = EN_pred_data()
-      model_features = EN_final_features()
+      # Fill ID/Response for the single row with "-999"
+      temp_data1[1, 1] <- "-999"
+      temp_data1[1, 2] <- "-999"
+      temp_data1[, 1]  <- as.character(temp_data1[, 1])
+      temp_data1[, 2]  <- as.character(temp_data1[, 2])
       
     } else {
-      
-      temp_data = NULL
-      model_features = NULL
-      return()
+      # Truncate to requested number of rows
+      temp_data1 <- temp_data[seq_len(n_target), , drop = FALSE]
     }
     
-    iv_name = colnames(temp_data)[1]
-    rv_name = colnames(temp_data)[2]
+    # Save back to the appropriate store
+    switch(input$model_choice,
+           "Logistic_Regression" = LG_pred_data(temp_data1),
+           "XGB_Classifier"      = XGBCL_pred_data(temp_data1),
+           "XGBoost"             = XGB_pred_data(temp_data1),
+           "Elastic_Net"         = EN_pred_data(temp_data1)
+    )
     
-    if (nrow(temp_data) < input$num_preds) {
-      
-      new_rows = matrix(-999, nrow = (input$num_preds-nrow(temp_data)), ncol = length(model_features)+6)
-      colnames(new_rows) = c(iv_name,rv_name,model_features,"Prediction","Lower_Bound","Upper_Bound","Outcome")
-      
-      temp_data1 = rbind(temp_data,new_rows)
-      colnames(temp_data1) = colnames(new_rows)
-      
-    } else if (input$num_preds==1) {
-      
-      temp_data1 = matrix(-999, nrow = 1, ncol = length(model_features)+6)
-      colnames(temp_data1) = c(iv_name,rv_name,model_features,"Prediction","Lower_Bound","Upper_Bound","Outcome")
-      
-    } else {
-      temp_data1 = temp_data[1:input$num_preds,]
-    }
-    
-    if (input$model_choice == "Logistic_Regression") {
-      
-      LG_pred_data(temp_data1)
-      
-    } else if (input$model_choice == "XGB_Classifier") {
-      
-      XGBCL_pred_data(temp_data1)
-      
-    } else if (input$model_choice == "XGBoost") {
-      
-      XGB_pred_data(temp_data1)
-      
-    } else if (input$model_choice == "Elastic_Net") {
-      
-      EN_pred_data(temp_data1)
-      
-    }
-    
-    renderpreddata(temp_data1,column_props,current_pred_page(),init_ID_format,output)
-    
+    renderpreddata(temp_data1, column_props, current_pred_page(), init_ID_format, output)
   })
   
   # Prediction dataset cell editing
@@ -5120,220 +6339,340 @@ server= function(input,output,session) {
   })
   
   # Make predictions using selected model
-  observeEvent (input$make_preds, ignoreInit = T, {
-    
+  observeEvent(input$make_preds, ignoreInit = TRUE, {
     req(iv$is_valid())
     
-    if (input$model_choice == "Logistic_Regression") {
-      
-      prediction_data = LG_pred_data()
-      
-    } else if (input$model_choice == "XGB_Classifier") {
-      
-      prediction_data = XGBCL_pred_data()
-      
-    } else if (input$model_choice == "XGBoost") {
-      
-      prediction_data = XGB_pred_data()
-      
-    } else if (input$model_choice == "Elastic_Net") {
-      
-      prediction_data = EN_pred_data()
-      
-    } else {
-      
-      prediction_data = NULL
+    # 1) Get the displayed prediction table for the chosen model
+    prediction_data = switch(input$model_choice,
+                              "Logistic_Regression" = LG_pred_data(),
+                              "XGB_Classifier"      = XGBCL_pred_data(),
+                              "XGBoost"             = XGB_pred_data(),
+                              "Elastic_Net"         = EN_pred_data(),
+                              NULL
+    )
+    
+    if (is.null(prediction_data)) {
+      showModal(modalDialog(
+        "Missing feature values are not allowed. Provide all feature values to make predictions.",
+        easyClose = FALSE, footer = div(modalButton('Close'))
+      ))
       return()
     }
     
-    if (is.null(prediction_data)) {
-      
-      showModal(modalDialog(paste("Missing feature values are not allowed. Provide all feature values to make predictions."),
-                            easyClose = F,footer = div(modalButton('Close'))))
+    # 2) Validate no missing values in the UI feature region
+    ui_start <- 3
+    ui_stop  <- ncol(prediction_data) - 4  # last 4 are Prediction/Bounds/Outcome
+    ui_df    <- if (ui_stop >= ui_start) prediction_data[, ui_start:ui_stop, drop = FALSE] else NULL
+    
+    if (is.null(ui_df) ||
+        any(is.na(ui_df)) ||
+        any(as.matrix(ui_df) == -999, na.rm = TRUE)) {
+      showModal(modalDialog(
+        "Missing feature values detected. Provide all feature values to make predictions.",
+        easyClose = FALSE, footer = div(modalButton('Close'))
+      ))
       return()
-      
-    } else if (any(prediction_data[, 3:(ncol(prediction_data) - 4)] == -999) || 
-               is.null(prediction_data[, 3:(ncol(prediction_data) - 4)]) || 
-               any(is.na(prediction_data[, 3:(ncol(prediction_data) - 4)]))) {
-      
-      showModal(modalDialog(paste("Missing feature values detected. Provide all feature values to make predictions."),
-                            easyClose = F,footer = div(modalButton('Close'))))
-      return()
-      
-    } else {
-      
-      resids = pred_residuals()
-      model = model_to_use()
-      outcomes = c()
-      
-      if (input$model_choice == "Logistic_Regression") {
-        
-        model_features = LG_final_features()
-        
-      } else if (input$model_choice == "XGB_Classifier") {
-        
-        model_features = XGBCL_final_features()
-        
-      } else if (input$model_choice == "XGBoost") {
-        
-        model_features = XGB_final_features()
-        
-      } else if (input$model_choice == "Elastic_Net") {
-        
-        model_features = EN_final_features()
-      }
-      
-      # iv_name = colnames(current_data())[1]
-      iv_name = "Sample_ID"
-      rv_name = colnames(current_data())[response_var()]
-      stop = ncol(prediction_data)-4
-      
-      if (input$num_preds == 1 && nrow(prediction_data) > 1) {
-        pred_feat_data = data.frame(t(prediction_data[1,3:stop]))
-      } else if (input$num_preds == 1 && nrow(prediction_data) <2) {
-        pred_feat_data = data.frame(prediction_data[1,3:stop])
-      } else {
-        pred_feat_data = data.frame(prediction_data[,3:stop])
-      }
-      
-      if (final_model_PCA()) {
-        
-        matched_mean = PCA_scaling_mean()[colnames(pred_feat_data)]
-        matched_sd = PCA_scaling_sd()[colnames(pred_feat_data)]
-        scaled_pred_data = scale(pred_feat_data, center = matched_mean, scale = matched_sd)
-        
-        part1 = as.matrix(scaled_pred_data)
-        part2 = as.matrix(PCA_coefficients() %>% select(any_of(model_PCA_axes())))
-        
-        pred_pca_data = data.frame(part1 %*% part2)
-      }
-      
-      if (input$model_choice == "Logistic_Regression") {
-        
-        if (final_model_PCA()) {
-          predictions = predict(model, newx = as.matrix(pred_pca_data), type = "response", scale = LG_standardize())
-        } else {
-          predictions = predict(model, newx = as.matrix(pred_feat_data), type = "response", scale = LG_standardize())
-        }
-        
-        for (i in 1:nrow(prediction_data)) {
-          
-          if (is.numeric(prediction_data[i,2])) {
-            
-            outcomes[i] = ifelse(predictions[i] >= LG_crit_prob() && prediction_data[i,2] >= LG_thresh(),"TP", ifelse(predictions[i] <= LG_crit_prob() && prediction_data[i,2] <= LG_thresh(),"TN",
-                                         ifelse(predictions[i] >= LG_crit_prob() && prediction_data[i,2] <= LG_thresh(),"FP","FN")))
-            
-          } else {
-            
-            outcomes[i] = NA
-          }
-        }
-        
-      } else if (input$model_choice == "XGB_Classifier") {
-        
-        if (final_model_PCA()) {
-          predictions = predict(model, newdata = as.matrix(pred_pca_data, type="response", scale = XGBCL_standardize()))
-        } else {
-          predictions = predict(model, newdata = as.matrix(pred_feat_data, type="response", scale = XGBCL_standardize()))
-        }
-        
-        for (i in 1:nrow(prediction_data)) {
-          
-          if (is.numeric(prediction_data[i,2])) {
-            
-            outcomes[i] = ifelse(predictions[i] >= XGBCL_crit_prob() && prediction_data[i,2] >= XGBCL_thresh(),"TP", ifelse(predictions[i] <= XGBCL_crit_prob() && prediction_data[i,2] <= XGBCL_thresh(),"TN",
-                                        ifelse(predictions[i] >= XGBCL_crit_prob() && prediction_data[i,2] <= XGBCL_thresh(),"FP","FN")))
-            
-          } else {
-            
-            outcomes[i] = NA
-          }
-        }
-        
-      } else if (input$model_choice == "XGBoost") {
-        
-        if (final_model_PCA()) {
-          predictions = predict(model, newdata = as.matrix(pred_pca_data), scale = XGB_standardize())
-        } else {
-          predictions = predict(model, newdata = as.matrix(pred_feat_data), scale = XGB_standardize())
-        }
-        
-        for (i in 1:nrow(prediction_data)) {
-          
-          if (is.numeric(prediction_data[i,2])) {
-            
-            outcomes[i] = ifelse(predictions[i] >= input$XGB_dec_crit && prediction_data[i,2] >= input$XGB_stand,"TP",
-                                 ifelse(predictions[i] <= input$XGB_dec_crit && prediction_data[i,2] <= input$XGB_stand,"TN",
-                                        ifelse(predictions[i] >= input$XGB_dec_crit && prediction_data[i,2] <= input$XGB_stand,"FP","FN")))
-            
-          } else {
-            
-            outcomes[i] = NA
-          }
-        }
-        
-      } else if (input$model_choice == "Elastic_Net") {
-        
-        if (final_model_PCA()) {
-          predictions = predict(model, newx = as.matrix(pred_pca_data), scale = EN_standardize())
-        } else {
-          predictions = predict(model, newx = as.matrix(pred_feat_data), scale = EN_standardize())
-        }
-        
-        for (i in 1:nrow(prediction_data)) {
-          
-          if (is.numeric(prediction_data[i,2])) {
-            
-            outcomes[i] = ifelse(predictions[i] >= input$EN_dec_crit && prediction_data[i,2] >= input$EN_stand,"TP",
-                                 ifelse(predictions[i] <= input$EN_dec_crit && prediction_data[i,2] <= input$EN_stand,"TN",
-                                        ifelse(predictions[i] >= input$EN_dec_crit && prediction_data[i,2] <= input$EN_stand,"FP","FN")))
-            
-          } else {
-            
-            outcomes[i] = NA
-          }
-        }
-      }
-      
-      if (!is.null(resids)) {
-        
-        sorted_resids = sort(resids,decreasing = TRUE)
-        
-        # Define the percentile (e.g., 90th percentile)
-        percentile = 100*(1-input$conf_bound)
-        
-        # Calculate the index for the ith percentile largest value
-        index = ceiling((percentile / 100)*length(sorted_resids))
-        
-        # Find the ith percentile largest value
-        crit_value = sorted_resids[index]
-        
-        upper_bound = round(predictions + crit_value,3)
-        lower_bound = round(predictions - crit_value,3)
-        
-        if (input$model_choice == "Logistic_Regression" || input$model_choice == "XGB_Classifier") {
-          upper_bound[upper_bound > 1] = 1
-          lower_bound[lower_bound < 0] = 0
-        }
-        
-      } else {
-        
-        upper_bound = rep(NA, length(predictions))
-        lower_bound = rep(NA, length(predictions))
-      }
-      
-      
-      if (input$num_preds == 1) {
-        new_pred_data = data.frame(cbind(prediction_data[1,1],prediction_data[1,2],pred_feat_data,round(predictions,3),lower_bound,upper_bound,outcomes))
-      } else {
-        new_pred_data = data.frame(cbind(prediction_data[,1],prediction_data[,2],pred_feat_data,round(predictions,3),lower_bound,upper_bound,outcomes))
-      }
-      
-      colnames(new_pred_data) = c(iv_name,rv_name,model_features,"Prediction","Lower_Bound","Upper_Bound","Outcome")
-      pred_data(new_pred_data)
-      
-      output$pd_data = renderpreddata(pred_data(),column_props,current_pred_page(),init_ID_format,output)
     }
+    
+    # 3) Determine the model + features the model expects
+    model = model_to_use()
+    model_features = switch(input$model_choice,
+                             "Logistic_Regression" = LG_final_features(),
+                             "XGB_Classifier"      = XGBCL_final_features(),
+                             "XGBoost"             = XGB_final_features(),
+                             "Elastic_Net"         = EN_final_features()
+    )
+    
+    # 4) Build a working feature frame from the UI table and compute A/O if needed
+    # The UI feature columns (3:ui_stop) contain raw Magnitude/Direction columns (canonical names).
+    df_ui = as.data.frame(prediction_data[, ui_start:ui_stop, drop = FALSE])
+    
+    # Compute A/O components if the model expects them.
+    need_wind    = any(model_features %in% c("WindA",    "WindO"))
+    need_current = any(model_features %in% c("CurrentA", "CurrentO"))
+    need_wave    = any(model_features %in% c("WaveA",    "WaveO"))
+    
+    `%||%` = function(a, b) if (!is.null(a) && nzchar(a)) a else b
+    
+    # Wind
+    if (need_wind) {
+      sp = rv_ao_map$wind_speed   %||% "Wind Speed"
+      dr = rv_ao_map$wind_dir     %||% "Wind Direction"
+      if (!all(c(sp, dr) %in% names(df_ui))) {
+        showModal(modalDialog(
+          "Wind raw inputs are missing from the prediction table.", easyClose = TRUE
+        ))
+        return()
+      }
+      ws = as.numeric(df_ui[[sp]])
+      wd = as.numeric(df_ui[[dr]])
+      df_ui[["WindA"]] = -ws * cos((wd - bo()) * pi/180)
+      df_ui[["WindO"]] =  ws * sin((wd - bo()) * pi/180)
+    }
+    
+    # Currents
+    if (need_current) {
+      sp = rv_ao_map$current_speed %||% "Current Speed"
+      dr = rv_ao_map$current_dir   %||% "Current Direction"
+      if (!all(c(sp, dr) %in% names(df_ui))) {
+        showModal(modalDialog(
+          "Current raw inputs are missing from the prediction table.", easyClose = TRUE
+        ))
+        return()
+      }
+      cs = as.numeric(df_ui[[sp]])
+      cd = as.numeric(df_ui[[dr]])
+      df_ui[["CurrentA"]] = -cs * cos((cd - bo()) * pi/180)
+      df_ui[["CurrentO"]] =  cs * sin((cd - bo()) * pi/180)
+    }
+    
+    # Waves
+    if (need_wave) {
+      ht = rv_ao_map$wave_height %||% "Wave Height"
+      dr = rv_ao_map$wave_dir    %||% "Wave Direction"
+      if (!all(c(ht, dr) %in% names(df_ui))) {
+        showModal(modalDialog(
+          "Wave raw inputs are missing from the prediction table.", easyClose = TRUE
+        ))
+        return()
+      }
+      wh = as.numeric(df_ui[[ht]])
+      wd = as.numeric(df_ui[[dr]])
+      df_ui[["WaveA"]] = -wh * cos((wd - bo()) * pi/180)
+      df_ui[["WaveO"]] =  wh * sin((wd - bo()) * pi/180)
+    }
+    
+    # Map prefix -> transform kind
+    prefix_kind <- list(
+      "Log.."     = "Log",
+      "Inverse.." = "Inverse",
+      "Square.."  = "Square",
+      "Sqrt.."    = "Sqrt",
+      "Qdrt.."    = "Qdrt",
+      "Poly.."    = "Poly"
+    )
+    
+    # For every transformed model feature, compute it from its base raw column in df_ui
+    trans_feats <- model_features[grepl(TRANS_PATTERN, model_features)]
+    if (length(trans_feats)) {
+      for (tf in trans_feats) {
+        base <- sub(TRANS_PATTERN, "", tf)
+        if (!base %in% names(df_ui)) {
+          showModal(modalDialog(
+            title = "Missing raw input",
+            paste0("Prediction table is missing raw feature '", base, "' required to compute '", tf, "'."),
+            easyClose = TRUE
+          ))
+          return()
+        }
+        # Identify which prefix/kind applies
+        prefix <- sub(paste0("^(Log..|Inverse..|Square..|Sqrt..|Qdrt..|Poly..).*$"), "\\1", tf)
+        kind   <- prefix_kind[[prefix]]
+        df_ui[[tf]] <- compute_transform(as.numeric(df_ui[[base]]), kind)
+      }
+    }
+    
+    int_feats <- model_features[is_interaction(model_features)]
+    if (length(int_feats)) {
+      for (nm in int_feats) {
+        bases <- parse_inter_bases(nm)  # c(a, b)
+        a <- bases[1]; b <- bases[2]
+        if (!all(c(a, b) %in% names(df_ui))) {
+          showModal(modalDialog(
+            title = "Missing inputs for interactions",
+            paste0("Missing raw input(s) '", paste(setdiff(c(a, b), names(df_ui)), collapse = ", "),
+                   "' required to compute interaction '", nm, "'."),
+            easyClose = TRUE
+          ))
+          return()
+        }
+        df_ui[[nm]] <- as.numeric(df_ui[[a]]) * as.numeric(df_ui[[b]])
+      }
+    }
+    
+    # 5) Build the model input matrix in the exact feature order required by the model
+    # For PCA models, we must project from the pre-PCA feature space.
+    final_pca = isTRUE(final_model_PCA())
+    
+    if (final_pca) {
+      # Names of the original (pre-PCA) features used to fit PCA
+      base_vars = names(PCA_scaling_mean())
+      if (is.null(base_vars)) {
+        showModal(modalDialog(
+          "PCA scaling information is missing. Cannot compute PCA features.",
+          easyClose = TRUE
+        ))
+        return()
+      }
+      
+      missing_base = setdiff(base_vars, names(df_ui))
+      if (length(missing_base) > 0) {
+        showModal(modalDialog(
+          title = "Missing pre-PCA features",
+          HTML(paste(
+            "The following pre-PCA features are required but not found in the prediction table:",
+            paste(missing_base, collapse = ", ")
+          )),
+          easyClose = TRUE
+        ))
+        return()
+      }
+      
+      pred_base = as.data.frame(df_ui[, base_vars, drop = TRUE])
+      # Ensure it is 2D even for single-row, single-col cases
+      if (is.null(dim(pred_base))) pred_base = as.data.frame(matrix(pred_base, nrow = nrow(df_ui), dimnames = list(NULL, base_vars)))
+      
+      matched_mean = PCA_scaling_mean()[base_vars]
+      matched_sd   = PCA_scaling_sd()[base_vars]
+      scaled_pred  = scale(pred_base, center = matched_mean, scale = matched_sd)
+      
+      # Project onto the axes used by the model
+      axes = model_PCA_axes()
+      if (is.null(axes) || length(axes) == 0) {
+        showModal(modalDialog(
+          "Model PCA axes are not available.", easyClose = TRUE
+        ))
+        return()
+      }
+      coeff = PCA_coefficients()
+      # Expect coeff rows = base_vars, columns include axes
+      # Ensure ordering matches
+      coeff_sub = as.matrix(coeff[base_vars, axes, drop = FALSE])
+      pred_pca_data = as.data.frame(as.matrix(scaled_pred) %*% coeff_sub)
+      
+      # Sanity: columns of pred_pca_data should be axes (model features)
+      # We'll feed pred_pca_data to predict()
+    } else {
+      # Non-PCA: ensure all model_features exist (from df_ui that now includes any needed A/O)
+      missing_feats = setdiff(model_features, names(df_ui))
+      if (length(missing_feats) > 0) {
+        showModal(modalDialog(
+          title = "Missing required features",
+          HTML(paste(
+            "The following required model features are missing:",
+            paste(missing_feats, collapse = ", ")
+          )),
+          easyClose = TRUE
+        ))
+        return()
+      }
+      pred_feat_data = as.data.frame(df_ui[, model_features, drop = FALSE])
+      # Ensure 2D for single-row edge cases
+      if (is.null(dim(pred_feat_data))) {
+        pred_feat_data = as.data.frame(matrix(pred_feat_data, nrow = nrow(df_ui), dimnames = list(NULL, model_features)))
+      }
+    }
+    
+    # 6) Predict with the chosen model
+    resids = pred_residuals()
+    rv_val = prediction_data[, 2, drop = TRUE]  # response column for outcome labelling
+    outcomes = character(nrow(prediction_data))
+    
+    if (input$model_choice == "Logistic_Regression") {
+      if (final_pca) {
+        predictions = predict(model, newx = as.matrix(pred_pca_data), type = "response", scale = LG_standardize())
+      } else {
+        predictions = predict(model, newx = as.matrix(pred_feat_data), type = "response", scale = LG_standardize())
+      }
+      
+      for (i in seq_len(nrow(prediction_data))) {
+        if (is.numeric(rv_val[i])) {
+          outcomes[i] = ifelse(predictions[i] >= LG_crit_prob() && rv_val[i] >= LG_thresh(), "TP",
+                                ifelse(predictions[i] <= LG_crit_prob() && rv_val[i] <= LG_thresh(), "TN",
+                                       ifelse(predictions[i] >= LG_crit_prob() && rv_val[i] <= LG_thresh(), "FP", "FN")))
+        } else {
+          outcomes[i] = NA
+        }
+      }
+      
+    } else if (input$model_choice == "XGB_Classifier") {
+      if (final_pca) {
+        predictions = predict(model, newdata = as.matrix(pred_pca_data), type = "response", scale = XGBCL_standardize())
+      } else {
+        predictions = predict(model, newdata = as.matrix(pred_feat_data), type = "response", scale = XGBCL_standardize())
+      }
+      
+      for (i in seq_len(nrow(prediction_data))) {
+        if (is.numeric(rv_val[i])) {
+          outcomes[i] = ifelse(predictions[i] >= XGBCL_crit_prob() && rv_val[i] >= XGBCL_thresh(), "TP",
+                                ifelse(predictions[i] <= XGBCL_crit_prob() && rv_val[i] <= XGBCL_thresh(), "TN",
+                                       ifelse(predictions[i] >= XGBCL_crit_prob() && rv_val[i] <= XGBCL_thresh(), "FP", "FN")))
+        } else {
+          outcomes[i] = NA
+        }
+      }
+      
+    } else if (input$model_choice == "XGBoost") {
+      if (final_pca) {
+        predictions = predict(model, newdata = as.matrix(pred_pca_data), scale = XGB_standardize())
+      } else {
+        predictions = predict(model, newdata = as.matrix(pred_feat_data), scale = XGB_standardize())
+      }
+      
+      for (i in seq_len(nrow(prediction_data))) {
+        if (is.numeric(rv_val[i])) {
+          outcomes[i] = ifelse(predictions[i] >= input$XGB_dec_crit && rv_val[i] >= input$XGB_stand, "TP",
+                                ifelse(predictions[i] <= input$XGB_dec_crit && rv_val[i] <= input$XGB_stand, "TN",
+                                       ifelse(predictions[i] >= input$XGB_dec_crit && rv_val[i] <= input$XGB_stand, "FP", "FN")))
+        } else {
+          outcomes[i] = NA
+        }
+      }
+      
+    } else if (input$model_choice == "Elastic_Net") {
+      if (final_pca) {
+        predictions = predict(model, newx = as.matrix(pred_pca_data), scale = EN_standardize())
+      } else {
+        predictions = predict(model, newx = as.matrix(pred_feat_data), scale = EN_standardize())
+      }
+      
+      for (i in seq_len(nrow(prediction_data))) {
+        if (is.numeric(rv_val[i])) {
+          outcomes[i] = ifelse(predictions[i] >= input$EN_dec_crit && rv_val[i] >= input$EN_stand, "TP",
+                                ifelse(predictions[i] <= input$EN_dec_crit && rv_val[i] <= input$EN_stand, "TN",
+                                       ifelse(predictions[i] >= input$EN_dec_crit && rv_val[i] <= input$EN_stand, "FP", "FN")))
+        } else {
+          outcomes[i] = NA
+        }
+      }
+    }
+    
+    # 7) Confidence bounds from residuals
+    if (!is.null(resids)) {
+      sorted_resids = sort(resids, decreasing = TRUE)
+      percentile = 100 * (1 - input$conf_bound)
+      index = ceiling((percentile / 100) * length(sorted_resids))
+      crit_value = sorted_resids[index]
+      upper_bound = round(predictions + crit_value, 3)
+      lower_bound = round(predictions - crit_value, 3)
+      if (input$model_choice %in% c("Logistic_Regression", "XGB_Classifier")) {
+        upper_bound[upper_bound > 1] = 1
+        lower_bound[lower_bound < 0] = 0
+      }
+    } else {
+      upper_bound = rep(NA, length(predictions))
+      lower_bound = rep(NA, length(predictions))
+    }
+    
+    # 8) Update only the last four columns of the displayed table
+    displayed = prediction_data
+    n = nrow(displayed)
+    displayed[, ncol(displayed) - 3] = round(predictions, 3)   # Prediction
+    displayed[, ncol(displayed) - 2] = lower_bound             # Lower_Bound
+    displayed[, ncol(displayed) - 1] = upper_bound             # Upper_Bound
+    displayed[, ncol(displayed)]     = outcomes                # Outcome
+    
+    # 9) Save back and render
+    pred_data(displayed)  # main store used by output
+    # Optionally also update model-specific stores to keep them in sync:
+    switch(input$model_choice,
+           "Logistic_Regression" = LG_pred_data(displayed),
+           "XGB_Classifier"      = XGBCL_pred_data(displayed),
+           "XGBoost"             = XGB_pred_data(displayed),
+           "Elastic_Net"         = EN_pred_data(displayed)
+    )
+    
+    output$pd_data = renderpreddata(pred_data(), column_props, current_pred_page(), init_ID_format, output)
   })
   
   # Disconnect the opened SQLite database

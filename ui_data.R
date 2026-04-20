@@ -26,10 +26,17 @@ DataPanel = sidebarLayout(
       
       bs_append (title="Feature Processing", content = card(
             
-        fluidRow(column(12,disabled(actionButton("corr_check", "Correlations",class = "btn-default custom2-btn", style = 'width:150px !important; padding:2px !important;')))),
+        fluidRow(column(5,disabled(actionButton("corr_check", "Correlations",class = "btn-default custom2-btn", style = 'width:130px !important; padding:2px !important;'))),
+                 column(7,disabled(actionButton("transforms", "Transformations",class = "btn-default custom2-btn", style = 'width:140px !important; padding:2px !important;')))),
+        fluidRow(column(5,disabled(actionButton("interacts", "Interactions",class = "btn-default custom2-btn", style = 'width:120px !important; padding:2px !important;'))),
+                 column(7,style = "padding-left: 8px;",tags$style(HTML("#r_thresh { height:35px !important; padding: 2px 2px !important; font-size: 16px !important; }
+                  .inline-label { margin-right: 8px; font-size: 16px !important; }")),
+                  div(style = "display:flex; align-items:center; gap:8px;",
+                     tags$label("Crit_Corr", `for` = "r_thresh", class = "inline-label"),
+                     div(style = "width: 75px;",numericInput("r_thresh", label = NULL, value = 0.5, min = 0, max = 1, step = 0.01))))),
         fluidRow(column(6,disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",  style='width: 150px; vertical-align: -38px;'))),
                  column(6,class="align-center", numericInput("num_axes", "# Axes", value=2, min=2,max=20,step=1))),
-        fluidRow(column(6,disabled(actionButton("run_iso_forest","Outliers: IsoForest", class = "btn-default custom-btn",  style='width: 150px; align: left; vertical-align: -38px;'))),
+        fluidRow(column(6,disabled(actionButton("run_iso_forest","IsoForest Leverage", class = "btn-default custom-btn",  style='width: 150px; align: left; vertical-align: -38px;'))),
                  column(6,numericInput("iso_ndim", "# Dimensions", value=2, min=1,max=10,step=1))))) %>%
       
       bs_append (title="Plotting", content = card(
@@ -51,20 +58,34 @@ DataPanel = sidebarLayout(
       
       bs_append (title="Wind/Wave/Current Decomposition", content = card(
         
-        fluidRow(column(12,inputPanel(selectInput("speed",label = "Speed",selectize=FALSE, selected ="-",choices = c("-"))))),
+        fluidRow(
+          column(
+            8,
+            selectInput("speed", label = "Magnitude", selectize = FALSE, selected = "-", choices = c("-")),
+            selectInput("direct", label = "Direction", selectize = FALSE, selected = "-", choices = c("-"))
+          ),
+          column(
+            4,
+            radioButtons(
+              "component_type", label = NULL,
+              choices = c("Wind", "Currents", "Waves"),
+              selected = "Wind", inline = FALSE
+            )
+          )
+        ),
         
-        fluidRow(column(12,inputPanel(selectInput("direct",label = "Direction",selectize=FALSE, selected ="-",choices = c("-"))))),
+        # h5(HTML("<i>Name for A-Component</i>")),
+        # fluidRow(column(12, textInput("A_name", label = NULL, value = "WindA"))),
+        # 
+        # h5(HTML("<i>Name for O-Component</i>")),
+        # fluidRow(column(12, textInput("O_name", label = NULL, value = "WindO"))),
         
-        h5(HTML("<i>Name for A-Component</i>")),
-        
-        fluidRow(column(12,textInput("A_name", label=NULL,value = "AComp"))),
-        
-        h5(HTML("<i>Name for O-Component</i>")),
-        
-        fluidRow(column(12,textInput("O_name", label=NULL,value = "OComp"))),
-
-        fluidRow(div(style = "display: flex; align-items: center; height: 100%;",column(6,numericInput("beach_angle", "Beach Orientation", value=0, min=0, max=359, step=1)),
-        column(6,actionButton("create_ao", "Create A/O", class = "btn-default custom-btn", style='width:130px; padding:10px;')))))) %>%
+        fluidRow(
+          div(
+            style = "display: flex; align-items: center; height: 100%;",
+            column(6, numericInput("beach_angle", "Beach Orientation", value = 0, min = 0, max = 359, step = 1)),
+            column(6, actionButton("create_ao", "Create A/O", class = "btn-default custom-btn", style = "width:130px; padding:10px;"))
+          )))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
@@ -81,9 +102,88 @@ DataPanel = sidebarLayout(
                                              fluidRow(column(12,DT::dataTableOutput('PCA_coeffs')),
                                                       column(12,DT::dataTableOutput('PCA_summary')))),
                                     tabPanel("PCA Data Table",DT::dataTableOutput('PCAdata'),tags$style(type = "text/css", "#pcatables {height: calc(100vh - 70px) !important;}")),
-                                    tabPanel("IsoForest Outliers",DT::dataTableOutput('iso_outliers'),
-                                             tags$style(type = "text/css", "#iso_outliers {height: calc(100vh - 70px) !important;}")),
+                                    tabPanel("IsoForest Leverage",DT::dataTableOutput('iso_leverage'),
+                                             tags$style(type = "text/css", "#iso_leverage {height: calc(100vh - 70px) !important;}")),
                                     tabPanel("Correlations",plotOutput("corrplot",width="100%",height="700px")),
+                                    tabPanel("Transformations",
+                                      div(id = "trans_container",
+                                        div(id = "trans_table_wrap",DT::dataTableOutput("trans_table")),
+                                        div(id = "trans_side",actionButton("apply_transforms", "Add Selected Transforms",class = "btn-primary", style = "width: 100%;"))),
+                                      tags$style(type = "text/css", HTML("
+                                        /* Side-by-side layout that hugs content (prevents sidebar from flying to far right) */
+                                        #trans_container {
+                                          display: inline-flex;
+                                          align-items: flex-start;
+                                          gap: 12px;
+                                        }
+                                        /* Table area: fixed width to keep header/body aligned */
+                                        #trans_table_wrap {
+                                          width: 650px;
+                                          min-width: 650px;
+                                          max-width: 650px;
+                                        }
+                                        #trans_table_wrap table.dataTable { table-layout: fixed; }
+                                        #trans_table_wrap .dataTables_scrollHeadInner { width: 650px !important; }
+                                        #trans_table_wrap .dataTables_scrollHeadInner table { width: 650px !important; }
+                                        #trans_table_wrap .dataTables_scrollBody > table { width: 650px !important; }
+
+                                        /* Center headers over cells */
+                                        #trans_table_wrap .dataTables_scrollHead th,
+                                        #trans_table_wrap table.dataTable thead th { text-align: center !important; }
+                                        #trans_table_wrap table.dataTable tbody td { text-align: center; }
+
+                                        /* Prevent table wrapper from covering sidebar */
+                                        #trans_table { height: auto !important; }
+                                        #trans_table_wrap .dataTables_wrapper { overflow: visible !important; }
+                                        #trans_table_wrap .dataTables_scroll  { overflow: visible !important; }
+
+                                        /* Sticky sidebar just to the right of the table */
+                                        #trans_side {
+                                          flex: 0 0 180px;
+                                          position: sticky;
+                                          top: 12px;
+                                          align-self: flex-start;
+                                          z-index: 10;
+                                        }"))),
+                                    
+                                    tabPanel("Interactions",
+                                      div(id = "inter_container",
+                                        div(id = "inter_table_wrap",DT::dataTableOutput("interactions_table")),
+                                        div(id = "interactions_side",actionButton("add_interactions", "Add Selected Interactions",class = "btn-primary", style = "width: 100%;"))),
+                                      tags$style(type = "text/css", HTML("
+                                        #inter_container {
+                                          display: inline-flex;
+                                          align-items: flex-start;
+                                          gap: 12px;
+                                        }
+                                        #inter_table_wrap {
+                                          width: 950px;
+                                          min-width: 950px;
+                                          max-width: 950px;
+                                        }
+                                        #inter_table_wrap table.dataTable { table-layout: fixed; }
+                                        #inter_table_wrap .dataTables_scrollHeadInner { width: 950px !important; }
+                                        #inter_table_wrap .dataTables_scrollHeadInner table { width: 950px !important; }
+                                        #inter_table_wrap .dataTables_scrollBody > table { width: 950px !important; }
+
+                                        /* Center headers over cells */
+                                        #inter_table_wrap .dataTables_scrollHead th,
+                                        #inter_table_wrap table.dataTable thead th { text-align: center !important; }
+                                        #inter_table_wrap table.dataTable tbody td { text-align: center; }
+
+                                        /* Prevent table wrapper from covering sidebar */
+                                        #interactions_table { height: auto !important; }
+                                        #inter_table_wrap .dataTables_wrapper { overflow: visible !important; }
+                                        #inter_table_wrap .dataTables_scroll  { overflow: visible !important; }
+
+                                        /* Sticky sidebar just to the right of the table */
+                                        #interactions_side {
+                                          flex: 0 0 150px;
+                                          position: sticky;
+                                          top: 12px;
+                                          align-self: flex-start;
+                                          z-index: 10;
+                                          }"))),
                                     tabPanel("Raincloud",plotOutput("rainplot", height = "700px", width="100%")),
                                     tabPanel("Line Plot",plotlyOutput("lineplott", height="700px",width="100%")),
                                     tabPanel("Scatterplot",plotlyOutput("scatplot", height="700px",width="100%")))

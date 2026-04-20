@@ -18,10 +18,7 @@ PredictionPanel = sidebarLayout(
   fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;")),
   div(fileInput("pred_file", "Import Data File", buttonLabel = "Browse",accept = c("text/csv",
         "text/comma-separated-values,text/plain",".csv",".xlsx")), style="font-family:Arial; width: 350px;"),
-  h5(HTML("STIPULATIONS:<br>1) First 2 columns in imported data file must be ID and Response Variable<br><br>
-                        2) These 2 columns can have any name and may contain missing data<br><br>
-                        3) File MUST contain columns with names EXACTLY equal to any features present in the chosen model<br><br>
-                        4) Any ordering of feature columns is OK; all unmatched feature columns will be ignored")),
+  uiOutput("directions"),
   fluidRow(tags$hr(style = "border-color: #2c3e50; margin-top: 3px; margin-bottom: 3px;")),
   fluidRow(column(12,actionButton("save_project_prediction", "Save Project File", style = "margin-bottom:8px;"))),
   fluidRow(column(12,downloadButton("save_prediction", "Save Prediction File", style = "margin-bottom:8px;"))),

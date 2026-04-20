@@ -39,6 +39,10 @@ redraw_scatplot = reactiveVal(FALSE)
 redraw_lineplot = reactiveVal(FALSE)
 current_data_page = reactiveVal(1)
 current_pred_page = reactiveVal(1)
+rv_pred = reactiveValues(pending = NULL)
+rv_ao_map = reactiveValues(wind_speed=NULL, wind_dir=NULL, current_speed=NULL, current_dir=NULL,wave_height=NULL, wave_dir=NULL)
+rv_trans = reactiveValues(full = NULL)
+rv_inter <- reactiveValues(table = NULL)
 
 # General non-reactive variables
 init_data = NULL
@@ -50,6 +54,22 @@ ignored_rows = NULL
 num_rows_per_page = 20
 date_format_string = "MDY"
 plot_delay = 900
+
+AO_COMP_NAMES <- c("WindA", "WindO", "CurrentA", "CurrentO", "WaveA", "WaveO")
+
+#Feature Transformations
+prefix_map <- c("Log10"="Log..","Inverse"="Inverse..","Square"="Square..","Square Root"="Sqrt..","Quad Root"="Qdrt..","Polynomial"="Poly..")
+TRANS_PREFIXES <- unname(prefix_map)
+TRANS_PATTERN <- sprintf("^(%s)", paste(escape_regex(TRANS_PREFIXES), collapse = "|"))
+PREFIX_KIND    <- setNames(names(prefix_map), TRANS_PREFIXES)
+POLY_COEFFS <- new.env(parent = emptyenv())
+
+#Feature Interactions
+INTER_PREFIX   <- "Int.."
+INTER_SEP      <- "__"
+INTER_PATTERN  <- sprintf("^%s", escape_regex(INTER_PREFIX))
+DERIVED_PREFIXES <- c(TRANS_PREFIXES, INTER_PREFIX)
+DERIVED_PATTERN  <- sprintf("^(%s)", paste(escape_regex(DERIVED_PREFIXES), collapse = "|"))
 
 # XGB hyperparameters
 xgb_tree_method_set = reactiveVal("hist")

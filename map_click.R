@@ -114,8 +114,8 @@ map_click = function(input,map_clicks,bo) {
       }
     }
     
-    bo(round(beach_orient,digits=1))
-    updateNumericInput(inputId = "beach_angle", value = round(bo(),digits=1))
+    bo(round(beach_orient,digits=0))
+    updateNumericInput(inputId = "beach_angle", value = round(bo(),digits=0))
     
     # leafletProxy("map") %>% addPopups(lat=lat,lng=lng,paste("Beach Orientation:",round(beach_orient,digits=1)))
     

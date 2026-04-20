@@ -10,6 +10,16 @@ ui = fluidPage(
 
   tags$head(
     
+  tags$style(type = "text/css", HTML("
+    #trans_table_wrap .dataTables_scrollHead th,
+    #trans_table_wrap table.dataTable thead th {
+      background-color: #073744 !important;
+      color: #fff !important;
+      cursor: default;
+      text-align: center;
+    }
+  ")),
+    
   tags$style(HTML("
     .selectize-input {white-space: nowrap}
     

@@ -11,11 +11,11 @@ raincloud = function(data,date_format_string) {
              label = length(x)))
   }
   
-  stat1 = mean(data[,2])
-  stat2 = median(data[,2])
-  stat3 = length(data[,2])
-  stat4 = min(data[,2])
-  stat5 = max(data[,2])-min(data[,2])
+  stat1 = mean(data[,2],na.rm=TRUE)
+  stat2 = median(data[,2],na.rm=TRUE)
+  stat3 = length(data[,2][!is.na(data[,2])]) 
+  stat4 = min(data[,2],na.rm=TRUE)
+  stat5 = max(data[,2],na.rm=TRUE)-min(data[,2],na.rm=TRUE)
   
   if (date_format_string == "Character") {
     data[,1]=as_factor(as.character(data[,1]))
