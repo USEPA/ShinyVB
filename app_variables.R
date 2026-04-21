@@ -58,9 +58,11 @@ plot_delay = 900
 AO_COMP_NAMES <- c("WindA", "WindO", "CurrentA", "CurrentO", "WaveA", "WaveO")
 
 #Feature Transformations
-prefix_map <- c("Log10"="Log..","Inverse"="Inverse..","Square"="Square..","Square Root"="Sqrt..","Quad Root"="Qdrt..","Polynomial"="Poly..")
+prefix_map <- c("Log10" = "Log..", "Inverse" = "Inverse..", "Square" = "Square..",
+                "Square Root" = "Sqrt..", "Quad Root" = "Qdrt..", "Polynomial" = "Poly..")
 TRANS_PREFIXES <- unname(prefix_map)
-TRANS_PATTERN <- sprintf("^(%s)", paste(escape_regex(TRANS_PREFIXES), collapse = "|"))
+TRANS_PATTERN  <- sprintf("^(%s)", paste(vapply(TRANS_PREFIXES, escape_regex, ""), collapse = "|"))
+
 PREFIX_KIND    <- setNames(names(prefix_map), TRANS_PREFIXES)
 POLY_COEFFS <- new.env(parent = emptyenv())
 
@@ -70,6 +72,7 @@ INTER_SEP      <- "__"
 INTER_PATTERN  <- sprintf("^%s", escape_regex(INTER_PREFIX))
 DERIVED_PREFIXES <- c(TRANS_PREFIXES, INTER_PREFIX)
 DERIVED_PATTERN  <- sprintf("^(%s)", paste(escape_regex(DERIVED_PREFIXES), collapse = "|"))
+thr_debounced <- reactive(input$r_thresh) %>% debounce(250)
 
 # XGB hyperparameters
 xgb_tree_method_set = reactiveVal("hist")

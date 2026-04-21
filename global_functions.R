@@ -251,7 +251,6 @@ clear_trans_table <- function(drop_transforms   = TRUE,
   invisible(NULL)
 }
 
-# Trim get_interaction_candidates: remove star fallback per your note
 get_interaction_candidates <- function(df, include_AO = TRUE) {
   nm <- names(df)
   id_name <- nm[1L]
@@ -295,94 +294,161 @@ build_transform_candidates <- function(df) {
   candidates
 }
 
-get_interaction_candidates <- function(df, include_AO = TRUE) {
-  nm <- names(df)
-  id_name <- nm[1L]
-  rv_name <- nm[response_var()]
-  
-  # Start with numeric columns, excluding ID/response
-  cand <- nm[vapply(df, is.numeric, logical(1))]
-  cand <- setdiff(cand, c(id_name, rv_name))
-  
-  # Exclude existing interactions (prefix-based)
-  inter_pat <- get0("INTER_PATTERN", envir = .GlobalEnv, ifnotfound = NULL)
-  if (!is.null(inter_pat) && nzchar(inter_pat)) {
-    cand <- cand[!grepl(inter_pat, cand, perl = TRUE)]
-  }
-  
-  # Exclude legacy star-named interactions (e.g., "FeatA*FeatB")
-  cand <- cand[!grepl("\\*", cand, perl = TRUE)]
-  
-  # Optionally exclude A/O components (default: keep them)
-  if (!isTRUE(include_AO)) {
-    ao_names <- get0("AO_COMP_NAMES", envir = .GlobalEnv,
-                     ifnotfound = c("WindA","WindO","CurrentA","CurrentO","WaveA","WaveO"))
-    cand <- setdiff(cand, ao_names)
-  }
-  
-  cand
-}
-
 is_transformed <- function(nm) grepl(TRANS_PATTERN, nm, perl = TRUE)
-
 base_name      <- function(nm) sub(TRANS_PATTERN, "", nm, perl = TRUE)
-
 get_prefix     <- function(nm) regmatches(nm, regexpr(TRANS_PATTERN, nm, perl = TRUE))
-
 make_name      <- function(kind, feat) paste0(prefix_map[[kind]], feat)
 
-compute_transform <- function(v, kind, base = NULL) {
-  out <- rep(NA_real_, length(v))
-  if (!is.numeric(v)) return(out)
+canonicalize_kind <- function(kind) {
+  # Normalize to 1-length string
+  if (length(kind) != 1L) kind <- kind[1L]
+  k <- as.character(kind)
+  if (is.na(k)) return(NA_character_)
+  k <- trimws(k)
   
-  # Normalize kind aliases
-  k <- kind
-  if (identical(k, "Square Root")) k <- "Sqrt"
-  if (identical(k, "Quad Root"))   k <- "Qdrt"
-  if (identical(k, "Polynomial"))  k <- "Poly"
-  
-  if (k == "Log10") {
-    idx_pos  <- which(is.finite(v) & v > 0)
-    idx_neg  <- which(is.finite(v) & v < 0)
-    idx_zero <- which(is.finite(v) & v == 0)
-    if (length(idx_pos))  out[idx_pos]  <- log10(v[idx_pos])
-    if (length(idx_neg))  out[idx_neg]  <- -log10(abs(v[idx_neg]))
-    if (length(idx_zero)) out[idx_zero] <- 0
-    
-  } else if (k == "Inverse") {
-    v2 <- v
-    idx_fin <- is.finite(v2)
-    idx_nz  <- which(idx_fin & v2 != 0)
-    if (length(idx_nz)) {
-      min_nz <- min(abs(v2[idx_nz]), na.rm = TRUE)
-      idx0   <- which(idx_fin & v2 == 0)
-      if (length(idx0)) v2[idx0] <- 0.5 * min_nz
-      idx_inv <- which(is.finite(v2) & v2 != 0)
-      if (length(idx_inv)) out[idx_inv] <- 1 / v2[idx_inv]
-    }
-    
-  } else if (k == "Square") {
-    out <- v^2
-    
-  } else if (k == "Sqrt") {
-    idx_fin <- is.finite(v)
-    out[idx_fin] <- sign(v[idx_fin]) * sqrt(abs(v[idx_fin]))
-    
-  } else if (k == "Qdrt") {
-    idx_fin <- is.finite(v)
-    out[idx_fin] <- sign(v[idx_fin]) * (abs(v[idx_fin])^(1/4))
-    
-  } else if (k == "Poly") {
-    coeff <- if (!is.null(base)) get_poly_coeffs(base) else NULL
-    if (!is.null(coeff)) {
-      A <- coeff[["A"]]; B <- coeff[["B"]]; C <- coeff[["C"]]
-      idx_fin <- is.finite(v)
-      out[idx_fin] <- A + B * v[idx_fin] + C * (v[idx_fin]^2)
-    } else {
-      out <- v^2
-    }
+  # If a transform prefix (e.g., "Poly.."), map via PREFIX_KIND when available
+  PREFIX_KIND <- get0("PREFIX_KIND", ifnotfound = NULL, envir = .GlobalEnv)
+  if (!is.null(PREFIX_KIND) && k %in% names(PREFIX_KIND)) {
+    return(PREFIX_KIND[[k]])
   }
-  out
+  
+  # Case-insensitive synonyms
+  kl <- tolower(gsub("\\s+", " ", k))
+  map <- c(
+    "log10" = "Log10", "log" = "Log10", "log 10" = "Log10",
+    "inverse" = "Inverse", "inv" = "Inverse", "1/x" = "Inverse",
+    "square" = "Square", "x^2" = "Square", "power2" = "Square",
+    "square root" = "Square Root", "sqrt" = "Square Root",
+    "quad root" = "Quad Root", "qdrt" = "Quad Root", "fourth root" = "Quad Root",
+    "polynomial" = "Polynomial", "poly" = "Polynomial", "poly()" = "Polynomial"
+  )
+  if (kl %in% names(map)) return(map[[kl]])
+  
+  # If a known prefix set exists but PREFIX_KIND wasn’t available
+  TRANS_PREFIXES <- get0("TRANS_PREFIXES",
+                         ifnotfound = c("Log..","Inverse..","Square..","Sqrt..","Qdrt..","Poly.."),
+                         envir = .GlobalEnv)
+  if (k %in% TRANS_PREFIXES) {
+    # Fallback mapping for prefixes
+    fallback_pk <- c(
+      "Log.." = "Log10", "Inverse.." = "Inverse", "Square.." = "Square",
+      "Sqrt.." = "Square Root", "Qdrt.." = "Quad Root", "Poly.." = "Polynomial"
+    )
+    return(fallback_pk[[k]])
+  }
+  
+  # Leave as-is (the caller will error if not recognized)
+  k
+}
+
+compute_transform <- function(v, kind, base = NULL) {
+  v <- as.numeric(v)
+  kind <- canonicalize_kind(kind)
+  
+  if (identical(kind, "Log10")) {
+    out <- v
+    pos <- v > 0; neg <- v < 0
+    out[pos] <- log10(v[pos])
+    out[neg] <- -log10(abs(v[neg]))
+    out[v == 0] <- 0
+    return(out)
+  }
+  
+  if (identical(kind, "Inverse")) {
+    vv <- v
+    nz <- vv != 0 & is.finite(vv)
+    min_nonzero <- suppressWarnings(min(abs(vv[nz]), na.rm = TRUE))
+    if (!is.finite(min_nonzero)) min_nonzero <- 1
+    vv[!nz] <- 0.5 * min_nonzero
+    out <- 1 / vv
+    out[!is.finite(out)] <- NA_real_
+    return(out)
+  }
+  
+  if (identical(kind, "Square")) {
+    return(v^2)
+  }
+  
+  if (identical(kind, "Square Root")) {
+    return(sign(v) * sqrt(abs(v)))
+  }
+  
+  if (identical(kind, "Quad Root")) {
+    return(sign(v) * (abs(v)^(1/4)))
+  }
+  
+  if (identical(kind, "Polynomial")) {
+    # Require a base to look up coefficients; otherwise default to v^2
+    if (is.null(base) || !nzchar(base)) return(v^2)
+    
+    co <- if (exists("get_poly_coeffs", mode = "function")) get_poly_coeffs(base) else NULL
+    if (is.null(co) || !is.numeric(co) || length(co) < 3L) {
+      # Fallback if coeffs weren’t persisted or malformed
+      return(v^2)
+    }
+    
+    # Extract A/B/C robustly for both named numeric vectors and lists
+    get_coef <- function(obj, nm, pos) {
+      if (is.list(obj)) {
+        val <- obj[[nm]]
+      } else {
+        if (!is.null(names(obj)) && nm %in% names(obj)) {
+          val <- obj[nm]
+        } else {
+          val <- obj[pos]
+        }
+      }
+      as.numeric(val)
+    }
+    A <- get_coef(co, "A", 1L)
+    B <- get_coef(co, "B", 2L)
+    C <- get_coef(co, "C", 3L)
+    
+    if (any(!is.finite(c(A, B, C)))) {
+      # As a last resort, fall back to v^2 to avoid hard failure
+      return(v^2)
+    }
+    return(A + B * v + C * (v^2))
+  }
+  
+  stop("Unknown transform kind: ", kind)
+}
+
+# Convert rv_ao_map (reactiveValues, reactive, or list) to a plain list
+.get_ao_map <- function(rv_ao_map) {
+  if (is.function(rv_ao_map)) rv_ao_map <- rv_ao_map()
+  if (inherits(rv_ao_map, "reactivevalues")) return(reactiveValuesToList(rv_ao_map))
+  as.list(rv_ao_map)
+}
+
+# Robust A/O synthesis that tolerates NA/NULL/"" mappings
+compute_AO <- function(df, rv_ao_map, bo_deg) {
+  map <- .get_ao_map(rv_ao_map)
+  
+  has_val <- function(x) is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+  
+  synth_pair <- function(speed_name, dir_name, A_name, O_name) {
+    # Skip if mapping not set
+    if (!has_val(speed_name) || !has_val(dir_name)) return(invisible(NULL))
+    # Skip if mapped columns do not exist in df
+    if (!isTRUE(all(c(speed_name, dir_name) %in% names(df)))) return(invisible(NULL))
+    
+    S <- suppressWarnings(as.numeric(df[[speed_name]]))  # speed or height
+    D <- suppressWarnings(as.numeric(df[[dir_name]]))    # direction (deg)
+    theta <- (D - as.numeric(bo_deg)) * pi / 180
+    df[[A_name]] <<- -S * cos(theta)
+    df[[O_name]] <<-  S * sin(theta)
+    invisible(NULL)
+  }
+  
+  # Wind
+  synth_pair(map$wind_speed,    map$wind_dir,    "WindA",    "WindO")
+  # Current
+  synth_pair(map$current_speed, map$current_dir, "CurrentA", "CurrentO")
+  # Wave (height substitutes speed)
+  synth_pair(map$wave_height,   map$wave_dir,    "WaveA",    "WaveO")
+  
+  df
 }
 
 materialize_model_features <- function(df_ui, model_features, rv_ao_map, bo_deg) {
@@ -404,79 +470,6 @@ materialize_model_features <- function(df_ui, model_features, rv_ao_map, bo_deg)
     }
   }
   df_ui
-}
-
-apply_transform_selections <- function(df, selection, column_props, ignored_rows = NULL) {
-  nm <- names(df)
-  
-  sel_map <- split(selection$kind, selection$feat)
-  sel_map <- lapply(sel_map, function(kinds) {
-    kind <- unique(kinds)
-    if (length(kind) > 1) kind <- kind[1]
-    if (identical(kind, "None")) NULL else kind
-  })
-  
-  find_existing_trans <- function(base) {
-    idx <- which(is_transformed(nm))
-    if (!length(idx)) return(NULL)
-    tf_cols <- nm[idx]
-    tf_cols <- tf_cols[base_name(tf_cols) == base]
-    if (length(tf_cols)) tf_cols[1] else NULL
-  }
-  
-  for (base in names(sel_map)) {
-    kind <- sel_map[[base]]
-    existing <- find_existing_trans(base)
-    has_existing <- !is.null(existing)
-    
-    if (is.null(kind)) {
-      # Removing any transform; also remove persisted poly coeffs for this base
-      if (has_existing) {
-        df[[existing]] <- NULL
-        nm <- names(df)
-        if (!is.null(column_props)) .del(column_props, keys = existing)
-      }
-      del_poly_coeffs(base)
-      next
-    }
-    
-    new_name <- make_name(kind, base)
-    
-    # Compute new column; if Polynomial, fit and persist coefficients
-    if (kind == "Polynomial") {
-      coeff <- fit_poly_for_feature(base, ignored_rows = ignored_rows)
-      if (!is.null(coeff)) set_poly_coeffs(base, coeff[["A"]], coeff[["B"]], coeff[["C"]])
-      new_col <- compute_transform(df[[base]], "Poly", base = base)
-    } else {
-      # Non-polynomial transforms
-      new_col <- compute_transform(df[[base]], kind)
-      # If replacing Polynomial, delete any stale coeffs
-      if (!is.null(get_poly_coeffs(base))) del_poly_coeffs(base)
-    }
-    
-    if (has_existing) {
-      at <- match(existing, nm)
-      df[[existing]] <- NULL
-      nm <- names(df)
-      left <- df[seq_len(at - 1)]
-      right <- df[seq(at, length(df))]
-      df <- c(left, setNames(list(new_col), new_name), right)
-      nm <- names(df)
-      if (!is.null(column_props)) {
-        .del(column_props, keys = existing)
-        .set(column_props, keys = new_name, values = 2)
-      }
-    } else {
-      at <- match(base, nm)
-      left <- df[seq_len(at)]
-      right <- df[seq(at + 1, length(df))]
-      df <- c(left, setNames(list(new_col), new_name), right)
-      nm <- names(df)
-      if (!is.null(column_props)) .set(column_props, keys = new_name, values = 2)
-    }
-  }
-  
-  df
 }
 
 save_state <- function(path) {
@@ -504,17 +497,9 @@ load_state <- function(path) {
   }
 }
 
-escape_regex = function(x) {
-  # 1) Escape backslashes
-  x <- gsub("\\\\", "\\\\\\\\", x, perl = TRUE)
-  # 2) Escape regex metacharacters: . ^ $ | ( ) [ ] { } * + ?
-  x <- gsub("([.\\^$|()\\[\\]{}*+?])", "\\\\\\1", x, perl = TRUE)
-  x
-}
+escape_regex <- function(x) gsub("([][{}()+*^$|\\\\.?])", "\\\\\\1", x, perl = TRUE)
 
 is_interaction <- function(nm) grepl(INTER_PATTERN, nm, perl = TRUE)
-
-# is_derived  <- function(nm) grepl(DERIVED_PATTERN, nm, perl = TRUE)
 
 make_inter_name <- function(a, b) {
   paste0(INTER_PREFIX, a, INTER_SEP, b)
@@ -538,44 +523,19 @@ format_pval <- function(p) {
   )
 }
 
-set_poly_coeffs <- function(feat, A, B, C) {
-  POLY_COEFFS[[feat]] <- c(A = as.numeric(A), B = as.numeric(B), C = as.numeric(C))
-}
-
-get_poly_coeffs <- function(feat) {
-  val <- POLY_COEFFS[[feat]]
-  if (is.null(val) || !is.numeric(val) || length(val) != 3L) return(NULL)
-  val
-}
-
-del_poly_coeffs <- function(feat) {
-  if (!is.null(POLY_COEFFS[[feat]])) rm(list = feat, envir = POLY_COEFFS)
-}
+set_poly_coeffs <- function(feat, A, B, C) assign(feat, c(A, B, C), envir = POLY_COEFFS)
+get_poly_coeffs <- function(feat) get0(feat, envir = POLY_COEFFS, inherits = FALSE)
+del_poly_coeffs <- function(feat) if (!is.null(get0(feat, envir = POLY_COEFFS, inherits = FALSE))) rm(list = feat, envir = POLY_COEFFS)
 
 # Fit A, B, C for a single feature using current_data() and response_var()
-fit_poly_for_feature <- function(base_feat, ignored_rows = NULL) {
-  df <- current_data()
-  if (is.null(df) || !is.data.frame(df)) return(NULL)
-  
-  rv_name <- colnames(df)[response_var()]
-  if (!is.numeric(df[[base_feat]]) || !is.numeric(df[[rv_name]])) return(NULL)
-  
-  rows <- seq_len(nrow(df))
-  if (!is.null(ignored_rows) && length(ignored_rows) > 0) rows <- setdiff(rows, ignored_rows)
-  
-  x <- df[[base_feat]][rows]
-  y <- df[[rv_name]][rows]
+fit_poly_coeffs <- function(x, y, ignore = NULL) {
+  x <- as.numeric(x); y <- as.numeric(y)
   mask <- is.finite(x) & is.finite(y)
-  
+  if (is.logical(ignore) && length(ignore) == length(mask)) mask <- mask & !ignore
   if (sum(mask) < 3 || sd(x[mask]) == 0 || sd(y[mask]) == 0) return(NULL)
-  
-  fit <- try(stats::lm(y[mask] ~ x[mask] + I((x[mask])^2)), silent = TRUE)
+  fit <- try(lm(y[mask] ~ x[mask] + I(x[mask]^2)), silent = TRUE)
   if (inherits(fit, "try-error")) return(NULL)
-  
-  cf <- stats::coef(fit)
-  # Ensure coefficients named (Intercept), x[mask], I((x[mask])^2)
-  A <- unname(cf[1])
-  B <- unname(cf[2])
-  C <- unname(cf[3])
-  c(A = A, B = B, C = C)
+  co <- coef(fit)
+  if (length(co) < 3 || any(!is.finite(co[1:3]))) return(NULL)
+  c(unname(co[[1]]), unname(co[[2]]), unname(co[[3]]))
 }

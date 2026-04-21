@@ -29,11 +29,11 @@ DataPanel = sidebarLayout(
         fluidRow(column(5,disabled(actionButton("corr_check", "Correlations",class = "btn-default custom2-btn", style = 'width:130px !important; padding:2px !important;'))),
                  column(7,disabled(actionButton("transforms", "Transformations",class = "btn-default custom2-btn", style = 'width:140px !important; padding:2px !important;')))),
         fluidRow(column(5,disabled(actionButton("interacts", "Interactions",class = "btn-default custom2-btn", style = 'width:120px !important; padding:2px !important;'))),
-                 column(7,style = "padding-left: 8px;",tags$style(HTML("#r_thresh { height:35px !important; padding: 2px 2px !important; font-size: 16px !important; }
+                 column(7,style = "padding-left: 8px;",tags$style(HTML("#r_thresh { height:35px !important; padding: 2px 2px !important; text-align: center !important; font-size: 16px !important; }
                   .inline-label { margin-right: 8px; font-size: 16px !important; }")),
                   div(style = "display:flex; align-items:center; gap:8px;",
                      tags$label("Crit_Corr", `for` = "r_thresh", class = "inline-label"),
-                     div(style = "width: 75px;",numericInput("r_thresh", label = NULL, value = 0.5, min = 0, max = 1, step = 0.01))))),
+                     div(style = "width: 75px;",numericInput("r_thresh", label = NULL, value = 0.7, min = 0, max = 1, step = 0.01))))),
         fluidRow(column(6,disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",  style='width: 150px; vertical-align: -38px;'))),
                  column(6,class="align-center", numericInput("num_axes", "# Axes", value=2, min=2,max=20,step=1))),
         fluidRow(column(6,disabled(actionButton("run_iso_forest","IsoForest Leverage", class = "btn-default custom-btn",  style='width: 150px; align: left; vertical-align: -38px;'))),
@@ -108,7 +108,7 @@ DataPanel = sidebarLayout(
                                     tabPanel("Transformations",
                                       div(id = "trans_container",
                                         div(id = "trans_table_wrap",DT::dataTableOutput("trans_table")),
-                                        div(id = "trans_side",actionButton("apply_transforms", "Add Selected Transforms",class = "btn-primary", style = "width: 100%;"))),
+                                        div(id = "trans_side",actionButton("apply_transforms", "Add/Remove Selected Terms",class = "btn-primary", style = "width: 100%;"))),
                                       tags$style(type = "text/css", HTML("
                                         /* Side-by-side layout that hugs content (prevents sidebar from flying to far right) */
                                         #trans_container {
@@ -149,7 +149,7 @@ DataPanel = sidebarLayout(
                                     tabPanel("Interactions",
                                       div(id = "inter_container",
                                         div(id = "inter_table_wrap",DT::dataTableOutput("interactions_table")),
-                                        div(id = "interactions_side",actionButton("add_interactions", "Add Selected Interactions",class = "btn-primary", style = "width: 100%;"))),
+                                        div(id = "interactions_side",actionButton("add_interactions", "Add/Remove Selected Terms",class = "btn-primary", style = "width: 100%;"))),
                                       tags$style(type = "text/css", HTML("
                                         #inter_container {
                                           display: inline-flex;

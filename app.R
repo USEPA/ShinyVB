@@ -89,7 +89,7 @@ server= function(input,output,session) {
   iv = InputValidator$new()
   add_validation_rules(iv)
   iv$enable()
-
+  
   # Prediction tab text directions
   output$directions = renderUI({
     req(bo())
@@ -130,11 +130,12 @@ server= function(input,output,session) {
                             easyClose = F,footer = div(modalButton('Close'))))
       
     } else {
+      
       col_props_temp = hash()
       
       for (i in 1:ncol(init_data)) {
-        .set(col_props_temp,keys=colnames(init_data)[i],values=2)
-        #.set(col_props_temp,keys=colnames(init_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA))
+        # .set(col_props_temp,keys=colnames(init_data)[i],values=2)
+        .set(col_props_temp,keys=colnames(init_data)[i],values=c(prop1=2,prop2=NA,prop3=NA,prop4=NA))
       }
       
       init_column_props <<- col_props_temp
@@ -939,53 +940,9 @@ server= function(input,output,session) {
   
   # Create a feature transformation data table
   observeEvent(input$transforms, ignoreInit = TRUE, {
-    # IMPORTANT: clear only transformed columns; KEEP interactions and A/O so they can be transformed
+
     clear_trans_table(drop_transforms = TRUE, drop_interactions = FALSE, drop_AO = FALSE)
-    
-    # Transform with index assignment to avoid evaluating logs on invalid values
-    transform_feature <- function(x, type) {
-      n   <- length(x)
-      out <- rep(NA_real_, n)
-      if (!is.numeric(x)) return(out)
-      
-      if (type == "None") {
-        out <- x
-        
-      } else if (type == "Log10") {
-        idx_pos  <- which(is.finite(x) & x > 0)
-        idx_neg  <- which(is.finite(x) & x < 0)
-        idx_zero <- which(is.finite(x) & x == 0)
-        if (length(idx_pos))  out[idx_pos]  <- log10(x[idx_pos])
-        if (length(idx_neg))  out[idx_neg]  <- -log10(abs(x[idx_neg]))
-        if (length(idx_zero)) out[idx_zero] <- 0
-        
-      } else if (type == "Inverse") {
-        x2 <- x
-        idx_fin <- is.finite(x2)
-        idx_nz  <- which(idx_fin & x2 != 0)
-        if (length(idx_nz)) {
-          min_nz <- min(abs(x2[idx_nz]), na.rm = TRUE)
-          idx0   <- which(idx_fin & x2 == 0)
-          if (length(idx0)) x2[idx0] <- 0.5 * min_nz
-          idx_inv <- which(is.finite(x2) & x2 != 0)
-          if (length(idx_inv)) out[idx_inv] <- 1 / x2[idx_inv]
-        }
-        
-      } else if (type == "Square") {
-        out <- x^2
-        
-      } else if (type == "Square Root") {
-        idx_fin <- is.finite(x)
-        out[idx_fin] <- sign(x[idx_fin]) * sqrt(abs(x[idx_fin]))
-        
-      } else if (type == "Quad Root") {
-        idx_fin <- is.finite(x)
-        out[idx_fin] <- sign(x[idx_fin]) * (abs(x[idx_fin])^(1/4))
-      }
-      
-      out
-    }
-    
+
     # Prepare data (exclude ignored rows)
     cd <- current_data()
     if (!is.null(ignored_rows) && length(ignored_rows) > 0) {
@@ -1001,15 +958,12 @@ server= function(input,output,session) {
     id_name  <- colnames(cd)[1]
     feature_names <- setdiff(names(cd)[num_cols], c(id_name, rv_name))
     
-    # EXPLICIT: exclude transformed columns by TRANS_PREFIXES; KEEP interactions (Int..FeatA__FeatB)
-    # Uses your global TRANS_PREFIXES (e.g., Log.., Inverse.., etc.)
+    # Exclude transformed columns by TRANS_PREFIXES; KEEP interactions (Int..FeatA__FeatB)
     if (exists("TRANS_PREFIXES", inherits = FALSE)) {
       trans_pat <- sprintf("^(%s)", paste(escape_regex(TRANS_PREFIXES), collapse = "|"))
       feature_names <- feature_names[!grepl(trans_pat, feature_names, perl = TRUE)]
     }
-    
-    # At this point, interactions remain in feature_names by design
-    
+
     transforms <- c("None", "Log10", "Inverse", "Square", "Square Root", "Quad Root", "Polynomial")
     
     results <- vector("list", length = length(feature_names) * length(transforms))
@@ -1023,7 +977,6 @@ server= function(input,output,session) {
         pval <- NA_real_
         
         if (tf == "Polynomial") {
-          # Quadratic: correlate y with yhat from y ~ x + x^2
           mask <- is.finite(x) & is.finite(y)
           if (sum(mask) >= 3) {
             xt <- x[mask]; yt <- y[mask]
@@ -1040,7 +993,8 @@ server= function(input,output,session) {
             }
           }
         } else {
-          xt <- transform_feature(x, tf)  # must return numeric
+          xt <- if (identical(tf, "None")) x else compute_transform(x, kind = tf)
+          
           mask <- is.finite(xt) & is.finite(y)
           if (sum(mask) >= 3 && stats::sd(xt[mask]) > 0 && stats::sd(y[mask]) > 0) {
             ct <- suppressWarnings(stats::cor.test(xt[mask], y[mask], method = "pearson"))
@@ -1048,8 +1002,7 @@ server= function(input,output,session) {
             pval <- unname(ct$p.value)
           }
         }
-        
-        # Store numeric p-value as p_val; format later into p_Value
+
         results[[k]] <- data.frame(
           Feature     = fname,
           Transform   = tf,
@@ -1076,7 +1029,7 @@ server= function(input,output,session) {
     
     # Ensure numeric types and apply formatting
     trans_table$Correlation <- round(as.numeric(trans_table$Correlation), 4)
-    trans_table$p_val       <- as.numeric(trans_table$p_val)  # keep raw numeric; do not round
+    trans_table$p_val       <- as.numeric(trans_table$p_val)
     
     # Add a formatted p-value column for display (keep numeric p_val for sorting/calcs)
     trans_table$p_Value <- format_pval(trans_table$p_val)
@@ -1205,139 +1158,159 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = 'data_tabs', selected = "Transformations")
   })
   
-  #Make new columns of selected feature transformations
+  # Create and remove columns of (un)selected feature transformations
   observeEvent(input$apply_transforms, {
     req(rv_trans$full)
     full_tbl <- rv_trans$full
     
+    # Ensure required globals exist
+    if (!exists("prefix_map", mode = "any")) {
+      showNotification("prefix_map is not available. Cannot apply transforms.", type = "error")
+      return()
+    }
+    if (!exists("TRANS_PREFIXES", mode = "any")) {
+      showNotification("TRANS_PREFIXES is not available. Cannot apply transforms.", type = "error")
+      return()
+    }
+    
+    # Selected rows from the DT
     sel <- input$trans_table_rows_selected
-    if (is.null(sel) || length(sel) == 0) {
-      showNotification("No rows selected. Please choose one transform per feature.", type = "warning")
-      return()
+    chosen <- if (!is.null(sel) && length(sel)) {
+      x <- full_tbl[sel, , drop = FALSE]
+      x$Transform <- as.character(x$Transform)
+      x <- x[!isTRUE(x$IsSep) & nzchar(x$Transform), , drop = FALSE]
+      # Deduplicate per base feature
+      x <- x[!duplicated(x$FeatureKey), , drop = FALSE]
+      x
+    } else {
+      # No selection => nothing to add, but we will remove any existing transforms for all bases in the table
+      full_tbl[0, , drop = FALSE]
     }
     
-    chosen <- full_tbl[sel, , drop = FALSE]
-    chosen$Transform <- as.character(chosen$Transform)
-    chosen <- chosen[!chosen$IsSep & nzchar(chosen$Transform), , drop = FALSE]
-    if (nrow(chosen) == 0) {
-      showNotification("No valid transform rows selected.", type = "warning")
-      return()
-    }
-    chosen <- chosen[!duplicated(chosen$FeatureKey), , drop = FALSE]
-    
-    # Transform rules
-    transform_apply <- function(x, y, type) {
-      n <- length(x)
-      out <- rep(NA_real_, n)
-      if (!is.numeric(x)) return(out)
-      
-      if (type %in% c("Log10")) {
-        idx_pos  <- which(is.finite(x) & x > 0)
-        idx_neg  <- which(is.finite(x) & x < 0)
-        idx_zero <- which(is.finite(x) & x == 0)
-        if (type == "Log10") {
-          if (length(idx_pos))  out[idx_pos]  <- log10(x[idx_pos])
-          if (length(idx_neg))  out[idx_neg]  <- -log10(abs(x[idx_neg]))
-        } else {
-          if (length(idx_pos))  out[idx_pos]  <- log(x[idx_pos])
-          if (length(idx_neg))  out[idx_neg]  <- -log(abs(x[idx_neg]))
-        }
-        if (length(idx_zero)) out[idx_zero] <- 0
-        
-      } else if (type == "Inverse") {
-        x2 <- x
-        idx_fin <- is.finite(x2)
-        idx_nz <- which(idx_fin & x2 != 0)
-        if (length(idx_nz)) {
-          min_nz <- min(abs(x2[idx_nz]), na.rm = TRUE)
-          idx_zero <- which(idx_fin & x2 == 0)
-          if (length(idx_zero)) x2[idx_zero] <- 0.5 * min_nz
-          idx_inv <- which(is.finite(x2) & x2 != 0)
-          if (length(idx_inv)) out[idx_inv] <- 1 / x2[idx_inv]
-        }
-        
-      } else if (type == "Square") {
-        out <- x^2
-        
-      } else if (type == "Square Root") {
-        idx_fin <- is.finite(x)
-        out[idx_fin] <- sign(x[idx_fin]) * sqrt(abs(x[idx_fin]))
-        
-      } else if (type == "Quad Root") {
-        idx_fin <- is.finite(x)
-        out[idx_fin] <- sign(x[idx_fin]) * (abs(x[idx_fin])^(1/4))
-        
-      } else if (type == "Polynomial") {
-        out[] <- NA_real_
-        if (!is.null(y)) {
-          mask <- is.finite(x) & is.finite(y)
-          if (sum(mask) >= 3 && sd(x[mask]) > 0 && sd(y[mask]) > 0) {
-            fit <- try(lm(y[mask] ~ poly(x[mask], degree = 2, raw = TRUE)), silent = TRUE)
-            if (!inherits(fit, "try-error")) {
-              idx_fin <- is.finite(x)
-              if (any(idx_fin)) {
-                co <- coef(fit)
-                if (length(co) >= 3) {
-                  out[idx_fin] <- co[1] + co[2] * x[idx_fin] + co[3] * x[idx_fin]^2
-                }
-              }
-            }
-          }
-        }
-      }
-      out
+    # Build selected transform map: FeatureKey -> Transform (excluding "None" for the add phase)
+    chosen_map <- if (nrow(chosen)) {
+      # Keep only known transform kinds present in prefix_map OR "None"
+      chosen$Transform <- as.character(chosen$Transform)
+      # We'll add only non-"None"
+      sel_mask <- chosen$Transform != "None" & chosen$Transform %in% names(prefix_map)
+      setNames(chosen$Transform[sel_mask], chosen$FeatureKey[sel_mask])
+    } else {
+      character(0)
     }
     
+    # Base features represented in the DT (exclude separators)
+    base_keys <- unique(full_tbl$FeatureKey[!isTRUE(full_tbl$IsSep)])
+    base_keys <- base_keys[nzchar(base_keys)]
+    
+    # Current data and response
     df <- current_data()
+    if (is.null(df) || !is.data.frame(df)) {
+      showNotification("No data available to apply transforms.", type = "error")
+      return()
+    }
     rv_name <- colnames(df)[response_var()]
     y_full  <- df[[rv_name]]
     
-    # Add/overwrite each new column and register it in column_props; place it after the source feature
-    for (i in seq_len(nrow(chosen))) {
-      feat <- chosen$FeatureKey[i]
-      tf   <- chosen$Transform[i]
-      if (tf == "None") next
+    # Ignored rows for polynomial fitting
+    ir <- tryCatch(ignored_rows(), error = function(e) integer(0))
+    
+    # Helper to drop all transform columns for a given base feature
+    drop_trans_for_base <- function(df, base) {
+      # All possible transform columns for this base
+      existing <- intersect(paste0(TRANS_PREFIXES, base), names(df))
+      if (!length(existing)) return(df)
       
-      # Validate transform name against global prefix_map
+      # If any polynomial column is being dropped, remove stored coefficients
+      poly_col <- paste0(prefix_map[["Polynomial"]], base)
+      if (poly_col %in% existing && exists("del_poly_coeffs", mode = "function")) {
+        try(del_poly_coeffs(base), silent = TRUE)
+      }
+      
+      # Remove from df
+      df <- df[, setdiff(names(df), existing), drop = FALSE]
+      
+      # Remove from column_props if available
+      if (exists(".del", mode = "function")) {
+        for (nm in existing) try(.del(column_props, keys = nm), silent = TRUE)
+      } else {
+        # If column_props is a list-like object, best-effort cleanup
+        if (exists("column_props", inherits = TRUE)) {
+          for (nm in existing) {
+            if (!is.null(column_props[[nm]])) column_props[[nm]] <- NULL
+          }
+        }
+      }
+      df
+    }
+    
+    # 1) Remove all existing transform columns for every base in the table
+    #    (we will re-add only the selected ones)
+    removed_count <- 0L
+    for (feat in base_keys) {
+      before <- ncol(df)
+      df <- drop_trans_for_base(df, feat)
+      removed_count <- removed_count + (before - ncol(df))
+    }
+    
+    # 2) Add selected transforms (excluding "None")
+    added <- character(0)
+    
+    for (feat in names(chosen_map)) {
+      tf <- chosen_map[[feat]]
       if (!tf %in% names(prefix_map)) {
-        showNotification(sprintf("Unknown transform '%s' for feature '%s'. Skipping.", tf, feat), type = "warning")
+        showNotification(sprintf("Unknown transform '%s' for feature '%s'. Skipping.", tf, feat),
+                         type = "warning")
+        next
+      }
+      if (!feat %in% names(df)) {
+        showNotification(sprintf("Base feature '%s' not found. Skipping transform.", feat),
+                         type = "warning")
         next
       }
       
-      vals <- transform_apply(df[[feat]], y_full, tf)
-      
-      # Build new column name using global prefix_map
       new_name <- paste0(prefix_map[[tf]], feat)
       
-      # Replace any existing transformed column for this feature, keep position
-      existing_old <- intersect(paste0(TRANS_PREFIXES, feat), names(df))
-      if (length(existing_old)) {
-        pos_target <- which(names(df) %in% existing_old)[1]
-        df <- df[, setdiff(names(df), existing_old), drop = FALSE]
-        if (exists(".del", mode = "function")) {
-          for (nm_old in existing_old) try(.del(column_props, keys = nm_old), silent = TRUE)
+      # Compute transform values
+      if (tf == "Polynomial") {
+        # Fit and persist coefficients first, if available
+        if (exists("fit_poly_coeffs", mode = "function")) {
+          co <- try(fit_poly_coeffs(df[[feat]], y_full, ignore = ir), silent = TRUE)
+          if (!inherits(co, "try-error") && !is.null(co) && length(co) >= 3L &&
+              exists("set_poly_coeffs", mode = "function")) {
+            try(set_poly_coeffs(feat, co[1], co[2], co[3]), silent = TRUE)
+          }
+        } else if (exists("fit_poly_for_feature", mode = "function")) {
+          # Alternate canonical API per ShinyVB primer
+          try(fit_poly_for_feature(feat, ignored_rows = ir), silent = TRUE)
         }
+        vals <- compute_transform(df[[feat]], "Polynomial", base = feat)
       } else {
-        pos_feat  <- match(feat, names(df))
-        pos_target <- if (!is.na(pos_feat)) pos_feat + 1L else length(names(df)) + 1L
+        vals <- compute_transform(df[[feat]], tf)
       }
       
-      # Add/overwrite new column and register props
+      # Insert column
       df[[new_name]] <- vals
-      .set(column_props, keys = new_name, values = 2)
+      # Register in column_props
+      if (exists(".set", mode = "function")) {
+        try(.set(column_props, keys = new_name, values = 2), silent = TRUE)
+      }
       
-      # Reorder to place new column immediately after target position
+      # Reorder to place new transform right after the base feature
       nm <- names(df)
-      idx_new   <- match(new_name, nm)
+      idx_new <- match(new_name, nm)
       nm_wo_new <- nm[-idx_new]
-      pos_target <- max(1L, min(pos_target, length(nm_wo_new) + 1L))
-      df <- df[, append(nm_wo_new, new_name, after = pos_target - 1L), drop = FALSE]
+      pos_feat <- match(feat, nm_wo_new)
+      # If base missing for any reason, append to end
+      after_idx <- if (!is.na(pos_feat)) pos_feat else length(nm_wo_new)
+      df <- df[, append(nm_wo_new, new_name, after = after_idx), drop = FALSE]
+      
+      added <- c(added, new_name)
     }
     
+    # 3) Commit updated data and refresh UI
     current_data(df)
     
-    # Refresh selectable column lists (optional but recommended)
-    new_column_names <- colnames(current_data())[-1]  # exclude ID
+    new_column_names <- colnames(current_data())[-1]
     rv <- response_var() - 1
     feat_names(new_column_names[-rv])
     feats_being_used(feat_names())
@@ -1348,73 +1321,91 @@ server= function(input,output,session) {
     updateSelectInput(session, "scatterx", selected = input$scatterx, choices = c("-", new_column_names))
     updateSelectInput(session, "scattery", selected = input$scattery, choices = c("-", new_column_names))
     
+    pca_axes_max(length(new_column_names) - 1)
+    updateNumericInput(session, "num_axes",
+                       value = length(new_column_names) - 1,
+                       max   = length(new_column_names) - 1)
+    
     renderdata(current_data(), response_var(), id_var, input$select_choice,
                date_format_string, column_props, ignored_rows, current_data_page(), output)
     
-    showNotification("Selected transforms added to the dataset.", type = "message")
+    # 4) Notify
+    msg <- sprintf(
+      "Transforms updated. Added: %s. Removed columns: %d.",
+      if (length(added)) paste(added, collapse = ", ") else "none",
+      removed_count
+    )
+    showNotification(msg, type = "message")
   })
   
-  # Create an interactions data table
-  observeEvent(input$interacts, {
-    
-    # Empty skeleton with new column names
-    output$interactions_table <- DT::renderDataTable(server = FALSE, {
-      DT::datatable(
-        data.frame(Feat1 = character(0), Feat2 = character(0),
-                   Correlation = numeric(0), p_Value = character(0)),
-        rownames = FALSE, selection = "none",
-        options = list(dom = 't', paging = FALSE)
-      )
-    })
-    
+  # Rebuild interactions table and render it. Set navigate=TRUE only when invoked from the UI button.
+  rebuild_interactions_table <- function(navigate = FALSE) {
     df <- current_data()
-    if (is.null(df) || ncol(df) < 3L) return()
-    
-    # Exclude rows the user ignored
-    rows_keep <- seq_len(nrow(df))
-    if (!is.null(ignored_rows) && length(ignored_rows) > 0) {
-      rows_keep <- setdiff(rows_keep, ignored_rows)
+    if (is.null(df) || !is.data.frame(df) || ncol(df) < 3L) {
+      rv_inter$table <- NULL
+      output$interactions_table <- DT::renderDataTable(server = FALSE, {
+        DT::datatable(
+          data.frame(Message = "No data available."),
+          rownames = FALSE, selection = "none",
+          options = list(dom = 't', paging = FALSE)
+        )
+      })
+      return(invisible(NULL))
     }
-    df <- df[rows_keep, , drop = FALSE]
     
-    # Identify response and candidate numeric features by name (exclude ID + response + derived)
+    # Exclude ignored rows (supports reactive or non-reactive form)
+    ir <- tryCatch(ignored_rows(), error = function(e) ignored_rows)
+    if (!is.null(ir) && length(ir) > 0) {
+      if (is.logical(ir) && length(ir) == nrow(df)) {
+        df <- df[!ir, , drop = FALSE]
+      } else {
+        df <- df[setdiff(seq_len(nrow(df)), as.integer(ir)), , drop = FALSE]
+      }
+    }
+    
+    # Response and base features
     rv_name <- colnames(df)[response_var()]
-    y <- df[[rv_name]]
-    id_name <- colnames(df)[1L]
+    y <- as.numeric(df[[rv_name]])
     
-    num_names <- names(df)[vapply(df, is.numeric, logical(1))]
+    # Use your helper to get candidates (excludes ID/response/derived; includes A/O as requested)
     base_feats <- get_interaction_candidates(df, include_AO = TRUE)
-    
     if (length(base_feats) < 2L) {
-      showNotification("Not enough numeric features to compute interactions.", type = "warning")
-      return()
+      rv_inter$table <- NULL
+      output$interactions_table <- DT::renderDataTable(server = FALSE, {
+        DT::datatable(
+          data.frame(Message = "Not enough numeric features to compute interactions."),
+          rownames = FALSE, selection = "none",
+          options = list(dom = 't', paging = FALSE)
+        )
+      })
+      return(invisible(NULL))
     }
     
-    # Threshold
-    thr <- input$r_thresh %||% 0.5
+    # Threshold (safe default)
+    thr <- input$r_thresh
+    if (is.null(thr) || !is.finite(thr)) thr <- 0.7
     
-    # Compute correlations for all pairs i < j
-    res <- list()
+    # Compute correlations for pairs i < j
+    res <- vector("list", length = 0L)
     k <- 1L
     for (ii in seq_len(length(base_feats) - 1L)) {
+      a <- base_feats[ii]
+      xa <- as.numeric(df[[a]])
       for (jj in (ii + 1L):length(base_feats)) {
-        a <- base_feats[ii]; b <- base_feats[jj]
-        prod <- df[[a]] * df[[b]]
+        b <- base_feats[jj]
+        xb <- as.numeric(df[[b]])
+        prod <- xa * xb
         mask <- is.finite(prod) & is.finite(y)
-        if (sum(mask) >= 3 && sd(prod[mask]) > 0 && sd(y[mask]) > 0) {
-          ct <- suppressWarnings(cor.test(prod[mask], y[mask], method = "pearson"))
+        if (sum(mask) >= 3 && stats::sd(prod[mask]) > 0 && stats::sd(y[mask]) > 0) {
+          ct <- suppressWarnings(stats::cor.test(prod[mask], y[mask], method = "pearson"))
           r  <- unname(ct$estimate)
           p  <- unname(ct$p.value)
-          if (abs(r) >= thr) {
+          if (is.finite(r) && abs(r) >= thr) {
             res[[k]] <- data.frame(
-              Feat1      = a,
-              Feat2      = b,
-              Correlation = round(r, 4),
-              p_Value     = ifelse(
-                is.na(p),
-                NA_character_,
-                ifelse(p < 1e-4, "<0.0001", format(signif(p, 4), scientific = FALSE, trim = TRUE))
-              ),
+              Feat1       = a,
+              Feat2       = b,
+              Correlation = as.numeric(r),
+              p_val       = as.numeric(p),
               stringsAsFactors = FALSE
             )
             k <- k + 1L
@@ -1434,8 +1425,16 @@ server= function(input,output,session) {
           options = list(dom = 't', paging = FALSE)
         )
       } else {
+        # Format columns per your primer
+        inter_tbl$Correlation <- round(inter_tbl$Correlation, 4)
+        inter_tbl$p_Value <- ifelse(
+          is.na(inter_tbl$p_val),
+          NA_character_,
+          ifelse(inter_tbl$p_val < 1e-4, "<0.0001",
+                 formatC(inter_tbl$p_val, format = "fg", digits = 4))
+        )
         DT::datatable(
-          inter_tbl,
+          inter_tbl[, c("Feat1","Feat2","Correlation","p_Value")],
           rownames  = FALSE,
           selection = "multiple",
           options = list(
@@ -1451,18 +1450,37 @@ server= function(input,output,session) {
       }
     })
     
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-    updateTabsetPanel(session, inputId = 'data_tabs', selected = "Interactions")
+    if (isTRUE(navigate)) {
+      updateTabsetPanel(session, inputId = 'shinyVB',  selected = 'Data')
+      updateTabsetPanel(session, inputId = 'data_tabs', selected = "Interactions")
+    }
+    
+    invisible(NULL)
+  }
+  
+  # Trigger when user opens Interactions UI
+  observeEvent(input$interacts, ignoreInit = TRUE, {
+    rebuild_interactions_table(navigate = TRUE)
   })
   
-  # Add selected interactions to the data table
+  thr_debounced <- shiny::debounce(reactive(input$r_thresh), 100)
+  
+  # Rebuild on threshold changes
+  observeEvent(thr_debounced(), ignoreInit = TRUE, {
+    rebuild_interactions_table(navigate = FALSE)
+  })
+  
+  # Apply (add/remove) selected interactions to the data table
   observeEvent(input$add_interactions, {
     inter_tbl <- rv_inter$table
-    sel <- input$interactions_table_rows_selected
-    if (is.null(inter_tbl) || length(sel) == 0) {
-      showNotification("No interactions selected.", type = "warning")
+    if (is.null(inter_tbl) || !is.data.frame(inter_tbl) || nrow(inter_tbl) == 0L) {
+      showNotification("No interaction candidates available.", type = "warning")
       return()
     }
+    
+    # Rows currently selected in the interactions table (may be NULL)
+    sel <- input$interactions_table_rows_selected
+    if (is.null(sel)) sel <- integer(0)
     
     df <- current_data()
     if (is.null(df) || !is.data.frame(df)) {
@@ -1471,6 +1489,32 @@ server= function(input,output,session) {
     }
     cols <- names(df)
     
+    # Canonical interaction name helper
+    make_inter <- if (exists("make_inter_name", mode = "function")) {
+      make_inter_name
+    } else {
+      # Fallback to canonical "Int..Feat1__Feat2"
+      inter_prefix <- get0("INTER_PREFIX", ifnotfound = "Int..", envir = .GlobalEnv)
+      inter_sep    <- get0("INTER_SEP",    ifnotfound = "__",   envir = .GlobalEnv)
+      function(a, b) paste0(inter_prefix, a, inter_sep, b)
+    }
+    
+    # Pool of all candidate interaction names represented by inter_tbl
+    pool_names <- character(nrow(inter_tbl))
+    for (i in seq_len(nrow(inter_tbl))) {
+      pool_names[i] <- make_inter(inter_tbl$Feat1[i], inter_tbl$Feat2[i])
+    }
+    
+    # Names for the currently selected interactions (may be empty)
+    selected_names <- character(0)
+    if (length(sel)) {
+      selected_names <- vapply(sel, function(i) make_inter(inter_tbl$Feat1[i], inter_tbl$Feat2[i]),
+                               character(1L))
+    }
+    
+    # 1) ADD/UPDATE all selected interactions
+    n_added <- 0L
+    n_updated <- 0L
     for (i in sel) {
       a <- inter_tbl$Feat1[i]
       b <- inter_tbl$Feat2[i]
@@ -1479,39 +1523,58 @@ server= function(input,output,session) {
       if (!a %in% cols || !b %in% cols) next
       if (!is.numeric(df[[a]]) || !is.numeric(df[[b]])) next
       
-      # Create a canonical interaction name (e.g., "A*B"); adjust make_inter_name if needed
-      name <- make_inter_name(a, b)
-      
-      # Compute product on full current_data
+      name <- make_inter(a, b)
       v <- df[[a]] * df[[b]]
       
-      # Replace if exists; keep position if replacing
       if (name %in% cols) {
-        # Overwrite values in place
+        # Overwrite existing values in place
         df[[name]] <- v
+        n_updated <- n_updated + 1L
       } else {
-        # Place after the later of a/b
+        # Insert new column after the later of a/b to keep a predictable position
         pos_target <- max(match(a, cols), match(b, cols), na.rm = TRUE) + 1L
         
-        # Add column and register props
         df[[name]] <- v
         if (exists(".set", mode = "function")) {
           try(.set(column_props, keys = name, values = 2), silent = TRUE)
         }
         
-        # Reorder to target position
+        # Reorder to the target position
         nm <- names(df)
         idx_new <- match(name, nm)
         nm_wo_new <- nm[-idx_new]
         pos_target <- max(1L, min(pos_target, length(nm_wo_new) + 1L))
         df <- df[, append(nm_wo_new, name, after = pos_target - 1L), drop = FALSE]
         cols <- names(df)
+        n_added <- n_added + 1L
       }
     }
     
+    # 2) REMOVE any previously created interactions from this pool that are now unselected
+    # Only remove names within pool_names so we don't touch unrelated columns.
+    present_pool <- intersect(pool_names, names(df))
+    to_remove <- setdiff(present_pool, selected_names)
+    
+    n_removed <- 0L
+    if (length(to_remove)) {
+      # Drop columns and unregister column_props entries
+      keep <- !(names(df) %in% to_remove)
+      df <- df[, keep, drop = FALSE]
+      if (exists(".del", mode = "function")) {
+        try(.del(column_props, keys = to_remove), silent = TRUE)
+      } else {
+        # Fallback if column_props is a list-like structure
+        for (nm in to_remove) {
+          if (!is.null(column_props[[nm]])) column_props[[nm]] <- NULL
+        }
+      }
+      n_removed <- length(to_remove)
+      cols <- names(df)
+    }
+    
+    # Commit and refresh UI
     current_data(df)
     
-    # Refresh selectors (exclude ID and response)
     new_column_names <- colnames(df)[-1]
     rv_idx <- response_var()
     if (!is.null(rv_idx) && rv_idx > 1 && rv_idx <= ncol(df)) {
@@ -1528,74 +1591,178 @@ server= function(input,output,session) {
     updateSelectInput(session, "scatterx", selected = input$scatterx, choices = choices_vec)
     updateSelectInput(session, "scattery", selected = input$scattery, choices = choices_vec)
     
+    pca_axes_max(length(new_column_names) - 1)
+    updateNumericInput(session, "num_axes",
+                       value = length(new_column_names) - 1,
+                       max   = length(new_column_names) - 1)
+    
     renderdata(current_data(), response_var(), id_var, input$select_choice,
                date_format_string, column_props, ignored_rows, current_data_page(), output)
     
-    showNotification("Selected interactions added to the dataset.", type = "message")
+    # Summary notification
+    if (n_added + n_updated + n_removed == 0L) {
+      showNotification("No interaction changes applied.", type = "message")
+    } else {
+      showNotification(sprintf("Interactions applied. Added: %d, Updated: %d, Removed: %d",
+                               n_added, n_updated, n_removed),
+                       type = "message")
+    }
   })
   
   # Create PCA dataset for later analysis
-  observeEvent(input$pca_check, ignoreInit = T, {
+  observeEvent(input$pca_check, ignoreInit = TRUE, {
+    data <- current_data()
+    req(is.data.frame(data), ncol(data) >= 2)
     
-    clear_trans_table(drop_transforms = TRUE, drop_interactions = FALSE, drop_AO = TRUE)
-    data = current_data()
-    feats = feats_being_used()
-    feat_data = data[,feats,drop = FALSE]
+    feats <- feats_being_used()
+    req(length(feats) > 0)
     
-    pca_axes_max(ncol(feat_data))
-    
-    updateNumericInput(session, "num_axes",max = pca_axes_max())
-    
-    if (is.null(ignored_rows)) {
-      feat_data = feat_data
-    } else {
-      feat_data = feat_data[-ignored_rows,]
+    # Keep only requested features that exist
+    feat_cols <- intersect(feats, names(data))
+    if (!length(feat_cols)) {
+      showNotification("No valid feature columns found for PCA.", type = "error")
+      return()
     }
     
-    if (any(is.na(feat_data))) {
-      feat_data = data.frame(missForest(feat_data)$ximp)
+    feat_data <- data[, feat_cols, drop = FALSE]
+    
+    # Apply ignored rows if provided (works for reactive or plain vector)
+    ignored <- tryCatch(if (is.function(ignored_rows)) ignored_rows() else ignored_rows, error = function(e) NULL)
+    if (length(ignored)) {
+      feat_data <- feat_data[-ignored, , drop = FALSE]
     }
     
-    n_axes = input$num_axes
+    # Coerce to numeric (PCA requires numeric); then impute if needed
+    feat_data[] <- lapply(feat_data, function(z) suppressWarnings(as.numeric(z)))
+    if (anyNA(feat_data)) {
+      # missForest returns a list with $ximp; wrap to data.frame to keep column names
+      feat_data <- data.frame(missForest(feat_data)$ximp, check.names = FALSE)
+    }
     
-    # Run PCA on feature data
-    pca_result = prcomp(feat_data, scale. = TRUE)
+    # Max axes is number of features
+    max_axes <- ncol(feat_data)
+    pca_axes_max(max_axes)
     
+    # Clamp requested axes into [1, max_axes]
+    desired_axes <- input$num_axes
+    if (is.null(desired_axes) || !is.numeric(desired_axes) || !is.finite(desired_axes)) desired_axes <- max_axes
+    n_axes <- max(1L, min(as.integer(desired_axes), max_axes))
+    
+    # Reflect constraints in the UI (update both value and max)
+    updateNumericInput(session, "num_axes", value = n_axes, max = max_axes)
+    
+    # Run PCA (center and scale)
+    pca_result <- prcomp(feat_data, center = TRUE, scale. = TRUE)
+    
+    # Persist scaling parameters keyed by original feature names
     PCA_scaling_mean(setNames(pca_result$center, colnames(feat_data)))
-    PCA_scaling_sd(setNames(pca_result$scale, colnames(feat_data)))
+    PCA_scaling_sd(  setNames(pca_result$scale,  colnames(feat_data)))
     
-    pca_summary = summary(pca_result)
+    # Assemble PCA scores for the selected number of axes
+    pcs <- as.data.frame(pca_result$x[, seq_len(n_axes), drop = FALSE], check.names = FALSE)
+    colnames(pcs) <- paste0("PC", seq_len(n_axes))
     
-    if (date_format_string == "Character") {
-      PCA_data = data.frame(cbind(data[,1],data[,response_var()]))
-      PCA_data[,3:(n_axes+2)] = pca_result$x[,1:n_axes]
-    } else {
-      PCA_data = data.frame(cbind(data[,1],data[,response_var()],pca_result$x[,1:n_axes]))
-    }
-    
-    colnames(PCA_data) = c(colnames(data)[1],colnames(data)[response_var()],paste0("PC",seq(1,n_axes)))
+    # Build the PCA dataset: ID + Response + PCs (no need for date_format_string branching)
+    id_idx   <- 1L
+    resp_idx <- response_var()
+    PCA_data <- cbind(
+      data[, id_idx,   drop = FALSE],
+      data[, resp_idx, drop = FALSE],
+      pcs
+    )
+    colnames(PCA_data)[1:2] <- c(colnames(data)[id_idx], colnames(data)[resp_idx])
     
     PCA_dataset(PCA_data)
     
-    pca_axes(colnames(PCA_dataset())[3:ncol(PCA_dataset())])
+    # Axes bookkeeping
+    pca_axes(colnames(PCA_dataset())[(ncol(PCA_dataset()) - n_axes + 1):ncol(PCA_dataset())])
     pcax_being_used(pca_axes())
     
-    PCA_coefficients0 = data.frame(round(pca_result$rotation[,1:n_axes],4))
-    PCA_coefficients(cbind(Feature = rownames(PCA_coefficients0), PCA_coefficients0))
+    # Coefficients (loadings) with "Feature" column
+    rot <- round(pca_result$rotation[, seq_len(n_axes), drop = FALSE], 4)
+    PCA_coefficients(
+      data.frame(Feature = rownames(rot), rot, row.names = NULL, check.names = FALSE)
+    )
     
-    PCA_summary_df0 = data.frame(rbind(round(pca_summary$importance[1,1:n_axes],3),pca_summary$importance[2,1:n_axes],pca_summary$importance[3,1:n_axes]))
-    summary_rownames= c("Std. Dev.","Variance Explained","Cumulative Var Explained")
-    PCA_summary_df1 = cbind(summary_rownames,PCA_summary_df0)
-    colnames(PCA_summary_df1)[1] = "Metric"
-    PCA_summary_df(PCA_summary_df1)
+    # Summary (Std. Dev., Variance Explained, Cumulative Var Explained)
+    imp <- summary(pca_result)$importance[, seq_len(n_axes), drop = FALSE]
+    PCA_summary_df(
+      data.frame(
+        Metric = c("Std. Dev.", "Variance Explained", "Cumulative Var Explained"),
+        round(imp, 3),
+        check.names = FALSE,
+        row.names = NULL
+      )
+    )
     
+    # Flags and UI navigation
     clear_modeling(TRUE)
     changed_model(TRUE)
     
-    updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-    updateTabsetPanel(session, inputId = 'data_tabs', selected = "PCA Results")
-    
+    updateTabsetPanel(session, inputId = "shinyVB", selected = "Data")
+    updateTabsetPanel(session, inputId = "data_tabs", selected = "PCA Results")
   })
+  
+  # observeEvent(input$pca_check, ignoreInit = T, {
+  # 
+  #   data = current_data()
+  #   feats = feats_being_used()
+  #   feat_data = data[,feats,drop = FALSE]
+  #   
+  #   pca_axes_max(ncol(feat_data))
+  #   
+  #   updateNumericInput(session, "num_axes",max = pca_axes_max())
+  #   
+  #   if (is.null(ignored_rows)) {
+  #     feat_data = feat_data
+  #   } else {
+  #     feat_data = feat_data[-ignored_rows,]
+  #   }
+  #   
+  #   if (any(is.na(feat_data))) {
+  #     feat_data = data.frame(missForest(feat_data)$ximp)
+  #   }
+  #   
+  #   n_axes = input$num_axes
+  #   
+  #   # Run PCA on feature data
+  #   pca_result = prcomp(feat_data, scale. = TRUE)
+  #   
+  #   PCA_scaling_mean(setNames(pca_result$center, colnames(feat_data)))
+  #   PCA_scaling_sd(setNames(pca_result$scale, colnames(feat_data)))
+  #   
+  #   pca_summary = summary(pca_result)
+  #   
+  #   if (date_format_string == "Character") {
+  #     PCA_data = data.frame(cbind(data[,1],data[,response_var()]))
+  #     PCA_data[,3:(n_axes+2)] = pca_result$x[,1:n_axes]
+  #   } else {
+  #     PCA_data = data.frame(cbind(data[,1],data[,response_var()],pca_result$x[,1:n_axes]))
+  #   }
+  #   
+  #   colnames(PCA_data) = c(colnames(data)[1],colnames(data)[response_var()],paste0("PC",seq(1,n_axes)))
+  #   
+  #   PCA_dataset(PCA_data)
+  #   
+  #   pca_axes(colnames(PCA_dataset())[3:ncol(PCA_dataset())])
+  #   pcax_being_used(pca_axes())
+  #   
+  #   PCA_coefficients0 = data.frame(round(pca_result$rotation[,1:n_axes],4))
+  #   PCA_coefficients(cbind(Feature = rownames(PCA_coefficients0), PCA_coefficients0))
+  #   
+  #   PCA_summary_df0 = data.frame(rbind(round(pca_summary$importance[1,1:n_axes],3),pca_summary$importance[2,1:n_axes],pca_summary$importance[3,1:n_axes]))
+  #   summary_rownames= c("Std. Dev.","Variance Explained","Cumulative Var Explained")
+  #   PCA_summary_df1 = cbind(summary_rownames,PCA_summary_df0)
+  #   colnames(PCA_summary_df1)[1] = "Metric"
+  #   PCA_summary_df(PCA_summary_df1)
+  #   
+  #   clear_modeling(TRUE)
+  #   changed_model(TRUE)
+  #   
+  #   updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
+  #   updateTabsetPanel(session, inputId = 'data_tabs', selected = "PCA Results")
+  #   
+  # })
   
   observeEvent(c(PCA_dataset(),refresh_trigger()), ignoreInit = TRUE, {
     if (!is.null(PCA_dataset())) {
@@ -1626,10 +1793,8 @@ server= function(input,output,session) {
   })
   
   observeEvent(pca_axes_max(), ignoreInit = T, {
-    
     iv$remove_rules("num_axes")
     iv$add_rule("num_axes", sv_between(2,pca_axes_max()))
-    
   })
   
   # Toggling dataset manipulation options
@@ -1687,34 +1852,43 @@ server= function(input,output,session) {
     # Preserve previous response for this clear operation (Option A)
     options(ShinyVB.prev_resp_name = all_cols[cur_rv_idx])
     
-    # Set the new response and clear transforms + interactions + A/O immediately
+    # Set the new response (so clear_trans_table can protect it)
     response_var(new_rv_idx)
-    clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = FALSE)
     
-    # Fallback: explicitly drop star-named interactions if they weren't prefixed
-    df <- current_data()
-    inter_cols <- find_interaction_cols(df)
-    if (length(inter_cols)) {
-      # Protect current and previous response names
-      rv_name   <- colnames(df)[response_var()]
-      prev_resp <- getOption("ShinyVB.prev_resp_name", NULL)
-      options(ShinyVB.prev_resp_name = NULL)  # clear once used
-      protect <- unique(stats::na.omit(as.character(c(rv_name, prev_resp))))
-      
-      inter_cols <- setdiff(inter_cols, protect)
-      if (length(inter_cols)) {
-        df[inter_cols] <- NULL
-        if (exists(".del", mode = "function")) {
-          for (nm in inter_cols) try(.del(column_props, keys = nm), silent = TRUE)
-        }
-        current_data(df)
-      }
-    }
+    # Clear transforms + interactions; keep A/O; also prunes column_props and POLY_COEFFS
+    clear_trans_table(
+      drop_transforms   = TRUE,
+      drop_interactions = TRUE,
+      drop_AO           = FALSE,
+      column_props      = column_props
+    )
+    
+    # clear_trans_table already clears ShinyVB.prev_resp_name; no need to reset here
+    df <- current_data()  # refreshed data after clearing
+    
+    # Refresh all column-based selectors using columns EXCLUDING the ID
+    all_cols2      <- colnames(df)
+    cur_cols_no_id <- if (length(all_cols2) >= 2L) all_cols2[-1L] else character(0)
+    
+    # Preserve current scatter selections if still valid; else reset to "-"
+    safe_keep <- function(sel, choices) if (!is.null(sel) && sel %in% c("-", choices)) sel else "-"
+    
+    updateSelectInput(session, "set_column_props",
+                      choices = c("-", cur_cols_no_id), selected = "-")
+    updateSelectInput(session, "rainplot",
+                      choices = c("-", cur_cols_no_id))
+    updateSelectInput(session, "lineplot",
+                      choices = c("-", cur_cols_no_id))
+    updateSelectInput(session, "scatterx",
+                      selected = safe_keep(input$scatterx, cur_cols_no_id),
+                      choices  = c("-", cur_cols_no_id))
+    updateSelectInput(session, "scattery",
+                      selected = safe_keep(input$scattery, cur_cols_no_id),
+                      choices  = c("-", cur_cols_no_id))
     
     # Rebuild feature list by name (exclude ID and the NEW response)
-    all_cols <- colnames(current_data())
-    rv_name  <- all_cols[response_var()]
-    feature_names_now <- setdiff(all_cols, c(id_name, rv_name))
+    rv_name <- all_cols2[response_var()]
+    feature_names_now <- setdiff(cur_cols_no_id, rv_name)
     
     feats_being_used(feature_names_now)
     feat_names(feature_names_now)
@@ -1727,7 +1901,7 @@ server= function(input,output,session) {
     
     # Response stats excluding left/right-censored tags
     exclude_values <- c(input$lc_val, input$rc_val)
-    resp_vec <- current_data()[[rv_name]]
+    resp_vec <- df[[rv_name]]
     real_responses <- stats::na.omit(resp_vec[!(resp_vec %in% exclude_values)])
     
     safe_min    <- function(x) if (length(x)) min(x) else NA_real_
@@ -1738,7 +1912,7 @@ server= function(input,output,session) {
     rmax <- round(safe_max(real_responses), 3)
     rmed <- round(safe_median(real_responses), 2)
     
-    updateNumericInput(session, "LG_binarize_crit_value",   value = rmed, min = rmin, max = rmax)
+    updateNumericInput(session, "LG_binarize_crit_value",    value = rmed, min = rmin, max = rmax)
     updateNumericInput(session, "XGBCL_binarize_crit_value", value = rmed, min = rmin, max = rmax)
     
     iv$remove_rules("LG_binarize_crit_value")
@@ -1961,18 +2135,97 @@ server= function(input,output,session) {
   })
   
   # Input column properties into the hash table
-  observeEvent(input$set_column_props, ignoreInit = T,  {
+  observeEvent(input$set_column_props, ignoreInit = TRUE, {
     
-    if (input$set_column_props != "-") {
-      
-      showModal(modalDialog(title=paste0(input$set_column_props," Column Properties"),card(
-        fluidRow(
-          column(4,numericInput("sig_digies",  label="Significant Digits", value = values(column_props,keys=input$set_column_props)[1], min=0,max=12,step=1)))),
-        # column(3,numericInput("prop2",  label="Prop2", value = values(column_props,keys=input$col_props)[2], min=0,max=1,step=0.05)),
-        # column(3,textInput("prop3",  label="Prop3", value = values(column_props,keys=input$col_props)[3])),
-        # column(3,textInput("prop4",  label="Prop4", value = values(column_props,keys=input$col_props)[4])))),
-        footer = div(actionButton("props_close",'Close'))))
+    if (is.null(input$set_column_props) || input$set_column_props == "-") return(NULL)
+    
+    sel_col <- input$set_column_props
+    
+    # Defensive: ensure the selected column still exists
+    if (!(sel_col %in% colnames(current_data()))) {
+      showNotification("Selected column no longer exists. Refreshing list.", type = "warning")
+      updateSelectInput(session, "set_column_props",
+                        choices = c("-", colnames(current_data())), selected = "-")
+      return(NULL)
     }
+    
+    # Helper: detect Polynomial column and extract base feature
+    poly_prefix <- prefix_map[["Polynomial"]]
+    is_poly_col <- grepl(sprintf("^%s", escape_regex(poly_prefix)), sel_col, perl = TRUE)
+    
+    # Use your base_name helper if available; otherwise inline fallback
+    base_feat <- if (is_poly_col) {
+      if (exists("base_name", mode = "function")) {
+        base_name(sel_col)
+      } else {
+        sub(sprintf("^%s", escape_regex(poly_prefix)), "", sel_col, perl = TRUE)
+      }
+    } else {
+      NULL
+    }
+    
+    # Fetch coefficients if Polynomial
+    coeffs <- if (!is.null(base_feat)) get_poly_coeffs(base_feat) else NULL
+    if (!is.null(coeffs) && length(coeffs) != 3) coeffs <- NULL
+    
+    fmt <- function(z) {
+      if (is.null(z) || anyNA(z)) "NA" else formatC(z, format = "fg", digits = 6)
+    }
+    
+    poly_block <- if (!is.null(coeffs)) {
+      # Show A, B, C as read-only text
+      fluidRow(
+        style = "margin-left:0; margin-right:0;",
+        column(
+          12,
+          div(
+            style = "margin-top:10px;",
+            strong("Polynomial Coefficients (A + Bx + Cx^2):"),
+            tags$ul(
+              style = "padding-left:1.25rem; margin-left:0; list-style-position: inside;",
+              tags$li(sprintf("A = %s", fmt(coeffs[1]))),
+              tags$li(sprintf("B = %s",   fmt(coeffs[2]))),
+              tags$li(sprintf("C = %s", fmt(coeffs[3])))
+            )
+          )
+        )
+      )
+    } else if (is_poly_col) {
+      # Polynomial column but no coeffs persisted (edge case)
+      fluidRow(
+        column(12,
+               div(style = "margin-top: 10px;",
+                   strong(sprintf("Polynomial coefficients for %s:" , base_feat)),
+                   div("No coefficients found (not yet fitted or cleared).")
+               )
+        )
+      )
+    } else {
+      # Non-polynomial column: no coefficients to show
+      NULL
+    }
+    
+    showModal(
+      modalDialog(
+        title = paste0(sel_col, " Column Properties"),
+        card(
+          fluidRow(
+            column(
+              4,
+              numericInput(
+                "sig_digies",
+                label = "Significant Digits",
+                value = values(column_props, keys = sel_col)[1],
+                min = 0, max = 12, step = 1
+              )
+            ),
+            # A/B/C read-only block (only if available/applicable)
+            if (!is.null(poly_block)) poly_block
+          )
+        ),
+        footer = div(actionButton("props_close", "Close"))
+      )
+    )
   })
   
   observeEvent(input$props_close, ignoreInit = T, {
@@ -3729,39 +3982,305 @@ server= function(input,output,session) {
   })
   
   # Create PDP for a feature in the XGBCL model
-  observeEvent(input$XGBCL_shapes_rows_selected, ignoreInit = T, {
+  observeEvent(input$XGBCL_shapes_rows_selected, ignoreInit = TRUE, {
+    # Validate selection
+    sel <- input$XGBCL_shapes_rows_selected
+    if (is.null(sel) || !length(sel)) return()
+    sel_idx <- sel[1]
     
-    selected_index = input$XGBCL_shapes_rows_selected[1]
-    selected_feature = XGBCL_coeffs()[selected_index,1]
+    # Shapes/coeffs table
+    xgbc <- XGBCL_coeffs()
+    if (is.null(xgbc) || nrow(xgbc) < sel_idx) {
+      showNotification("No feature selected or shapes table not ready.", type = "warning")
+      return()
+    }
+    selected_feature <- as.character(xgbc[sel_idx, 1])
     
-    used_data = na.omit(XGBCL_final_data())
+    # Try cached final data first
+    ud <- XGBCL_final_data()
     
-    train_data = as.data.frame(used_data[,-1])
-    response = as.numeric(used_data[,1])
-    
-    predcl_fun = function(model, newdata) {
-      predictions = predict(model, newdata = as.matrix(newdata))
-      return(as.numeric(predictions))
+    # If cache is not available or incomplete, reconstruct from current_data()
+    if (is.null(ud) || !is.data.frame(ud) || ncol(ud) < 2L) {
+      cur_df <- current_data()
+      if (is.null(cur_df) || !is.data.frame(cur_df) || ncol(cur_df) < 2L) {
+        showNotification("Training data for PDP is unavailable. Rebuild the model and try again.", type = "error")
+        return()
+      }
+      
+      id_name   <- colnames(cur_df)[1L]
+      resp_name <- colnames(cur_df)[response_var()]
+      
+      # Model features from the shapes table
+      model_features <- unique(as.character(xgbc[[1]]))
+      if (!length(model_features)) {
+        showNotification("Model feature list is empty. Rebuild the model and try again.", type = "error")
+        return()
+      }
+      
+      # Local helpers (fall back to defaults if globals not present)
+      AO_COMP_NAMES <- get0("AO_COMP_NAMES",
+                            ifnotfound = c("WindA","WindO","CurrentA","CurrentO","WaveA","WaveO"),
+                            envir = .GlobalEnv)
+      TRANS_PATTERN <- get0("TRANS_PATTERN",
+                            ifnotfound = "^(Log\\.\\.|Inverse\\.\\.|Sqrt\\.\\.|Qdrt\\.\\.|Square\\.\\.|Poly\\.\\.)",
+                            envir = .GlobalEnv)
+      INTER_PATTERN <- get0("INTER_PATTERN", ifnotfound = "^Int\\.\\.", envir = .GlobalEnv)
+      INTER_SEP     <- get0("INTER_SEP",     ifnotfound = "__",         envir = .GlobalEnv)
+      
+      .is_transformed <- function(nm) grepl(TRANS_PATTERN, nm, perl = TRUE)
+      .base_name      <- function(nm) sub(TRANS_PATTERN, "", nm, perl = TRUE)
+      .is_inter       <- function(nm) grepl(INTER_PATTERN, nm, perl = TRUE)
+      .parse_inter    <- function(nm) {
+        core <- sub(INTER_PATTERN, "", nm, perl = TRUE)
+        strsplit(core, INTER_SEP, fixed = TRUE)[[1L]]
+      }
+      
+      .prefix_kind <- get0("PREFIX_KIND", ifnotfound = NULL, envir = .GlobalEnv)
+      if (is.null(.prefix_kind)) {
+        .prefix_kind <- c(
+          "Log.."     = "Log10",
+          "Inverse.." = "Inverse",
+          "Sqrt.."    = "Square Root",
+          "Qdrt.."    = "Quad Root",
+          "Square.."  = "Square",
+          "Poly.."    = "Polynomial"
+        )
+      }
+      .get_prefix <- get0("get_prefix", ifnotfound = NULL, envir = .GlobalEnv)
+      if (is.null(.get_prefix)) {
+        .get_prefix <- function(x) {
+          m <- regexpr(TRANS_PATTERN, x, perl = TRUE)
+          if (m[1L] == -1L) return(NA_character_)
+          substr(x, m[1L], m[1L] + attr(m, "match.length")[1L] - 1L)
+        }
+      }
+      
+      df_mat <- cur_df
+      
+      # Determine which A/O components are required by the model
+      required_AO <- character(0)
+      for (f in model_features) {
+        if (f %in% AO_COMP_NAMES) {
+          required_AO <- c(required_AO, f)
+        } else if (.is_transformed(f)) {
+          b <- .base_name(f)
+          if (b %in% AO_COMP_NAMES) required_AO <- c(required_AO, b)
+        } else if (.is_inter(f)) {
+          parts <- .parse_inter(f)
+          for (p in parts) {
+            if (.is_transformed(p)) p <- .base_name(p)
+            if (p %in% AO_COMP_NAMES) required_AO <- c(required_AO, p)
+          }
+        }
+      }
+      # Deduplicate while preserving order
+      if (length(required_AO)) {
+        seen <- new.env(parent = emptyenv()); req <- character(0)
+        for (nm in required_AO) if (!exists(nm, envir = seen, inherits = FALSE)) {
+          assign(nm, TRUE, envir = seen); req <- c(req, nm)
+        }
+        required_AO <- req
+      }
+      
+      # Compute A/O if any required A/O components are missing from df_mat
+      if (length(required_AO)) {
+        missing_AO <- setdiff(required_AO, names(df_mat))
+        if (length(missing_AO)) {
+          if (!exists("compute_AO", mode = "function")) {
+            showNotification("A/O synthesis helper compute_AO is not available.", type = "error")
+            return()
+          }
+          # Prefer bo at fit-time if available; else current bo()
+          bo_for_pdp <- get0("XGBCL_fit_bo", ifnotfound = bo(), envir = .GlobalEnv)
+          df_mat <- compute_AO(df_mat, rv_ao_map = rv_ao_map, bo_deg = bo_for_pdp)
+        }
+      }
+      
+      # Fail fast for missing polynomial coeffs (optional but recommended)
+      if (exists("get_poly_coeffs", mode = "function")) {
+        polys <- model_features[grepl("^Poly\\.\\.", gsub("\\.\\.", "..", model_features), perl = TRUE) |
+                                  grepl("^Poly\\.\\.?", model_features)]
+        if (length(polys)) {
+          missing_poly <- character(0)
+          for (p in polys) {
+            b <- .base_name(p)
+            if (is.null(get_poly_coeffs(b))) missing_poly <- c(missing_poly, b)
+          }
+          if (length(missing_poly)) {
+            showNotification(
+              paste0("Polynomial coefficients missing for bases: ",
+                     paste(unique(missing_poly), collapse = ", "),
+                     ". Restore POLY_COEFFS before computing PDP."),
+              type = "error", duration = 8
+            )
+            return()
+          }
+        }
+      }
+      
+      # Ensure transformed columns required by the model exist
+      if (!exists("compute_transform", mode = "function")) {
+        showNotification("compute_transform is not available; cannot reconstruct transformed features for PDP.", type = "error")
+        return()
+      }
+      for (mf in model_features) {
+        if (.is_transformed(mf) && !(mf %in% names(df_mat))) {
+          base <- .base_name(mf)
+          if (!(base %in% names(df_mat))) next
+          pref <- .get_prefix(mf)
+          kind <- .prefix_kind[[pref]]
+          if (is.null(kind) || is.na(kind)) next
+          df_mat[[mf]] <- compute_transform(df_mat[[base]], kind = kind, base = base)
+        }
+      }
+      
+      # Ensure interaction columns required by the model exist
+      for (mf in model_features) {
+        if (.is_inter(mf) && !(mf %in% names(df_mat))) {
+          parts <- .parse_inter(mf)
+          if (length(parts) != 2L) next
+          a <- parts[1L]; b <- parts[2L]
+          if (!(a %in% names(df_mat) && b %in% names(df_mat))) next
+          df_mat[[mf]] <- as.numeric(df_mat[[a]]) * as.numeric(df_mat[[b]])
+        }
+      }
+      
+      # Final check
+      missing <- setdiff(model_features, names(df_mat))
+      if (length(missing)) {
+        showNotification(
+          sprintf("Cannot reconstruct training data. Missing features: %s", paste(missing, collapse = ", ")),
+          type = "error", duration = 6
+        )
+        return()
+      }
+      
+      # Build ud in exact training feature order
+      train_order <- XGBCL_model$feature_names
+      if (is.null(train_order) || !length(train_order)) {
+        train_order <- model_features
+        showNotification("Warning: XGBCL_model$feature_names is not set; using shapes table feature order.", type = "warning", duration = 6)
+      } else {
+        extra <- setdiff(train_order, names(df_mat))
+        if (length(extra)) {
+          showNotification(
+            paste0("Model expects features not found in data: ", paste(extra, collapse = ", ")),
+            type = "error", duration = 6
+          )
+          return()
+        }
+      }
+      
+      keep_cols <- c(id_name, resp_name, train_order)
+      ud <- df_mat[, keep_cols, drop = FALSE]
     }
     
-    predictor.xgbcl = Predictor$new(
-      model = XGBCL_model,
-      data = train_data,
-      y = response,
-      predict.fun = predcl_fun
-    )
+    # Now prepare training data from ud, preserving exact training order
+    train_order <- if (!is.null(XGBCL_model$feature_names) && length(XGBCL_model$feature_names)) {
+      XGBCL_model$feature_names
+    } else {
+      unique(as.character(xgbc[[1]]))
+    }
     
-    pdp_info =  FeatureEffect$new(
-      predictor.xgbcl,
-      selected_feature,
-      method = "pdp",
-      grid.size = 25
-    )
+    # Response column: prefer the current response name if present; else fallback to first non-feature column
+    cur_df <- current_data()
+    resp_name_cur <- if (!is.null(cur_df) && is.data.frame(cur_df) && ncol(cur_df) >= 2L) {
+      colnames(cur_df)[response_var()]
+    } else NULL
     
-    output$XGBCL_pdp_plot = renderPlot({plot(pdp_info$plot())})
+    # Try to get response by name
+    if (!is.null(resp_name_cur) && resp_name_cur %in% names(ud)) {
+      resp_col <- resp_name_cur
+    } else {
+      # Fallbacks: if ud has exactly length(train_order)+1 cols and first col is not a feature, assume first is response
+      non_feature_cols <- setdiff(colnames(ud), train_order)
+      if (length(non_feature_cols) == 1L) {
+        resp_col <- non_feature_cols[1L]
+      } else if (ncol(ud) == length(train_order) + 1L && !(colnames(ud)[1L] %in% train_order)) {
+        resp_col <- colnames(ud)[1L]
+      } else {
+        showNotification("Response column not found in the reconstructed data.", type = "error")
+        return()
+      }
+    }
+    
+    # Subset and drop rows with NA for stability
+    cols_needed <- unique(c(train_order, resp_col))
+    used_data <- stats::na.omit(as.data.frame(ud[, cols_needed, drop = FALSE]))
+    
+    # Features matrix in exact training order; do NOT drop any columns
+    train_data <- used_data[, train_order, drop = FALSE]
+    # Coerce to numeric
+    train_data[] <- lapply(train_data, function(z) suppressWarnings(as.numeric(z)))
+    
+    # Final name/order check against the booster (if available)
+    fn <- XGBCL_model$feature_names
+    if (!is.null(fn) && length(fn) && !identical(colnames(train_data), fn)) {
+      showNotification(
+        paste0(
+          "Feature name/order mismatch with the trained classifier.\n",
+          "Model:   ", paste(fn, collapse = ", "), "\n",
+          "Newdata: ", paste(colnames(train_data), collapse = ", ")
+        ),
+        type = "error", duration = 8
+      )
+      return()
+    }
+    
+    # Response (numeric 0/1 is fine for iml)
+    response <- suppressWarnings(as.numeric(used_data[[resp_col]]))
+    
+    # Ensure the selected feature exists in train_data
+    if (!(selected_feature %in% colnames(train_data))) {
+      showNotification(sprintf("Selected feature '%s' is not present in the model features.", selected_feature), type = "error")
+      return()
+    }
+    
+    # Predict function for xgboost classifier:
+    # - For binary: returns probabilities (numeric)
+    # - For multi-class: you may need to choose a column; adjust if needed
+    predcl_fun <- function(model, newdata) {
+      as.numeric(stats::predict(model, newdata = as.matrix(newdata)))
+    }
+    
+    # Build iml Predictor (classification)
+    predictor.xgbcl <- try(
+      iml::Predictor$new(
+        model       = XGBCL_model,
+        data        = train_data,
+        y           = response,
+        predict.fun = predcl_fun
+      ),
+      silent = TRUE
+    )
+    if (inherits(predictor.xgbcl, "try-error")) {
+      msg <- conditionMessage(attr(predictor.xgbcl, "condition"))
+      showNotification(paste0("Failed to initialize PDP Predictor (CL): ", msg), type = "error", duration = 6)
+      return()
+    }
+    
+    # Compute PDP for the selected feature
+    pdp_info <- try(
+      iml::FeatureEffect$new(
+        predictor = predictor.xgbcl,
+        feature   = selected_feature,
+        method    = "pdp",
+        grid.size = 25
+      ),
+      silent = TRUE
+    )
+    if (inherits(pdp_info, "try-error")) {
+      msg <- conditionMessage(attr(pdp_info, "condition"))
+      showNotification(paste0("Failed to compute PDP (CL): ", msg), type = "error", duration = 6)
+      return()
+    }
+    
+    output$XGBCL_pdp_plot <- renderPlot({
+      pdp_info$plot()
+    })
     
     showModal(modalDialog(
-      title = paste("Partial Dependence Plot: ", selected_feature),
+      title = paste("Partial Dependence Plot:", selected_feature),
       size = "l",
       plotOutput("XGBCL_pdp_plot"),
       easyClose = TRUE,
@@ -4489,38 +5008,309 @@ server= function(input,output,session) {
   })
   
   # Create PDP for a feature in the XGB model
-  observeEvent(input$XGB_shapes_rows_selected, ignoreInit = T, {
+  observeEvent(input$XGB_shapes_rows_selected, ignoreInit = TRUE, {
+    # Validate selection
+    sel_idx <- input$XGB_shapes_rows_selected
+    if (is.null(sel_idx) || length(sel_idx) == 0) return()
+    sel_idx <- sel_idx[1]
     
-    selected_index = input$XGB_shapes_rows_selected[1]
-    selected_feature = XGB_coeffs()[selected_index,1]
+    # Shapes/coeffs table
+    xgbc <- XGB_coeffs()
+    if (is.null(xgbc) || nrow(xgbc) < sel_idx) {
+      showNotification("No feature selected or shapes table not ready.", type = "warning")
+      return()
+    }
+    selected_feature <- as.character(xgbc[sel_idx, 1])
     
-    used_data = na.omit(XGB_final_data())
+    # Try cached final data first
+    ud <- XGB_final_data()
     
-    train_data = as.data.frame(used_data[,-1])
-    response = as.numeric(used_data[,1])
-    
-    predcl_fun = function(model, newdata) {
-      predictions = predict(model, newdata = as.matrix(newdata))
-      return(as.numeric(predictions))
+    # If cache is not available, reconstruct from current_data
+    if (is.null(ud) || !is.data.frame(ud) || ncol(ud) < 2L) {
+      # Current dataset
+      cur_df <- current_data()
+      if (is.null(cur_df) || !is.data.frame(cur_df) || ncol(cur_df) < 2L) {
+        showNotification("Training data for PDP is unavailable. Rebuild the model and try again.", type = "error")
+        return()
+      }
+      
+      # Column names for ID and response
+      id_name   <- colnames(cur_df)[1L]
+      resp_name <- colnames(cur_df)[response_var()]
+      
+      # Model features from the shapes table
+      model_features <- unique(as.character(xgbc[[1]]))
+      if (!length(model_features)) {
+        showNotification("Model feature list is empty. Rebuild the model and try again.", type = "error")
+        return()
+      }
+      
+      # Local helpers (tolerant of missing globals; use fallbacks)
+      AO_COMP_NAMES <- get0("AO_COMP_NAMES",
+                            ifnotfound = c("WindA","WindO","CurrentA","CurrentO","WaveA","WaveO"),
+                            envir = .GlobalEnv)
+      TRANS_PATTERN <- get0("TRANS_PATTERN",
+                            ifnotfound = "^(Log\\.\\.|Inverse\\.\\.|Sqrt\\.\\.|Qdrt\\.\\.|Square\\.\\.|Poly\\.\\.)",
+                            envir = .GlobalEnv)
+      INTER_PATTERN <- get0("INTER_PATTERN",
+                            ifnotfound = "^Int\\.\\.",
+                            envir = .GlobalEnv)
+      INTER_SEP     <- get0("INTER_SEP", ifnotfound = "__", envir = .GlobalEnv)
+      
+      .is_transformed <- function(nm) grepl(TRANS_PATTERN, nm, perl = TRUE)
+      .base_name      <- function(nm) sub(TRANS_PATTERN, "", nm, perl = TRUE)
+      .is_inter       <- function(nm) grepl(INTER_PATTERN, nm, perl = TRUE)
+      .parse_inter    <- function(nm) {
+        core <- sub(INTER_PATTERN, "", nm, perl = TRUE)
+        strsplit(core, INTER_SEP, fixed = TRUE)[[1L]]
+      }
+      
+      # Map prefix -> human kind; prefer global PREFIX_KIND, fallback to static map
+      .prefix_kind <- get0("PREFIX_KIND", ifnotfound = NULL, envir = .GlobalEnv)
+      if (is.null(.prefix_kind)) {
+        .prefix_kind <- c(
+          "Log.."     = "Log10",
+          "Inverse.." = "Inverse",
+          "Sqrt.."    = "Square Root",
+          "Qdrt.."    = "Quad Root",
+          "Square.."  = "Square",
+          "Poly.."    = "Polynomial"
+        )
+      }
+      .get_prefix <- get0("get_prefix", ifnotfound = NULL, envir = .GlobalEnv)
+      if (is.null(.get_prefix)) {
+        .get_prefix <- function(x) {
+          m <- regexpr(TRANS_PATTERN, x, perl = TRUE)
+          if (m[1L] == -1L) return(NA_character_)
+          substr(x, m[1L], m[1L] + attr(m, "match.length")[1L] - 1L)
+        }
+      }
+      
+      # Tweak 1: Use bo captured at fit time if available
+      bo_for_pdp <- get0("XGB_fit_bo", ifnotfound = bo(), envir = .GlobalEnv)
+      
+      df_mat <- cur_df
+      
+      # Tweak 2: Fail fast if Polynomial transforms are required but coeffs are missing
+      if (exists("get_poly_coeffs", mode = "function")) {
+        required_poly_bases <- character(0)
+        for (mf in model_features) {
+          if (.is_transformed(mf) && identical(.prefix_kind[[.get_prefix(mf)]], "Polynomial")) {
+            required_poly_bases <- c(required_poly_bases, .base_name(mf))
+          }
+        }
+        if (length(required_poly_bases)) {
+          # dedupe while preserving order
+          seen <- new.env(parent = emptyenv()); reqpb <- character(0)
+          for (nm in required_poly_bases) if (!exists(nm, envir = seen, inherits = FALSE)) {
+            assign(nm, TRUE, envir = seen); reqpb <- c(reqpb, nm)
+          }
+          required_poly_bases <- reqpb
+          
+          missing_poly <- character(0)
+          for (b in required_poly_bases) {
+            co <- get_poly_coeffs(b)
+            if (is.null(co) || !is.numeric(co) || length(co) != 3L || any(!is.finite(co))) {
+              missing_poly <- c(missing_poly, b)
+            }
+          }
+          if (length(missing_poly)) {
+            showNotification(
+              paste0("Polynomial coefficients missing for bases: ",
+                     paste(unique(missing_poly), collapse = ", "),
+                     ". Restore POLY_COEFFS or refit the model before computing PDP."),
+              type = "error", duration = 8
+            )
+            return()
+          }
+        }
+      }
+      
+      # Determine which A/O components are required by the model
+      required_AO <- character(0)
+      for (f in model_features) {
+        if (f %in% AO_COMP_NAMES) {
+          required_AO <- c(required_AO, f)
+        } else if (.is_transformed(f)) {
+          b <- .base_name(f)
+          if (b %in% AO_COMP_NAMES) required_AO <- c(required_AO, b)
+        } else if (.is_inter(f)) {
+          parts <- .parse_inter(f)
+          for (p in parts) {
+            if (.is_transformed(p)) p <- .base_name(p)
+            if (p %in% AO_COMP_NAMES) required_AO <- c(required_AO, p)
+          }
+        }
+      }
+      # Deduplicate while preserving order
+      if (length(required_AO)) {
+        seen <- new.env(parent = emptyenv()); req <- character(0)
+        for (nm in required_AO) if (!exists(nm, envir = seen, inherits = FALSE)) {
+          assign(nm, TRUE, envir = seen); req <- c(req, nm)
+        }
+        required_AO <- req
+      }
+      
+      # Compute A/O if any required A/O components are missing from df_mat
+      if (length(required_AO)) {
+        missing_AO <- setdiff(required_AO, names(df_mat))
+        if (length(missing_AO)) {
+          if (!exists("compute_AO", mode = "function")) {
+            showNotification("A/O synthesis helper compute_AO is not available.", type = "error")
+            return()
+          }
+          # rv_ao_map is reactiveValues; pass it directly; use bo_for_pdp (captured at fit)
+          df_mat <- compute_AO(df_mat, rv_ao_map = rv_ao_map, bo_deg = bo_for_pdp)
+        }
+      }
+      
+      # Ensure transformed columns required by the model exist (compute only if missing)
+      if (exists("compute_transform", mode = "function")) {
+        for (mf in model_features) {
+          if (.is_transformed(mf) && !(mf %in% names(df_mat))) {
+            base <- .base_name(mf)
+            if (!(base %in% names(df_mat))) next
+            pref <- .get_prefix(mf)
+            kind <- .prefix_kind[[pref]]
+            if (is.null(kind) || is.na(kind)) next
+            df_mat[[mf]] <- compute_transform(df_mat[[base]], kind = kind, base = base)
+          }
+        }
+      } else {
+        showNotification("compute_transform is not available; cannot reconstruct transformed features for PDP.", type = "error")
+        return()
+      }
+      
+      # Ensure interaction columns required by the model exist (compute only if missing)
+      for (mf in model_features) {
+        if (.is_inter(mf) && !(mf %in% names(df_mat))) {
+          parts <- .parse_inter(mf)
+          if (length(parts) != 2L) next
+          a <- parts[1L]; b <- parts[2L]
+          if (!(a %in% names(df_mat) && b %in% names(df_mat))) next
+          df_mat[[mf]] <- as.numeric(df_mat[[a]]) * as.numeric(df_mat[[b]])
+        }
+      }
+      
+      # Final check: all model features must now exist
+      missing <- setdiff(model_features, names(df_mat))
+      if (length(missing)) {
+        showNotification(
+          sprintf("Cannot reconstruct training data. Missing features: %s", paste(missing, collapse = ", ")),
+          type = "error", duration = 6
+        )
+        return()
+      }
+      
+      # Build used_data in exact training order
+      train_order <- XGB_model$feature_names
+      if (is.null(train_order) || !length(train_order)) {
+        # Fallback to shapes table order (may not match training; warn)
+        train_order <- model_features
+        showNotification("Warning: XGB_model$feature_names is not set; using shapes table feature order.", type = "warning", duration = 6)
+      } else {
+        # Sanity: make sure all train_order features exist
+        extra <- setdiff(train_order, names(df_mat))
+        if (length(extra)) {
+          showNotification(
+            paste0("Model expects features not found in data: ", paste(extra, collapse = ", ")),
+            type = "error", duration = 6
+          )
+          return()
+        }
+      }
+      
+      # Keep only ID + response + features in the training order
+      keep_cols <- c(id_name, resp_name, train_order)
+      ud <- df_mat[, keep_cols, drop = FALSE]
     }
     
-    predictor.xgb = Predictor$new(
-      model = XGB_model,
-      data = train_data,
-      y = response,
-      predict.fun = predcl_fun
+    # Drop rows with NA across used columns (stability)
+    used_data <- stats::na.omit(as.data.frame(ud))
+    
+    # Prepare training matrix in the exact training feature order
+    train_order <- if (!is.null(XGB_model$feature_names) && length(XGB_model$feature_names)) {
+      XGB_model$feature_names
+    } else {
+      # fall back to shapes table order if model lacks names
+      unique(as.character(xgbc[[1]]))
+    }
+    train_data <- used_data[, train_order, drop = FALSE]
+    
+    # Coerce to numeric without dropping columns
+    train_data[] <- lapply(train_data, function(z) suppressWarnings(as.numeric(z)))
+    
+    # Final hard check against the booster feature_names (if present)
+    fn <- XGB_model$feature_names
+    if (!is.null(fn) && length(fn) && !identical(colnames(train_data), fn)) {
+      showNotification(
+        paste0(
+          "Feature name/order mismatch with the trained model.\n",
+          "Model:   ", paste(fn, collapse = ", "), "\n",
+          "Newdata: ", paste(colnames(train_data), collapse = ", ")
+        ),
+        type = "error", duration = 8
+      )
+      return()
+    }
+    
+    # Response vector
+    cur_df <- current_data()
+    resp_name_cur <- if (!is.null(cur_df) && is.data.frame(cur_df) && ncol(cur_df) >= 2L) {
+      colnames(cur_df)[response_var()]
+    } else NULL
+    if (is.null(resp_name_cur) || !(resp_name_cur %in% names(used_data))) {
+      showNotification("Response column not found in the reconstructed data.", type = "error")
+      return()
+    }
+    response <- suppressWarnings(as.numeric(used_data[[resp_name_cur]]))
+    
+    # Ensure the selected feature exists in train_data
+    if (!(selected_feature %in% colnames(train_data))) {
+      showNotification(sprintf("Selected feature '%s' is not present in the model features.", selected_feature), type = "error")
+      return()
+    }
+    
+    # Define predict function for xgboost (returns numeric vector)
+    predcl_fun <- function(model, newdata) {
+      stats::predict(model, newdata = as.matrix(newdata)) |> as.numeric()
+    }
+    
+    # Build iml Predictor
+    predictor.xgb <- try(
+      iml::Predictor$new(
+        model       = XGB_model,
+        data        = train_data,
+        y           = as.numeric(response),
+        predict.fun = predcl_fun
+      ),
+      silent = TRUE
     )
+    if (inherits(predictor.xgb, "try-error")) {
+      msg <- conditionMessage(attr(predictor.xgb, "condition"))
+      showNotification(paste0("Failed to initialize PDP Predictor: ", msg), type = "error", duration = 6)
+      return()
+    }
     
-    pdp_info =  FeatureEffect$new(
-      predictor.xgb,
-      selected_feature,
-      method = "pdp",
-      grid.size = 25
+    # Compute PDP for the selected feature
+    pdp_info <- try(
+      iml::FeatureEffect$new(
+        predictor = predictor.xgb,
+        feature   = selected_feature,
+        method    = "pdp",
+        grid.size = 25
+      ),
+      silent = TRUE
     )
+    if (inherits(pdp_info, "try-error")) {
+      msg <- conditionMessage(attr(pdp_info, "condition"))
+      showNotification(paste0("Failed to compute PDP: ", msg), type = "error", duration = 6)
+      return()
+    }
     
-    # print(pdp_info$plot())
-    
-    output$XGB_pdp_plot = renderPlot({plot(pdp_info$plot())})
+    output$XGB_pdp_plot <- renderPlot({
+      pdp_info$plot()
+    })
     
     showModal(modalDialog(
       title = paste("PDP for", selected_feature),
@@ -6122,63 +6912,33 @@ server= function(input,output,session) {
       
       current_pred_page(1)
       
-      # Build the columns to display in the Feature Ranges table; use model_features for non-A/O features; for any A/O groups present in the model, replace with the canonical raw columns
-      ao_groups = list(
-        wind    = list(ao = c("WindA","WindO"),
-                       raw = c(rv_ao_map$wind_speed,    rv_ao_map$wind_dir)),
-        current = list(ao = c("CurrentA","CurrentO"),
-                       raw = c(rv_ao_map$current_speed, rv_ao_map$current_dir)),
-        wave    = list(ao = c("WaveA","WaveO"),
-                       raw = c(rv_ao_map$wave_height,   rv_ao_map$wave_dir))
-      )
-      
-      ao_all = unlist(lapply(ao_groups, `[[`, "ao"), use.names = FALSE)
-      
-      # Start with model features excluding A/O features
-      ui_features_ranges = model_features[!model_features %in% ao_all]
-      
-      # For each group with A/O in the model, append its canonical raw columns (once)
-      for (g in names(ao_groups)) {
-        if (any(model_features %in% ao_groups[[g]]$ao)) {
-          raws = ao_groups[[g]]$raw
-          # keep only non-null names that actually exist in current_data()
-          raws = raws[!vapply(raws, is.null, logical(1))]
-          raws = raws[raws %in% colnames(current_data())]
-          if (length(raws) == 0) {
-            # Fallback: if raw mapping not available, keep the A/O names so table isn't empty
-            for (ao in ao_groups[[g]]$ao) {
-              if (!(ao %in% ui_features_ranges)) ui_features_ranges = c(ui_features_ranges, ao)
-            }
-          } else {
-            for (nm in raws) {
-              if (!(nm %in% ui_features_ranges)) ui_features_ranges = c(ui_features_ranges, nm)
-            }
-          }
-        }
-      }
-      
-      # Deduplicate while preserving order and keep only columns present in current_data
-      present_cols = unique(ui_features_ranges)
-      present_cols = present_cols[present_cols %in% colnames(current_data())]
+      # Build display in Feature Ranges table based on UI features already computed for prediction entry above (ui_features)
+      present_cols <- ui_features[ui_features %in% colnames(current_data())]
       
       # Compute ranges on these columns
       if (length(present_cols) > 0) {
-        selected_data = current_data()[, present_cols, drop = FALSE]
-        num_cols = length(present_cols)
+        selected_data <- current_data()[, present_cols, drop = FALSE]
         
-        min_feats = apply(selected_data, 2, min, na.rm = TRUE)
-        max_feats = apply(selected_data, 2, max, na.rm = TRUE)
+        # Coerce to numeric just in case (defensive)
+        for (nm in names(selected_data)) {
+          if (!is.numeric(selected_data[[nm]])) {
+            suppressWarnings(selected_data[[nm]] <- as.numeric(selected_data[[nm]]))
+          }
+        }
         
-        feature_ranges = data.frame(matrix(NA, nrow = 2, ncol = num_cols + 1))
+        min_feats <- apply(selected_data, 2, function(z) suppressWarnings(min(z, na.rm = TRUE)))
+        max_feats <- apply(selected_data, 2, function(z) suppressWarnings(max(z, na.rm = TRUE)))
+        
+        feature_ranges <- data.frame(matrix(NA, nrow = 2, ncol = length(present_cols) + 1))
         feature_ranges[1, 1] <- "Minimum"
         feature_ranges[2, 1] <- "Maximum"
-        feature_ranges[1, 2:(1 + num_cols)] = magnitude_round(min_feats)
-        feature_ranges[2, 2:(1 + num_cols)] = magnitude_round(max_feats)
+        feature_ranges[1, 2:(1 + length(present_cols))] <- magnitude_round(min_feats)
+        feature_ranges[2, 2:(1 + length(present_cols))] <- magnitude_round(max_feats)
         
-        colnames(feature_ranges) = c("Feature_Characteristic", present_cols)
+        colnames(feature_ranges) <- c("Feature_Characteristic", present_cols)
       } else {
         # Graceful fallback: only the label column
-        feature_ranges = data.frame(Feature_Characteristic = c("Minimum", "Maximum"))
+        feature_ranges <- data.frame(Feature_Characteristic = c("Minimum", "Maximum"))
       }
       
       model_feature_ranges(feature_ranges)
@@ -6343,7 +7103,7 @@ server= function(input,output,session) {
     req(iv$is_valid())
     
     # 1) Get the displayed prediction table for the chosen model
-    prediction_data = switch(input$model_choice,
+    prediction_data <- switch(input$model_choice,
                               "Logistic_Regression" = LG_pred_data(),
                               "XGB_Classifier"      = XGBCL_pred_data(),
                               "XGBoost"             = XGB_pred_data(),
@@ -6360,8 +7120,8 @@ server= function(input,output,session) {
     }
     
     # 2) Validate no missing values in the UI feature region
-    ui_start <- 3
-    ui_stop  <- ncol(prediction_data) - 4  # last 4 are Prediction/Bounds/Outcome
+    ui_start <- 3L
+    ui_stop  <- ncol(prediction_data) - 4L  # last 4 are Prediction/Bounds/Outcome
     ui_df    <- if (ui_stop >= ui_start) prediction_data[, ui_start:ui_stop, drop = FALSE] else NULL
     
     if (is.null(ui_df) ||
@@ -6375,8 +7135,8 @@ server= function(input,output,session) {
     }
     
     # 3) Determine the model + features the model expects
-    model = model_to_use()
-    model_features = switch(input$model_choice,
+    model <- model_to_use()
+    model_features <- switch(input$model_choice,
                              "Logistic_Regression" = LG_final_features(),
                              "XGB_Classifier"      = XGBCL_final_features(),
                              "XGBoost"             = XGB_final_features(),
@@ -6385,78 +7145,131 @@ server= function(input,output,session) {
     
     # 4) Build a working feature frame from the UI table and compute A/O if needed
     # The UI feature columns (3:ui_stop) contain raw Magnitude/Direction columns (canonical names).
-    df_ui = as.data.frame(prediction_data[, ui_start:ui_stop, drop = FALSE])
+    df_ui <- as.data.frame(ui_df, stringsAsFactors = FALSE)
     
-    # Compute A/O components if the model expects them.
-    need_wind    = any(model_features %in% c("WindA",    "WindO"))
-    need_current = any(model_features %in% c("CurrentA", "CurrentO"))
-    need_wave    = any(model_features %in% c("WaveA",    "WaveO"))
+    # Helper utilities (use globals if available; else fallbacks)
+    AO_COMP_NAMES <- get0("AO_COMP_NAMES",
+                          ifnotfound = c("WindA","WindO","CurrentA","CurrentO","WaveA","WaveO"),
+                          envir = .GlobalEnv)
+    TRANS_PATTERN <- get0("TRANS_PATTERN",
+                          ifnotfound = "^(Log\\.\\.|Inverse\\.\\.|Sqrt\\.\\.|Qdrt\\.\\.|Square\\.\\.|Poly\\.\\.)",
+                          envir = .GlobalEnv)
+    INTER_PATTERN <- get0("INTER_PATTERN",
+                          ifnotfound = "^Int\\.\\.",
+                          envir = .GlobalEnv)
+    INTER_SEP     <- get0("INTER_SEP", ifnotfound = "__", envir = .GlobalEnv)
     
-    `%||%` = function(a, b) if (!is.null(a) && nzchar(a)) a else b
-    
-    # Wind
-    if (need_wind) {
-      sp = rv_ao_map$wind_speed   %||% "Wind Speed"
-      dr = rv_ao_map$wind_dir     %||% "Wind Direction"
-      if (!all(c(sp, dr) %in% names(df_ui))) {
-        showModal(modalDialog(
-          "Wind raw inputs are missing from the prediction table.", easyClose = TRUE
-        ))
-        return()
-      }
-      ws = as.numeric(df_ui[[sp]])
-      wd = as.numeric(df_ui[[dr]])
-      df_ui[["WindA"]] = -ws * cos((wd - bo()) * pi/180)
-      df_ui[["WindO"]] =  ws * sin((wd - bo()) * pi/180)
+    is_transformed_local <- function(nm) grepl(TRANS_PATTERN, nm, perl = TRUE)
+    base_name_local      <- function(nm) sub(TRANS_PATTERN, "", nm, perl = TRUE)
+    is_interaction_local <- function(nm) grepl(INTER_PATTERN, nm, perl = TRUE)
+    parse_inter_local    <- function(nm) {
+      body <- sub(INTER_PATTERN, "", nm, perl = TRUE)
+      strsplit(body, INTER_SEP, fixed = TRUE)[[1L]]
     }
     
-    # Currents
-    if (need_current) {
-      sp = rv_ao_map$current_speed %||% "Current Speed"
-      dr = rv_ao_map$current_dir   %||% "Current Direction"
-      if (!all(c(sp, dr) %in% names(df_ui))) {
-        showModal(modalDialog(
-          "Current raw inputs are missing from the prediction table.", easyClose = TRUE
-        ))
-        return()
+    # Prefix -> human kind (compute_transform expects these labels)
+    PREFIX_KIND <- get0("PREFIX_KIND", ifnotfound = NULL, envir = .GlobalEnv)
+    if (is.null(PREFIX_KIND)) {
+      PREFIX_KIND <- c(
+        "Log.."     = "Log10",
+        "Inverse.." = "Inverse",
+        "Sqrt.."    = "Square Root",
+        "Qdrt.."    = "Quad Root",
+        "Square.."  = "Square",
+        "Poly.."    = "Polynomial"
+      )
+    }
+    get_prefix_local <- get0("get_prefix", ifnotfound = NULL, envir = .GlobalEnv)
+    if (is.null(get_prefix_local)) {
+      get_prefix_local <- function(x) {
+        m <- regexpr(TRANS_PATTERN, x, perl = TRUE)
+        if (m[1L] == -1L) return(NA_character_)
+        substr(x, m[1L], m[1L] + attr(m, "match.length")[1L] - 1L)
       }
-      cs = as.numeric(df_ui[[sp]])
-      cd = as.numeric(df_ui[[dr]])
-      df_ui[["CurrentA"]] = -cs * cos((cd - bo()) * pi/180)
-      df_ui[["CurrentO"]] =  cs * sin((cd - bo()) * pi/180)
     }
     
-    # Waves
-    if (need_wave) {
-      ht = rv_ao_map$wave_height %||% "Wave Height"
-      dr = rv_ao_map$wave_dir    %||% "Wave Direction"
-      if (!all(c(ht, dr) %in% names(df_ui))) {
-        showModal(modalDialog(
-          "Wave raw inputs are missing from the prediction table.", easyClose = TRUE
-        ))
-        return()
+    # Compute A/O components from raw UI df if the model expects them (directly or in interactions/transforms)
+    need_AO <- FALSE
+    required_AO <- character(0)
+    for (f in model_features) {
+      if (f %in% AO_COMP_NAMES) {
+        need_AO <- TRUE; required_AO <- c(required_AO, f)
+      } else if (is_transformed_local(f)) {
+        b <- base_name_local(f)
+        if (b %in% AO_COMP_NAMES) { need_AO <- TRUE; required_AO <- c(required_AO, b) }
+      } else if (is_interaction_local(f)) {
+        parts <- parse_inter_local(f)
+        for (p in parts) {
+          if (is_transformed_local(p)) p <- base_name_local(p)
+          if (p %in% AO_COMP_NAMES) { need_AO <- TRUE; required_AO <- c(required_AO, p) }
+        }
       }
-      wh = as.numeric(df_ui[[ht]])
-      wd = as.numeric(df_ui[[dr]])
-      df_ui[["WaveA"]] = -wh * cos((wd - bo()) * pi/180)
-      df_ui[["WaveO"]] =  wh * sin((wd - bo()) * pi/180)
+    }
+    # Deduplicate required_AO preserving order
+    if (length(required_AO)) {
+      seen <- new.env(parent = emptyenv()); tmp <- character(0)
+      for (nm in required_AO) if (!exists(nm, envir = seen, inherits = FALSE)) { assign(nm, TRUE, envir = seen); tmp <- c(tmp, nm) }
+      required_AO <- tmp
     }
     
-    # Map prefix -> transform kind
-    prefix_kind <- list(
-      "Log.."     = "Log",
-      "Inverse.." = "Inverse",
-      "Square.."  = "Square",
-      "Sqrt.."    = "Sqrt",
-      "Qdrt.."    = "Qdrt",
-      "Poly.."    = "Poly"
-    )
+    # `%||%` helper
+    `%||%` <- function(a, b) if (!is.null(a) && is.character(a) && length(a) == 1L && nzchar(a)) a else b
     
-    # For every transformed model feature, compute it from its base raw column in df_ui
-    trans_feats <- model_features[grepl(TRANS_PATTERN, model_features)]
+    if (need_AO) {
+      # Wind
+      if (any(required_AO %in% c("WindA","WindO"))) {
+        sp <- rv_ao_map$wind_speed %||% "Wind Speed"
+        dr <- rv_ao_map$wind_dir   %||% "Wind Direction"
+        if (!all(c(sp, dr) %in% names(df_ui))) {
+          showModal(modalDialog("Wind raw inputs are missing from the prediction table.", easyClose = TRUE))
+          return()
+        }
+        S <- suppressWarnings(as.numeric(df_ui[[sp]]))
+        D <- suppressWarnings(as.numeric(df_ui[[dr]]))
+        theta <- (D - as.numeric(bo())) * pi / 180
+        df_ui[["WindA"]] <- -S * cos(theta)
+        df_ui[["WindO"]] <-  S * sin(theta)
+      }
+      # Current
+      if (any(required_AO %in% c("CurrentA","CurrentO"))) {
+        sp <- rv_ao_map$current_speed %||% "Current Speed"
+        dr <- rv_ao_map$current_dir   %||% "Current Direction"
+        if (!all(c(sp, dr) %in% names(df_ui))) {
+          showModal(modalDialog("Current raw inputs are missing from the prediction table.", easyClose = TRUE))
+          return()
+        }
+        S <- suppressWarnings(as.numeric(df_ui[[sp]]))
+        D <- suppressWarnings(as.numeric(df_ui[[dr]]))
+        theta <- (D - as.numeric(bo())) * pi / 180
+        df_ui[["CurrentA"]] <- -S * cos(theta)
+        df_ui[["CurrentO"]] <-  S * sin(theta)
+      }
+      # Wave (height, dir)
+      if (any(required_AO %in% c("WaveA","WaveO"))) {
+        ht <- rv_ao_map$wave_height %||% "Wave Height"
+        dr <- rv_ao_map$wave_dir    %||% "Wave Direction"
+        if (!all(c(ht, dr) %in% names(df_ui))) {
+          showModal(modalDialog("Wave raw inputs are missing from the prediction table.", easyClose = TRUE))
+          return()
+        }
+        H <- suppressWarnings(as.numeric(df_ui[[ht]]))
+        D <- suppressWarnings(as.numeric(df_ui[[dr]]))
+        theta <- (D - as.numeric(bo())) * pi / 180
+        df_ui[["WaveA"]] <- -H * cos(theta)
+        df_ui[["WaveO"]] <-  H * sin(theta)
+      }
+    }
+    
+    # 4b) Synthesize transformed features from bases using compute_transform
+    if (!exists("compute_transform", mode = "function")) {
+      showModal(modalDialog("compute_transform is not available; cannot compute transformed features.", easyClose = TRUE))
+      return()
+    }
+    trans_feats <- model_features[is_transformed_local(model_features)]
     if (length(trans_feats)) {
       for (tf in trans_feats) {
-        base <- sub(TRANS_PATTERN, "", tf)
+        if (tf %in% names(df_ui)) next
+        base <- base_name_local(tf)
         if (!base %in% names(df_ui)) {
           showModal(modalDialog(
             title = "Missing raw input",
@@ -6465,47 +7278,52 @@ server= function(input,output,session) {
           ))
           return()
         }
-        # Identify which prefix/kind applies
-        prefix <- sub(paste0("^(Log..|Inverse..|Square..|Sqrt..|Qdrt..|Poly..).*$"), "\\1", tf)
-        kind   <- prefix_kind[[prefix]]
-        df_ui[[tf]] <- compute_transform(as.numeric(df_ui[[base]]), kind)
+        pref <- get_prefix_local(tf)          # e.g., "Poly.."
+        kind <- PREFIX_KIND[[pref]]           # e.g., "Polynomial"
+        if (is.null(kind) || is.na(kind)) {
+          showModal(modalDialog(sprintf("Unknown transform kind for '%s'.", tf), easyClose = TRUE))
+          return()
+        }
+        df_ui[[tf]] <- compute_transform(df_ui[[base]], kind = kind, base = base)
       }
     }
     
-    int_feats <- model_features[is_interaction(model_features)]
+    # 4c) Synthesize interaction features Int..Feat1__Feat2
+    int_feats <- model_features[is_interaction_local(model_features)]
     if (length(int_feats)) {
       for (nm in int_feats) {
-        bases <- parse_inter_bases(nm)  # c(a, b)
-        a <- bases[1]; b <- bases[2]
+        if (nm %in% names(df_ui)) next
+        parts <- parse_inter_local(nm)
+        if (length(parts) != 2L) {
+          showModal(modalDialog(sprintf("Malformed interaction name '%s'.", nm), easyClose = TRUE))
+          return()
+        }
+        a <- parts[1L]; b <- parts[2L]
+        # If components are transformed, ensure they exist (already handled above). If A/O components, must exist by now.
         if (!all(c(a, b) %in% names(df_ui))) {
           showModal(modalDialog(
             title = "Missing inputs for interactions",
-            paste0("Missing raw input(s) '", paste(setdiff(c(a, b), names(df_ui)), collapse = ", "),
+            paste0("Missing input(s) '", paste(setdiff(c(a, b), names(df_ui)), collapse = ", "),
                    "' required to compute interaction '", nm, "'."),
             easyClose = TRUE
           ))
           return()
         }
-        df_ui[[nm]] <- as.numeric(df_ui[[a]]) * as.numeric(df_ui[[b]])
+        df_ui[[nm]] <- suppressWarnings(as.numeric(df_ui[[a]])) * suppressWarnings(as.numeric(df_ui[[b]]))
       }
     }
     
     # 5) Build the model input matrix in the exact feature order required by the model
-    # For PCA models, we must project from the pre-PCA feature space.
-    final_pca = isTRUE(final_model_PCA())
+    final_pca <- isTRUE(final_model_PCA())
     
     if (final_pca) {
-      # Names of the original (pre-PCA) features used to fit PCA
-      base_vars = names(PCA_scaling_mean())
-      if (is.null(base_vars)) {
-        showModal(modalDialog(
-          "PCA scaling information is missing. Cannot compute PCA features.",
-          easyClose = TRUE
-        ))
+      # PCA path: build pre-PCA matrix by names(PCA_scaling_mean())
+      base_vars <- names(PCA_scaling_mean())
+      if (is.null(base_vars) || !length(base_vars)) {
+        showModal(modalDialog("PCA scaling information is missing. Cannot compute PCA features.", easyClose = TRUE))
         return()
       }
-      
-      missing_base = setdiff(base_vars, names(df_ui))
+      missing_base <- setdiff(base_vars, names(df_ui))
       if (length(missing_base) > 0) {
         showModal(modalDialog(
           title = "Missing pre-PCA features",
@@ -6517,34 +7335,26 @@ server= function(input,output,session) {
         ))
         return()
       }
-      
-      pred_base = as.data.frame(df_ui[, base_vars, drop = TRUE])
-      # Ensure it is 2D even for single-row, single-col cases
-      if (is.null(dim(pred_base))) pred_base = as.data.frame(matrix(pred_base, nrow = nrow(df_ui), dimnames = list(NULL, base_vars)))
-      
-      matched_mean = PCA_scaling_mean()[base_vars]
-      matched_sd   = PCA_scaling_sd()[base_vars]
-      scaled_pred  = scale(pred_base, center = matched_mean, scale = matched_sd)
-      
-      # Project onto the axes used by the model
-      axes = model_PCA_axes()
+      pred_base <- as.data.frame(df_ui[, base_vars, drop = FALSE])
+      # Coerce numeric
+      pred_base[] <- lapply(pred_base, function(z) suppressWarnings(as.numeric(z)))
+      # Scale
+      matched_mean <- PCA_scaling_mean()[base_vars]
+      matched_sd   <- PCA_scaling_sd()[base_vars]
+      scaled_pred  <- scale(pred_base, center = matched_mean, scale = matched_sd)
+      # Project
+      axes  <- model_PCA_axes()
       if (is.null(axes) || length(axes) == 0) {
-        showModal(modalDialog(
-          "Model PCA axes are not available.", easyClose = TRUE
-        ))
+        showModal(modalDialog("Model PCA axes are not available.", easyClose = TRUE))
         return()
       }
-      coeff = PCA_coefficients()
-      # Expect coeff rows = base_vars, columns include axes
-      # Ensure ordering matches
-      coeff_sub = as.matrix(coeff[base_vars, axes, drop = FALSE])
-      pred_pca_data = as.data.frame(as.matrix(scaled_pred) %*% coeff_sub)
+      coeff <- PCA_coefficients()
+      coeff_sub <- as.matrix(coeff[base_vars, axes, drop = FALSE])
+      pred_pca_data <- as.data.frame(as.matrix(scaled_pred) %*% coeff_sub)
       
-      # Sanity: columns of pred_pca_data should be axes (model features)
-      # We'll feed pred_pca_data to predict()
     } else {
-      # Non-PCA: ensure all model_features exist (from df_ui that now includes any needed A/O)
-      missing_feats = setdiff(model_features, names(df_ui))
+      # Non-PCA: ensure all model_features exist (from df_ui that now includes any needed A/O, transforms, interactions)
+      missing_feats <- setdiff(model_features, names(df_ui))
       if (length(missing_feats) > 0) {
         showModal(modalDialog(
           title = "Missing required features",
@@ -6556,115 +7366,127 @@ server= function(input,output,session) {
         ))
         return()
       }
-      pred_feat_data = as.data.frame(df_ui[, model_features, drop = FALSE])
-      # Ensure 2D for single-row edge cases
-      if (is.null(dim(pred_feat_data))) {
-        pred_feat_data = as.data.frame(matrix(pred_feat_data, nrow = nrow(df_ui), dimnames = list(NULL, model_features)))
+      
+      # For XGBoost, align to the booster feature_names if available
+      if (input$model_choice == "XGBoost" && !is.null(XGB_model$feature_names) && length(XGB_model$feature_names)) {
+        order_names <- XGB_model$feature_names
+        extra <- setdiff(order_names, names(df_ui))
+        if (length(extra)) {
+          showModal(modalDialog(
+            title = "Missing required features for XGB",
+            paste("Model expects:", paste(extra, collapse = ", ")), easyClose = TRUE
+          ))
+          return()
+        }
+        pred_feat_data <- as.data.frame(df_ui[, order_names, drop = FALSE])
+      } else {
+        pred_feat_data <- as.data.frame(df_ui[, model_features, drop = FALSE])
       }
+      
+      # Coerce to numeric without dropping columns
+      pred_feat_data[] <- lapply(pred_feat_data, function(z) suppressWarnings(as.numeric(z)))
     }
     
     # 6) Predict with the chosen model
-    resids = pred_residuals()
-    rv_val = prediction_data[, 2, drop = TRUE]  # response column for outcome labelling
-    outcomes = character(nrow(prediction_data))
+    resids  <- pred_residuals()
+    rv_val  <- prediction_data[, 2, drop = TRUE]  # response column for outcome labelling
+    outcomes <- character(nrow(prediction_data))
     
     if (input$model_choice == "Logistic_Regression") {
-      if (final_pca) {
-        predictions = predict(model, newx = as.matrix(pred_pca_data), type = "response", scale = LG_standardize())
+      predictions <- if (final_pca) {
+        predict(model, newx = as.matrix(pred_pca_data), type = "response", scale = LG_standardize())
       } else {
-        predictions = predict(model, newx = as.matrix(pred_feat_data), type = "response", scale = LG_standardize())
+        predict(model, newx = as.matrix(pred_feat_data), type = "response", scale = LG_standardize())
       }
       
       for (i in seq_len(nrow(prediction_data))) {
         if (is.numeric(rv_val[i])) {
-          outcomes[i] = ifelse(predictions[i] >= LG_crit_prob() && rv_val[i] >= LG_thresh(), "TP",
+          outcomes[i] <- ifelse(predictions[i] >= LG_crit_prob() && rv_val[i] >= LG_thresh(), "TP",
                                 ifelse(predictions[i] <= LG_crit_prob() && rv_val[i] <= LG_thresh(), "TN",
                                        ifelse(predictions[i] >= LG_crit_prob() && rv_val[i] <= LG_thresh(), "FP", "FN")))
         } else {
-          outcomes[i] = NA
+          outcomes[i] <- NA
         }
       }
       
     } else if (input$model_choice == "XGB_Classifier") {
-      if (final_pca) {
-        predictions = predict(model, newdata = as.matrix(pred_pca_data), type = "response", scale = XGBCL_standardize())
+      predictions <- if (final_pca) {
+        predict(model, newdata = as.matrix(pred_pca_data), type = "response", scale = XGBCL_standardize())
       } else {
-        predictions = predict(model, newdata = as.matrix(pred_feat_data), type = "response", scale = XGBCL_standardize())
+        predict(model, newdata = as.matrix(pred_feat_data), type = "response", scale = XGBCL_standardize())
       }
       
       for (i in seq_len(nrow(prediction_data))) {
         if (is.numeric(rv_val[i])) {
-          outcomes[i] = ifelse(predictions[i] >= XGBCL_crit_prob() && rv_val[i] >= XGBCL_thresh(), "TP",
+          outcomes[i] <- ifelse(predictions[i] >= XGBCL_crit_prob() && rv_val[i] >= XGBCL_thresh(), "TP",
                                 ifelse(predictions[i] <= XGBCL_crit_prob() && rv_val[i] <= XGBCL_thresh(), "TN",
                                        ifelse(predictions[i] >= XGBCL_crit_prob() && rv_val[i] <= XGBCL_thresh(), "FP", "FN")))
         } else {
-          outcomes[i] = NA
+          outcomes[i] <- NA
         }
       }
       
     } else if (input$model_choice == "XGBoost") {
-      if (final_pca) {
-        predictions = predict(model, newdata = as.matrix(pred_pca_data), scale = XGB_standardize())
+      predictions <- if (final_pca) {
+        predict(model, newdata = as.matrix(pred_pca_data), scale = XGB_standardize())
       } else {
-        predictions = predict(model, newdata = as.matrix(pred_feat_data), scale = XGB_standardize())
+        predict(model, newdata = as.matrix(pred_feat_data), scale = XGB_standardize())
       }
       
       for (i in seq_len(nrow(prediction_data))) {
         if (is.numeric(rv_val[i])) {
-          outcomes[i] = ifelse(predictions[i] >= input$XGB_dec_crit && rv_val[i] >= input$XGB_stand, "TP",
+          outcomes[i] <- ifelse(predictions[i] >= input$XGB_dec_crit && rv_val[i] >= input$XGB_stand, "TP",
                                 ifelse(predictions[i] <= input$XGB_dec_crit && rv_val[i] <= input$XGB_stand, "TN",
                                        ifelse(predictions[i] >= input$XGB_dec_crit && rv_val[i] <= input$XGB_stand, "FP", "FN")))
         } else {
-          outcomes[i] = NA
+          outcomes[i] <- NA
         }
       }
       
     } else if (input$model_choice == "Elastic_Net") {
-      if (final_pca) {
-        predictions = predict(model, newx = as.matrix(pred_pca_data), scale = EN_standardize())
+      predictions <- if (final_pca) {
+        predict(model, newx = as.matrix(pred_pca_data), scale = EN_standardize())
       } else {
-        predictions = predict(model, newx = as.matrix(pred_feat_data), scale = EN_standardize())
+        predict(model, newx = as.matrix(pred_feat_data), scale = EN_standardize())
       }
       
       for (i in seq_len(nrow(prediction_data))) {
         if (is.numeric(rv_val[i])) {
-          outcomes[i] = ifelse(predictions[i] >= input$EN_dec_crit && rv_val[i] >= input$EN_stand, "TP",
+          outcomes[i] <- ifelse(predictions[i] >= input$EN_dec_crit && rv_val[i] >= input$EN_stand, "TP",
                                 ifelse(predictions[i] <= input$EN_dec_crit && rv_val[i] <= input$EN_stand, "TN",
                                        ifelse(predictions[i] >= input$EN_dec_crit && rv_val[i] <= input$EN_stand, "FP", "FN")))
         } else {
-          outcomes[i] = NA
+          outcomes[i] <- NA
         }
       }
     }
     
     # 7) Confidence bounds from residuals
     if (!is.null(resids)) {
-      sorted_resids = sort(resids, decreasing = TRUE)
-      percentile = 100 * (1 - input$conf_bound)
-      index = ceiling((percentile / 100) * length(sorted_resids))
-      crit_value = sorted_resids[index]
-      upper_bound = round(predictions + crit_value, 3)
-      lower_bound = round(predictions - crit_value, 3)
+      sorted_resids <- sort(resids, decreasing = TRUE)
+      percentile    <- 100 * (1 - input$conf_bound)
+      index         <- ceiling((percentile / 100) * length(sorted_resids))
+      crit_value    <- sorted_resids[index]
+      upper_bound   <- round(predictions + crit_value, 3)
+      lower_bound   <- round(predictions - crit_value, 3)
       if (input$model_choice %in% c("Logistic_Regression", "XGB_Classifier")) {
-        upper_bound[upper_bound > 1] = 1
-        lower_bound[lower_bound < 0] = 0
+        upper_bound[upper_bound > 1] <- 1
+        lower_bound[lower_bound < 0] <- 0
       }
     } else {
-      upper_bound = rep(NA, length(predictions))
-      lower_bound = rep(NA, length(predictions))
+      upper_bound <- rep(NA, length(predictions))
+      lower_bound <- rep(NA, length(predictions))
     }
     
     # 8) Update only the last four columns of the displayed table
-    displayed = prediction_data
-    n = nrow(displayed)
-    displayed[, ncol(displayed) - 3] = round(predictions, 3)   # Prediction
-    displayed[, ncol(displayed) - 2] = lower_bound             # Lower_Bound
-    displayed[, ncol(displayed) - 1] = upper_bound             # Upper_Bound
-    displayed[, ncol(displayed)]     = outcomes                # Outcome
+    displayed <- prediction_data
+    displayed[, ncol(displayed) - 3] <- round(predictions, 3)   # Prediction
+    displayed[, ncol(displayed) - 2] <- lower_bound             # Lower_Bound
+    displayed[, ncol(displayed) - 1] <- upper_bound             # Upper_Bound
+    displayed[, ncol(displayed)]     <- outcomes                # Outcome
     
     # 9) Save back and render
-    pred_data(displayed)  # main store used by output
-    # Optionally also update model-specific stores to keep them in sync:
+    pred_data(displayed)
     switch(input$model_choice,
            "Logistic_Regression" = LG_pred_data(displayed),
            "XGB_Classifier"      = XGBCL_pred_data(displayed),
@@ -6672,7 +7494,7 @@ server= function(input,output,session) {
            "Elastic_Net"         = EN_pred_data(displayed)
     )
     
-    output$pd_data = renderpreddata(pred_data(), column_props, current_pred_page(), init_ID_format, output)
+    output$pd_data <- renderpreddata(pred_data(), column_props, current_pred_page(), init_ID_format, output)
   })
   
   # Disconnect the opened SQLite database
