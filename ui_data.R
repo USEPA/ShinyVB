@@ -35,10 +35,11 @@ DataPanel = div(id="data_flex", style = "display:flex; gap:8px; align-items:flex
                     tags$label("Crit Corr", `for` = "r_thresh", class = "inline-label"),
                     div(style = "width: 75px; margin-top:3px;",   # nudge the box down
                       numericInput("r_thresh", label = NULL, value = 0.7, min = 0, max = 1, step = 0.01))))),
-        fluidRow(column(6,disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",  style='width: 150px; vertical-align: -38px;'))),
-                 column(6,class="align-center", numericInput("num_axes", "# Axes", value=2, min=2,max=20,step=1))),
-        fluidRow(column(6,disabled(actionButton("run_iso_forest","IsoForest Leverage", class = "btn-default custom-btn",  style='width: 150px; align: left; vertical-align: -38px;'))),
-                 column(6,numericInput("iso_ndim", "# Dimensions", value=2, min=1,max=10,step=1))))) %>%
+        fluidRow(column(6, disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",style='width: 150px; vertical-align: -38px;'))),
+                column(6, class="align-center",div(style = "margin-top:4px;",numericInput("num_axes", "# Axes", value=2, min=2, max=20, step=1)))),
+        fluidRow(column(6, disabled(actionButton("run_iso_forest", "IsoForest Leverage", class = "btn-default custom-btn",
+            style='width: 150px; align: left; vertical-align: -38px;'))),
+                column(6,div(style = "margin-top:4px;",numericInput("iso_ndim", "# Dimensions", value=2, min=1, max=10, step=1)))))) %>%
       
       bs_append (title="Plotting", content = card(
         
