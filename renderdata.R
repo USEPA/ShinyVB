@@ -10,42 +10,99 @@ renderdata = function(data,
   
   data = data.frame(data)
   
-  sig_digies = c()
-  
+  # Build digits vector (coerce to numeric; default to 2 where NA)
   col_names = colnames(data)
+  sig_digies <- numeric(length(col_names))
+  for (i in seq_along(col_names)) {
+    val <- tryCatch(values(feat_props, keys = col_names[i])[1], error = function(e) NA_real_)
+    val <- suppressWarnings(as.numeric(val))
+    sig_digies[i] <- ifelse(is.na(val), 2, val)
+  }
   
   all_rows = row.names(data)
   iggies = ifelse(all_rows %in% ignored_rows, 'gray', '')
   
-  row_IDs = data[,1]
-  
   PL = 20
   
-  for (i in 1:ncol(data)) {
-    sig_digies = append(sig_digies, values(feat_props, keys = col_names[i])[1])
+  # Helper to ensure digits length matches columns length
+  fit_digits <- function(digits, n) {
+    if (length(digits) == n) return(digits)
+    if (length(digits) == 1) return(rep(digits, n))
+    # Fallback: recycle safely
+    rep_len(digits, n)
   }
+  
+  # Date-like display modes
+  is_date_like <- date_format_string %in% c("Date", "Date_MDY_HM")
+  
+  # Optional: format ID as "M/D/YYYY HH:MM" only when Date_MDY_HM
+  format_mdy_hm <- function(x) {
+    # Coerce to POSIXct robustly
+    if (inherits(x, c("POSIXct", "POSIXt"))) {
+      dt <- x
+    } else if (inherits(x, "Date")) {
+      dt <- as.POSIXct(x, tz = Sys.timezone())
+    } else if (is.numeric(x)) {
+      # Treat as Excel serial days by default
+      dt <- as.POSIXct(x * 86400, origin = "1899-12-30", tz = Sys.timezone())
+    } else if (is.character(x)) {
+      # Try a broad parse, then fall back to as.POSIXct
+      dt <- suppressWarnings(
+        lubridate::parse_date_time(
+          x,
+          orders = c("mdYIMSp","mdYIMp","mdYHM","mdYHMS",
+                     "YmdIMSp","YmdIMp","YmdHM","YmdHMS",
+                     "dmYIMSp","dmYIMp","dmYHM","dmYHMS"),
+          truncated = 1, exact = TRUE, tz = Sys.timezone()
+        )
+      )
+      na_idx <- which(is.na(dt))
+      if (length(na_idx)) {
+        dt[na_idx] <- suppressWarnings(as.POSIXct(x[na_idx], tz = Sys.timezone()))
+      }
+    } else {
+      # Last resort: return as character without reformatting
+      return(as.character(x))
+    }
+    
+    dt <- lubridate::floor_date(dt, unit = "minute")
+    
+    y  <- format(dt, "%Y")
+    m  <- as.integer(format(dt, "%m"))
+    d  <- as.integer(format(dt, "%d"))
+    hm <- format(dt, "%H:%M")
+    
+    sprintf("%d/%d/%s %s", m, d, y, hm)
+  }
+  
+  # Build a view copy for table rendering
+  data_view <- data
+  if (identical(date_format_string, "Date_MDY_HM")) {
+    # Render only; do not mutate underlying data
+    data_view[[id_var]] <- format_mdy_hm(data_view[[id_var]])
+  }
+  row_IDs_view <- data_view[, 1]
   
   if (select_choice == "Change_Response") {
     
-    if (date_format_string != "Numeric" && date_format_string != "Character") {
-      
-      col_list = seq(1, ncol(data))
+    if (is_date_like) {
+      col_list = seq_len(ncol(data_view))
       remaining = col_list[-id_var]
-      sig_digies = sig_digies[-id_var]
+      digits_rem <- fit_digits(sig_digies[-id_var], length(remaining))
       
-      output$data = DT::renderDataTable(server = T, {
+      output$data = DT::renderDataTable(server = TRUE, {
         datatable(
-          data,
-          rownames = F,
+          data_view,
+          rownames = FALSE,
           extensions = 'Buttons',
           selection = list(
             selected = list(rows = NULL, cols = response_var - 1),
             target = "column",
             mode = "single"
           ),
-          editable = F,
+          editable = FALSE,
           options = list(
-            autoWidth = F,
+            autoWidth = FALSE,
             dom='ltBp',
             paging = TRUE,
             pageLength = PL,
@@ -53,9 +110,7 @@ renderdata = function(data,
             scrollX = TRUE,
             scrollY = TRUE,
             buttons = c('copy', 'csv', 'excel'),
-            columnDefs = list(list(
-              targets = '_all', className = 'dt-center'
-            )),
+            columnDefs = list(list(targets = '_all', className = 'dt-center')),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
@@ -66,25 +121,25 @@ renderdata = function(data,
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatRound(columns = remaining, digits = sig_digies) %>%
-          formatDate(id_var, date_format_string)
+          formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
+          formatRound(columns = remaining, digits = digits_rem)
       })
       
-    } else if (date_format_string == "Numeric") {
-      output$data = DT::renderDataTable(server = T, {
+    } else if (identical(date_format_string, "Numeric")) {
+      digits_all <- fit_digits(sig_digies, ncol(data_view))
+      output$data = DT::renderDataTable(server = TRUE, {
         datatable(
-          data,
-          rownames = F,
+          data_view,
+          rownames = FALSE,
           extensions = 'Buttons',
           selection = list(
             selected = list(rows = NULL, cols = response_var - 1),
             target = "column",
             mode = "single"
           ),
-          editable = F,
+          editable = FALSE,
           options = list(
-            autoWidth = F,
+            autoWidth = FALSE,
             dom='ltBp',
             paging = TRUE,
             pageLength = PL,
@@ -92,9 +147,7 @@ renderdata = function(data,
             scrollX = TRUE,
             scrollY = TRUE,
             buttons = c('copy', 'csv', 'excel'),
-            columnDefs = list(list(
-              targets = '_all', className = 'dt-center'
-            )),
+            columnDefs = list(list(targets = '_all', className = 'dt-center')),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
@@ -105,23 +158,26 @@ renderdata = function(data,
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatRound(columns = 1:ncol(data),digits = sig_digies)
+          formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
+          formatRound(columns = seq_len(ncol(data_view)), digits = digits_all)
       })
-    } else if (date_format_string == "Character") {
-      output$data = DT::renderDataTable(server = T, {
+      
+    } else if (identical(date_format_string, "Character")) {
+      # Format all columns except ID
+      digits_non_id <- fit_digits(sig_digies[-1], ncol(data_view) - 1L)
+      output$data = DT::renderDataTable(server = TRUE, {
         datatable(
-          data,
-          rownames = F,
+          data_view,
+          rownames = FALSE,
           extensions = 'Buttons',
           selection = list(
             selected = list(rows = NULL, cols = response_var - 1),
             target = "column",
             mode = "single"
           ),
-          editable = F,
+          editable = FALSE,
           options = list(
-            autoWidth = F,
+            autoWidth = FALSE,
             dom='ltBp',
             paging = TRUE,
             pageLength = PL,
@@ -129,9 +185,7 @@ renderdata = function(data,
             scrollX = TRUE,
             scrollY = TRUE,
             buttons = c('copy', 'csv', 'excel'),
-            columnDefs = list(list(
-              targets = '_all', className = 'dt-center'
-            )),
+            columnDefs = list(list(targets = '_all', className = 'dt-center')),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
@@ -142,25 +196,27 @@ renderdata = function(data,
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatRound(columns = 2:ncol(data),digits = sig_digies)
+          formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
+          formatRound(columns = 2:ncol(data_view), digits = digits_non_id)
       })
     }
+    
   } else if (select_choice == "Edit_Cells") {
-    if (date_format_string != "Numeric" && date_format_string != "Character") {
-      col_list = seq(1, ncol(data))
+    
+    if (is_date_like) {
+      col_list = seq_len(ncol(data_view))
       remaining = col_list[-id_var]
-      sig_digies = sig_digies[-id_var]
+      digits_rem <- fit_digits(sig_digies[-id_var], length(remaining))
       
-      output$data = DT::renderDataTable(server = T, {
+      output$data = DT::renderDataTable(server = TRUE, {
         datatable(
-          data,
-          rownames = F,
+          data_view,
+          rownames = FALSE,
           extensions = 'Buttons',
           selection = "none",
           editable = list(target = "cell", disable = list(columns = 0)),
           options = list(
-            autoWidth = F,
+            autoWidth = FALSE,
             dom='ltBp',
             paging = TRUE,
             pageLength = PL,
@@ -168,9 +224,7 @@ renderdata = function(data,
             scrollX = TRUE,
             scrollY = TRUE,
             buttons = c('copy', 'csv', 'excel'),
-            columnDefs = list(list(
-              targets = '_all', className = 'dt-center'
-            )),
+            columnDefs = list(list(targets = '_all', className = 'dt-center')),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
@@ -181,21 +235,21 @@ renderdata = function(data,
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatRound(columns = remaining, digits = sig_digies) %>%
-          formatDate(id_var, date_format_string)
+          formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
+          formatRound(columns = remaining, digits = digits_rem)
       })
       
-    } else if (date_format_string == "Numeric") {
-      output$data = DT::renderDataTable(server = T, {
+    } else if (identical(date_format_string, "Numeric")) {
+      digits_all <- fit_digits(sig_digies, ncol(data_view))
+      output$data = DT::renderDataTable(server = TRUE, {
         datatable(
-          data,
-          rownames = F,
+          data_view,
+          rownames = FALSE,
           extensions = 'Buttons',
           selection = "none",
           editable = list(target = "cell", disable = list(columns = 0)),
           options = list(
-            autoWidth = F,
+            autoWidth = FALSE,
             paging = TRUE,
             pageLength = PL,
             displayStart = current_page * PL - PL,
@@ -203,9 +257,7 @@ renderdata = function(data,
             scrollY = TRUE,
             dom='ltBp',
             buttons = c('copy', 'csv', 'excel'),
-            columnDefs = list(list(
-              targets = '_all', className = 'dt-center'
-            )),
+            columnDefs = list(list(targets = '_all', className = 'dt-center')),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
@@ -216,19 +268,21 @@ renderdata = function(data,
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatRound(columns = 1:ncol(data),digits = sig_digies)
+          formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
+          formatRound(columns = seq_len(ncol(data_view)), digits = digits_all)
       })
-    } else if (date_format_string == "Character") {
-      output$data = DT::renderDataTable(server = T, {
+      
+    } else if (identical(date_format_string, "Character")) {
+      digits_non_id <- fit_digits(sig_digies[-1], ncol(data_view) - 1L)
+      output$data = DT::renderDataTable(server = TRUE, {
         datatable(
-          data,
-          rownames = F,
+          data_view,
+          rownames = FALSE,
           extensions = 'Buttons',
           selection = "none",
           editable = list(target = "cell", disable = list(columns = 0)),
           options = list(
-            autoWidth = F,
+            autoWidth = FALSE,
             paging = TRUE,
             pageLength = PL,
             displayStart = current_page * PL - PL,
@@ -236,9 +290,7 @@ renderdata = function(data,
             scrollY = TRUE,
             dom='ltBp',
             buttons = c('copy', 'csv', 'excel'),
-            columnDefs = list(list(
-              targets = '_all', className = 'dt-center'
-            )),
+            columnDefs = list(list(targets = '_all', className = 'dt-center')),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
@@ -249,29 +301,31 @@ renderdata = function(data,
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatRound(columns = 2:ncol(data),digits = sig_digies)
+          formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
+          formatRound(columns = 2:ncol(data_view), digits = digits_non_id)
       })
     }
+    
   } else if (select_choice == "D/E_Rows") {
-    if (date_format_string != "Numeric" && date_format_string != "Character") {
-      col_list = seq(1, ncol(data))
+    
+    if (is_date_like) {
+      col_list = seq_len(ncol(data_view))
       remaining = col_list[-id_var]
-      sig_digies = sig_digies[-id_var]
+      digits_rem <- fit_digits(sig_digies[-id_var], length(remaining))
       
-      output$data = DT::renderDataTable(server = T, {
+      output$data = DT::renderDataTable(server = TRUE, {
         datatable(
-          data,
-          rownames = F,
+          data_view,
+          rownames = FALSE,
           extensions = 'Buttons',
           selection = list(
             selected = list(rows = NULL, cols = response_var - 1),
             target = "row",
             mode = "multiple"
           ),
-          editable = F,
+          editable = FALSE,
           options = list(
-            autoWidth = F,
+            autoWidth = FALSE,
             dom='ltBp',
             paging = TRUE,
             pageLength = PL,
@@ -279,9 +333,7 @@ renderdata = function(data,
             scrollX = TRUE,
             scrollY = TRUE,
             buttons = c('copy', 'csv', 'excel'),
-            columnDefs = list(list(
-              targets = '_all', className = 'dt-center'
-            )),
+            columnDefs = list(list(targets = '_all', className = 'dt-center')),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
@@ -292,25 +344,25 @@ renderdata = function(data,
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatRound(columns = remaining, digits = sig_digies) %>%
-          formatDate(id_var, date_format_string)
+          formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
+          formatRound(columns = remaining, digits = digits_rem)
       })
       
-    } else if (date_format_string == "Numeric") {
-      output$data = DT::renderDataTable(server = T, {
+    } else if (identical(date_format_string, "Numeric")) {
+      digits_all <- fit_digits(sig_digies, ncol(data_view))
+      output$data = DT::renderDataTable(server = TRUE, {
         datatable(
-          data,
-          rownames = F,
+          data_view,
+          rownames = FALSE,
           extensions = 'Buttons',
           selection = list(
             selected = list(rows = NULL, cols = response_var - 1),
             target = "row",
             mode = "multiple"
           ),
-          editable = F,
+          editable = FALSE,
           options = list(
-            autoWidth = F,
+            autoWidth = FALSE,
             paging = TRUE,
             pageLength = PL,
             displayStart = current_page * PL - PL,
@@ -318,9 +370,7 @@ renderdata = function(data,
             scrollY = TRUE,
             dom='ltBp',
             buttons = c('copy', 'csv', 'excel'),
-            columnDefs = list(list(
-              targets = '_all', className = 'dt-center'
-            )),
+            columnDefs = list(list(targets = '_all', className = 'dt-center')),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
@@ -331,23 +381,25 @@ renderdata = function(data,
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatRound(columns = 1:ncol(data),digits = sig_digies)
+          formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
+          formatRound(columns = seq_len(ncol(data_view)), digits = digits_all)
       })
-    } else if (date_format_string == "Character") {
-      output$data = DT::renderDataTable(server = T, {
+      
+    } else if (identical(date_format_string, "Character")) {
+      digits_non_id <- fit_digits(sig_digies[-1], ncol(data_view) - 1L)
+      output$data = DT::renderDataTable(server = TRUE, {
         datatable(
-          data,
-          rownames = F,
+          data_view,
+          rownames = FALSE,
           extensions = 'Buttons',
           selection = list(
             selected = list(rows = NULL, cols = response_var - 1),
             target = "row",
             mode = "multiple"
           ),
-          editable = F,
+          editable = FALSE,
           options = list(
-            autoWidth = F,
+            autoWidth = FALSE,
             paging = TRUE,
             pageLength = PL,
             displayStart = current_page * PL - PL,
@@ -355,9 +407,7 @@ renderdata = function(data,
             scrollY = TRUE,
             dom='ltBp',
             buttons = c('copy', 'csv', 'excel'),
-            columnDefs = list(list(
-              targets = '_all', className = 'dt-center'
-            )),
+            columnDefs = list(list(targets = '_all', className = 'dt-center')),
             initComplete = JS(
               "function(settings, json) {",
               "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
@@ -368,8 +418,8 @@ renderdata = function(data,
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
           formatStyle(id_var, backgroundColor = 'lightgray') %>%
-          formatStyle(1,target = "row",backgroundColor = styleEqual(row_IDs,iggies)) %>%
-          formatRound(columns = 2:ncol(data),digits = sig_digies)
+          formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
+          formatRound(columns = 2:ncol(data_view), digits = digits_non_id)
       })
     }
   }

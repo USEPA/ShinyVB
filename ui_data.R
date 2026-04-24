@@ -1,10 +1,10 @@
-DataPanel = sidebarLayout(
-  sidebarPanel = sidebarPanel(
-    id = "datasidepanel",
-    width = 3,
-    tags$style(type = "text/css", "#datasidepanel {height: calc(100vh - 70px) !important; width: 385px !important;}"),
+DataPanel = div(id="data_flex", style = "display:flex; gap:8px; align-items:flex-start;",
+            div(id = "datasidepanel", style = paste("flex:0 0 400px; min-width:400px; max-width:400px;",
+              "background-color:#e9ecef; padding:10px; box-sizing:border-box;",
+              "height: calc(100vh - 70px); height: calc(100dvh - 70px);","overflow-y:auto;"),
+    tags$style(type = "text/css", "#datasidepanel {height: calc(100vh - 70px) !important;}"),
     
-    fluidRow(column(6,inputPanel(selectInput("IDasDate",label = "ID/Date Format",selected ="MDY",choices = c("MDY","YMD","MDYHM","Numeric","Character")))),
+    fluidRow(column(6,inputPanel(selectInput("ID_Format",label = "ID Format",selected ="Date",choices = c("Date","Numeric","Character")))),
              column(6,disabled(actionButton("restore", "Restore Inputs", class = "btn-default custom-btn", style='width: 120px; padding:5px; vertical-align: -33px;')))),
     fluidRow(column(12,radioButtons(inline=T,"sep","Separator",choices = c("Comma" = ",","Semicolon" = ";","Space" = " ","Tab" = "\t"),selected = ","))),
     
@@ -31,9 +31,10 @@ DataPanel = sidebarLayout(
         fluidRow(column(5,disabled(actionButton("interacts", "Interactions",class = "btn-default custom2-btn", style = 'width:120px !important; padding:2px !important;'))),
                  column(7,style = "padding-left: 8px;",tags$style(HTML("#r_thresh { height:35px !important; padding: 2px 2px !important; text-align: center !important; font-size: 16px !important; }
                   .inline-label { margin-right: 8px; font-size: 16px !important; }")),
-                  div(style = "display:flex; align-items:center; gap:8px;",
-                     tags$label("Crit_Corr", `for` = "r_thresh", class = "inline-label"),
-                     div(style = "width: 75px;",numericInput("r_thresh", label = NULL, value = 0.7, min = 0, max = 1, step = 0.01))))),
+                  div(style = "display:flex; align-items:center; gap:5px;",
+                    tags$label("Crit Corr", `for` = "r_thresh", class = "inline-label"),
+                    div(style = "width: 75px; margin-top:3px;",   # nudge the box down
+                      numericInput("r_thresh", label = NULL, value = 0.7, min = 0, max = 1, step = 0.01))))),
         fluidRow(column(6,disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",  style='width: 150px; vertical-align: -38px;'))),
                  column(6,class="align-center", numericInput("num_axes", "# Axes", value=2, min=2,max=20,step=1))),
         fluidRow(column(6,disabled(actionButton("run_iso_forest","IsoForest Leverage", class = "btn-default custom-btn",  style='width: 150px; align: left; vertical-align: -38px;'))),
@@ -58,34 +59,12 @@ DataPanel = sidebarLayout(
       
       bs_append (title="Wind/Wave/Current Decomposition", content = card(
         
-        fluidRow(
-          column(
-            8,
-            selectInput("speed", label = "Magnitude", selectize = FALSE, selected = "-", choices = c("-")),
-            selectInput("direct", label = "Direction", selectize = FALSE, selected = "-", choices = c("-"))
-          ),
-          column(
-            4,
-            radioButtons(
-              "component_type", label = NULL,
-              choices = c("Wind", "Currents", "Waves"),
-              selected = "Wind", inline = FALSE
-            )
-          )
-        ),
-        
-        # h5(HTML("<i>Name for A-Component</i>")),
-        # fluidRow(column(12, textInput("A_name", label = NULL, value = "WindA"))),
-        # 
-        # h5(HTML("<i>Name for O-Component</i>")),
-        # fluidRow(column(12, textInput("O_name", label = NULL, value = "WindO"))),
-        
-        fluidRow(
-          div(
-            style = "display: flex; align-items: center; height: 100%;",
+        fluidRow(column(8,selectInput("speed", label = "Magnitude", selectize = FALSE, selected = "-", choices = c("-")),
+                  selectInput("direct", label = "Direction", selectize = FALSE, selected = "-", choices = c("-"))),
+                column(4,radioButtons("component_type", label = NULL,choices = c("Wind", "Currents", "Waves"),selected = "Wind", inline = FALSE))),
+        fluidRow(div(style = "display: flex; align-items: center; height: 100%;",
             column(6, numericInput("beach_angle", "Beach Orientation", value = 0, min = 0, max = 359, step = 1)),
-            column(6, actionButton("create_ao", "Create A/O", class = "btn-default custom-btn", style = "width:130px; padding:10px;"))
-          )))) %>%
+            column(6, actionButton("create_ao", "Create A/O",class = "btn-default custom-btn",style = "width:130px; padding:10px; margin-top:10px;")))))) %>%
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
@@ -94,7 +73,7 @@ DataPanel = sidebarLayout(
 
   ),
   
-  mainPanel = mainPanel(width=9, id = "data_main_panel",
+  div(id = "data_main_panel", style = "flex:1 1 auto; min-width:0;",
                         tabsetPanel(id = "data_tabs",
                                     tabPanel("Data Table",DT::dataTableOutput('data'),
                                              tags$style(type = "text/css", "#userdatatable {height: calc(100vh - 70px) !important;}")),
@@ -104,7 +83,7 @@ DataPanel = sidebarLayout(
                                     tabPanel("PCA Data Table",DT::dataTableOutput('PCAdata'),tags$style(type = "text/css", "#pcatables {height: calc(100vh - 70px) !important;}")),
                                     tabPanel("IsoForest Leverage",DT::dataTableOutput('iso_leverage'),
                                              tags$style(type = "text/css", "#iso_leverage {height: calc(100vh - 70px) !important;}")),
-                                    tabPanel("Correlations",plotOutput("corrplot",width="100%",height="700px")),
+                                    tabPanel("Correlations",uiOutput("correlations_ui")),
                                     tabPanel("Transformations",
                                       div(id = "trans_container",
                                         div(id = "trans_table_wrap",DT::dataTableOutput("trans_table")),
@@ -118,14 +97,14 @@ DataPanel = sidebarLayout(
                                         }
                                         /* Table area: fixed width to keep header/body aligned */
                                         #trans_table_wrap {
-                                          width: 650px;
-                                          min-width: 650px;
-                                          max-width: 650px;
+                                          width: 800px;
+                                          min-width: 800px;
+                                          max-width: 800px;
                                         }
                                         #trans_table_wrap table.dataTable { table-layout: fixed; }
-                                        #trans_table_wrap .dataTables_scrollHeadInner { width: 650px !important; }
-                                        #trans_table_wrap .dataTables_scrollHeadInner table { width: 650px !important; }
-                                        #trans_table_wrap .dataTables_scrollBody > table { width: 650px !important; }
+                                        #trans_table_wrap .dataTables_scrollHeadInner { width: 800px !important; }
+                                        #trans_table_wrap .dataTables_scrollHeadInner table { width: 800px !important; }
+                                        #trans_table_wrap .dataTables_scrollBody > table { width: 800px !important; }
 
                                         /* Center headers over cells */
                                         #trans_table_wrap .dataTables_scrollHead th,
@@ -157,14 +136,14 @@ DataPanel = sidebarLayout(
                                           gap: 12px;
                                         }
                                         #inter_table_wrap {
-                                          width: 950px;
-                                          min-width: 950px;
-                                          max-width: 950px;
+                                          width: 800px;
+                                          min-width: 800px;
+                                          max-width: 800px;
                                         }
                                         #inter_table_wrap table.dataTable { table-layout: fixed; }
-                                        #inter_table_wrap .dataTables_scrollHeadInner { width: 950px !important; }
-                                        #inter_table_wrap .dataTables_scrollHeadInner table { width: 950px !important; }
-                                        #inter_table_wrap .dataTables_scrollBody > table { width: 950px !important; }
+                                        #inter_table_wrap .dataTables_scrollHeadInner { width: 800px !important; }
+                                        #inter_table_wrap .dataTables_scrollHeadInner table { width: 800px !important; }
+                                        #inter_table_wrap .dataTables_scrollBody > table { width: 800px !important; }
 
                                         /* Center headers over cells */
                                         #inter_table_wrap .dataTables_scrollHead th,
@@ -178,7 +157,7 @@ DataPanel = sidebarLayout(
 
                                         /* Sticky sidebar just to the right of the table */
                                         #interactions_side {
-                                          flex: 0 0 150px;
+                                          flex: 0 0 180px;
                                           position: sticky;
                                           top: 12px;
                                           align-self: flex-start;

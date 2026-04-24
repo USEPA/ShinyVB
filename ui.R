@@ -11,14 +11,15 @@ ui = fluidPage(
   tags$head(
     
   tags$style(type = "text/css", HTML("
-    #trans_table_wrap .dataTables_scrollHead th,
-    #trans_table_wrap table.dataTable thead th {
-      background-color: #073744 !important;
-      color: #fff !important;
-      cursor: default;
-      text-align: center;
-    }
-  ")),
+  #trans_table_wrap .dataTables_scrollHead th,
+  #trans_table_wrap table.dataTable thead th,
+  #inter_table_wrap .dataTables_scrollHead th,
+  #inter_table_wrap table.dataTable thead th {
+    background-color: #073744 !important;
+    color: #fff !important;
+    cursor: default;
+    text-align: center;
+  }")),
     
   tags$style(HTML("
     .selectize-input {white-space: nowrap}
@@ -105,19 +106,7 @@ ui = fluidPage(
        background-color: #2c3e50 !important;
        color: #18bc9c !important;
     }
-    
-    .btn.checkbtn.btn-custom.active {
-      background-color: #2c3e50;
-      color: white;
-      border-color: green;
-    }
-    
-    .btn.checkbtn.btn-custom {
-      background-color: #cccccc;
-      color: #111111;
-      border-color: #2c3e50;
-    }
-    
+
     .custom-btn {
        padding: 5px !important;
        height: 35px !important;
@@ -154,6 +143,50 @@ ui = fluidPage(
     .custom2-btn:hover {
        background-color: #2c3e50 !important;
        color: #18bc9c !important;
+    }
+
+    #feats_to_corr .btn,
+    #feats_to_use .btn,
+    #pcax_to_use .btn {
+      background-color: lightgray !important;
+      color: #495057 !important;
+      border-color: black !important;
+      box-shadow: none !important;
+    }
+
+    #feats_to_corr .btn.active,
+    #feats_to_use .btn.active,
+    #pcax_to_use .btn.active,
+    #feats_to_corr .btn[aria-pressed='true'],
+    #feats_to_use .btn[aria-pressed='true'],
+    #pcax_to_use .btn[aria-pressed='true'] {
+      background-color: #2c3e50 !important;
+      color: #ffffff !important;
+      border-color: green !important;
+      box-shadow: none !important;
+    }
+
+    #feats_to_corr input.btn-check:checked + label.btn,
+    #feats_to_use input.btn-check:checked + label.btn,
+    #pcax_to_use input.btn-check:checked + label.btn {
+      background-color: #2c3e50 !important;
+      color: #ffffff !important;
+      border-color: green !important;
+      box-shadow: none !important;
+    }
+
+    #feats_to_corr .btn:hover,
+    #feats_to_use .btn:hover,
+    #pcax_to_use .btn:hover,
+    #feats_to_corr .btn:focus,
+    #feats_to_use .btn:focus,
+    #pcax_to_use .btn:focus {
+      filter: brightness(0.95);
+      box-shadow: none !important;
+    }
+              
+    #feats_select {
+      vertical-align: middle;
     }
     
     .panel-heading:hover {

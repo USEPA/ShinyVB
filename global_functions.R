@@ -161,31 +161,146 @@ set_prev_response_name <- function(name) {
   options(ShinyVB.prev_resp_name = if (is.null(name)) NULL else as.character(name))
 }
 
-# get_derived_pattern <- function() {
-#   prefixes <- NULL
-#   if (exists("DERIVED_PREFIXES", envir = .GlobalEnv, inherits = FALSE)) {
-#     prefixes <- get("DERIVED_PREFIXES", envir = .GlobalEnv, inherits = FALSE)
-#   } else {
-#     tp <- get0("TRANS_PREFIXES", envir = .GlobalEnv, ifnotfound = character(0))
-#     ip <- get0("INTER_PREFIX", envir = .GlobalEnv, ifnotfound = character(0))
-#     prefixes <- c(tp, ip)
-#   }
-#   if (!length(prefixes)) return(NULL)
-#   sprintf("^(%s)", paste(escape_regex(prefixes), collapse = "|"))
-# }
-# 
-# find_interaction_cols <- function(df) {
-#   if (is.null(df) || !is.data.frame(df)) return(character(0))
-#   nm <- names(df); if (!length(nm)) return(character(0))
-#   pat <- if (exists("INTER_PATTERN", inherits = FALSE)) {
-#     get("INTER_PATTERN", inherits = FALSE)
-#   } else if (exists("INTER_PREFIX", inherits = FALSE)) {
-#     sprintf("^%s", escape_regex(get("INTER_PREFIX", inherits = FALSE)))
-#   } else {
-#     return(character(0))
-#   }
-#   nm[grepl(pat, nm, perl = TRUE)]
-# }
+parse_id_any_datetime_minute <- function(x, tz = Sys.timezone(), excel_ext = NULL, locale = "C") {
+  # Already POSIXct -> floor to minute
+  if (inherits(x, c("POSIXct", "POSIXt"))) {
+    return(lubridate::floor_date(x, unit = "minute"))
+  }
+  # Already Date -> coerce to POSIXct at midnight
+  if (inherits(x, "Date")) {
+    return(as.POSIXct(x, tz = tz))
+  }
+  # Excel numeric serials (xlsx) -> convert using Excel origin
+  if (is.numeric(x) && (is.null(excel_ext) || identical(excel_ext, "xlsx"))) {
+    px <- as.POSIXct(x * 86400, origin = "1899-12-30", tz = tz)
+    return(lubridate::floor_date(px, unit = "minute"))
+  }
+  
+  # Character inputs: normalize whitespace
+  chr <- gsub("[[:space:]]+", " ", trimws(as.character(x)))
+  
+  # Broad lubridate orders: MDY, YMD, DMY; 4-digit and 2-digit years; 12/24h; optional seconds
+  orders <- c(
+    # MDY (month/day/year)
+    "mdYIMSp","mdYIMp","mdYHMS","mdYHM","mdY",
+    "mdyIMSp","mdyIMp","mdyHMS","mdyHM","mdy",
+    # YMD (year-month-day)
+    "YmdIMSp","YmdIMp","YmdHMS","YmdHM","Ymd",
+    "ymdIMSp","ymdIMp","ymdHMS","ymdHM","ymd",
+    # DMY (day-month-year)
+    "dmYIMSp","dmYIMp","dmYHMS","dmYHM","dmY",
+    "dmyIMSp","dmyIMp","dmyHMS","dmyHM","dmy"
+  )
+  
+  px <- suppressWarnings(
+    lubridate::parse_date_time(chr, orders = orders, truncated = 1, exact = TRUE, tz = tz, locale = locale)
+  )
+  
+  # Fallback with explicit base::strptime formats for remaining NAs, including month names
+  na_idx <- which(is.na(px))
+  if (length(na_idx) > 0L) {
+    old_loc <- tryCatch(Sys.getlocale("LC_TIME"), error = function(e) NA_character_)
+    if (!is.na(old_loc)) on.exit(try(Sys.setlocale("LC_TIME", old_loc), silent = TRUE), add = TRUE)
+    try(Sys.setlocale("LC_TIME", "C"), silent = TRUE)
+    
+    fmts <- c(
+      # MDY with slash/dash, 4-digit year, 12/24h, with/without seconds
+      "%m/%d/%Y %I:%M:%S %p","%m/%d/%Y %I:%M %p","%m/%d/%Y %H:%M:%S","%m/%d/%Y %H:%M","%m/%d/%Y",
+      "%m-%d-%Y %I:%M:%S %p","%m-%d-%Y %I:%M %p","%m-%d-%Y %H:%M:%S","%m-%d-%Y %H:%M","%m-%d-%Y",
+      # MDY 2-digit year
+      "%m/%d/%y %I:%M:%S %p","%m/%d/%y %I:%M %p","%m/%d/%y %H:%M:%S","%m/%d/%y %H:%M","%m/%d/%y",
+      "%m-%d-%y %I:%M:%S %p","%m-%d-%y %I:%M %p","%m-%d-%y %H:%M:%S","%m-%d-%y %H:%M","%m-%d-%y",
+      # YMD with slash/dash
+      "%Y/%m/%d %I:%M:%S %p","%Y/%m/%d %I:%M %p","%Y/%m/%d %H:%M:%S","%Y/%m/%d %H:%M","%Y/%m/%d",
+      "%Y-%m-%d %I:%M:%S %p","%Y-%m-%d %I:%M %p","%Y-%m-%d %H:%M:%S","%Y-%m-%d %H:%M","%Y-%m-%d",
+      # DMY with slash/dash
+      "%d/%m/%Y %I:%M:%S %p","%d/%m/%Y %I:%M %p","%d/%m/%Y %H:%M:%S","%d/%m/%Y %H:%M","%d/%m/%Y",
+      "%d-%m-%Y %I:%M:%S %p","%d-%m-%Y %I:%M %p","%d-%m-%Y %H:%M:%S","%d-%m-%Y %H:%M","%d-%m-%Y",
+      # Month-name variants
+      "%b %d, %Y %H:%M:%S","%b %d, %Y %H:%M","%b %d, %Y",
+      "%B %d, %Y %H:%M:%S","%B %d, %Y %H:%M","%B %d, %Y"
+    )
+    
+    for (fmt in fmts) {
+      remaining <- na_idx[is.na(px[na_idx])]
+      if (!length(remaining)) break
+      parsed <- as.POSIXct(chr[remaining], format = fmt, tz = tz)
+      ok <- !is.na(parsed)
+      if (any(ok)) px[remaining][ok] <- parsed[ok]
+    }
+  }
+  
+  lubridate::floor_date(px, unit = "minute")
+}
+
+# Renders a modeling/prediction DT with consistent options and a wide, non-wrapping ID column.
+model_dt <- function(df,
+                     date_format_string,
+                     num_rows_per_page,
+                     id_col = 1,
+                     id_width = "180px",
+                     tz = Sys.timezone()) {
+  if (is.null(df)) return(NULL)
+  
+  # Format ID as "M/D/YYYY HH:MM" only when converted from numeric Excel serials
+  if (ncol(df) >= id_col && identical(date_format_string, "Date_MDY_HM")) {
+    df[[id_col]] <- format_id_MDY_HM(df[[id_col]], tz = tz)
+  }
+  
+  DT::datatable(
+    df,
+    rownames   = FALSE,
+    selection  = list(
+      selected = list(rows = NULL, cols = NULL),
+      target   = "row",
+      mode     = "single"
+    ),
+    editable   = FALSE,
+    extensions = "Buttons",
+    options = list(
+      autoWidth   = FALSE,
+      dom         = "ltBp",
+      buttons     = c("copy", "csv", "excel"),
+      paging      = TRUE,
+      pageLength  = num_rows_per_page,
+      scrollX     = TRUE,
+      scrollY     = TRUE,
+      columnDefs  = list(
+        list(className = "dt-center", orderable = TRUE, targets = "_all"),
+        list(width = id_width, targets = 0)  # widen first column
+      ),
+      initComplete = JS(
+        "function(settings, json) {",
+        "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});",
+        "}"
+      )
+    )
+  ) %>%
+    DT::formatStyle(id_col, `white-space` = "nowrap", `min-width` = id_width)
+}
+
+# Format a vector to "M/D/YYYY HH:MM" for display
+format_id_MDY_HM <- function(x, tz = Sys.timezone()) {
+  dt <- x
+  if (inherits(dt, "Date")) {
+    dt <- as.POSIXct(dt, tz = tz)
+  } else if (inherits(dt, c("POSIXct", "POSIXt"))) {
+    # keep
+  } else if (is.numeric(dt)) {
+    # Treat numeric as Excel serial days (Windows origin)
+    dt <- as.POSIXct(dt * 86400, origin = "1899-12-30", tz = tz)
+  } else if (is.character(dt)) {
+    dt <- suppressWarnings(as.POSIXct(dt, tz = tz))
+  } else {
+    return(as.character(x))
+  }
+  dt <- lubridate::floor_date(dt, unit = "minute")
+  y  <- format(dt, "%Y")
+  m  <- as.integer(format(dt, "%m"))
+  d  <- as.integer(format(dt, "%d"))
+  hm <- format(dt, "%H:%M")
+  sprintf("%d/%d/%s %s", m, d, y, hm)
+}
 
 clear_trans_table <- function(drop_transforms   = TRUE,
                               drop_interactions = TRUE,
@@ -538,4 +653,87 @@ fit_poly_coeffs <- function(x, y, ignore = NULL) {
   co <- coef(fit)
   if (length(co) < 3 || any(!is.finite(co[1:3]))) return(NULL)
   c(unname(co[[1]]), unname(co[[2]]), unname(co[[3]]))
+}
+
+build_rcorr_results <- function(df_num) {
+  # df_num must be all-numeric columns
+  if (ncol(df_num) < 2L) {
+    return(list(
+      mat = matrix(numeric(), 0, 0, dimnames = list(NULL, NULL)),
+      tab = data.frame(Feat1 = character(),
+                       Feat2 = character(),
+                       Correlation = numeric(),
+                       `p-Value` = numeric(),
+                       check.names = FALSE)
+    ))
+  }
+  res <- suppressWarnings(Hmisc::rcorr(as.matrix(df_num), type = "pearson"))
+  r  <- res$r
+  p  <- res$P
+  
+  # upper-triangle pairs only
+  idx <- which(upper.tri(r), arr.ind = TRUE)
+  tab <- data.frame(
+    Feat1       = colnames(r)[idx[, 1]],
+    Feat2       = colnames(r)[idx[, 2]],
+    Correlation = as.numeric(r[idx]),
+    `p-Value`   = as.numeric(p[idx]),
+    check.names = FALSE
+  )
+  # sort by descending |Correlation|, NAs last, then by names for stability
+  tab <- tab[order(-abs(tab$Correlation), tab$Feat1, tab$Feat2, na.last = TRUE), ]
+  rownames(tab) <- NULL
+  
+  list(mat = r, tab = tab)
+}
+
+normalize_pca_artifacts <- function(mu, sdv, rot) {
+  # Ensure named numeric vectors for mean/sd
+  if (is.data.frame(mu) || is.matrix(mu)) {
+    key <- intersect(colnames(mu), c("Feature","feature","Variable","variable","Name","name","feat"))[1]
+    val <- setdiff(colnames(mu), key)[1]
+    mu <- setNames(as.numeric(mu[[val]]), as.character(mu[[key]]))
+  } else {
+    mu <- setNames(as.numeric(mu), names(mu))
+  }
+  
+  if (is.data.frame(sdv) || is.matrix(sdv)) {
+    key <- intersect(colnames(sdv), c("Feature","feature","Variable","variable","Name","name","feat"))[1]
+    val <- setdiff(colnames(sdv), key)[1]
+    sdv <- setNames(as.numeric(sdv[[val]]), as.character(sdv[[key]]))
+  } else {
+    sdv <- setNames(as.numeric(sdv), names(sdv))
+  }
+  
+  # Coefficients: matrix with rownames = features, colnames = PCs
+  if (is.null(rot)) stop("PCA coefficients are NULL")
+  if (is.data.frame(rot)) {
+    key_candidates <- intersect(names(rot), c("Feature","feature","Variable","variable","Name","name","feat"))
+    key <- if (length(key_candidates)) key_candidates[1] else NULL
+    if (!is.null(key)) {
+      rn <- as.character(rot[[key]])
+      rot_num <- rot[, setdiff(names(rot), key), drop = FALSE]
+      for (nm in names(rot_num)) rot_num[[nm]] <- suppressWarnings(as.numeric(rot_num[[nm]]))
+      rot <- as.matrix(rot_num); rownames(rot) <- rn
+    } else {
+      rot <- as.matrix(rot)
+    }
+  } else if (!is.matrix(rot)) {
+    rot <- as.matrix(rot)
+  }
+  
+  # Auto‑transpose if features are in colnames instead of rownames
+  base_vars <- names(mu)
+  rn <- rownames(rot); cn <- colnames(rot)
+  if ((is.null(rn) || !any(rn %in% base_vars)) && (!is.null(cn) && any(cn %in% base_vars))) {
+    rot <- t(rot)
+  }
+  
+  # Warn if any features are missing
+  if (!all(base_vars %in% rownames(rot))) {
+    warning("PCA loadings missing rows for: ",
+            paste(setdiff(base_vars, rownames(rot)), collapse = ", "))
+  }
+  
+  list(mu = mu, sdv = sdv, rot = rot)
 }

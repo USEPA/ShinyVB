@@ -1,8 +1,7 @@
-PredictionPanel = sidebarLayout(
-  sidebarPanel = sidebarPanel(
-    id = "predictionsidepanel",
-    width = 3,
-    tags$style(type = "text/css", "#predictionsidepanel {height: calc(100vh - 70px) !important; width: 385px !important;}"),
+PredictionPanel = div(id="prediction_flex", style = "display:flex; gap:8px; align-items:flex-start;",
+    div(id = "predictionsidepanel", style = paste("flex:0 0 400px; min-width:400px; max-width:400px;",
+    "background-color:#e9ecef; padding:10px; box-sizing:border-box;",
+    "height: calc(100vh - 70px); height: calc(100dvh - 70px);","overflow-y:auto;"),
     
     radioButtons(
       inputId = "model_choice",
@@ -25,7 +24,7 @@ PredictionPanel = sidebarLayout(
   fluidRow(column(12,fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData"),
                                style="font-family:Arial; width: 350px;"))),
   
-  mainPanel = mainPanel(width=9, id = "prediction_main_panel",
+  div(id = "prediction_main_panel", style = "flex:1 1 auto; min-width:0;",
                     fluidRow(column(12,uiOutput("model_text"))),
                     fluidRow(column(12,textOutput("pca_model_text"))),
                     fluidRow(column(12,uiOutput("resid_text"))),
