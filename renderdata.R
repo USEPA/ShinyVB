@@ -35,52 +35,14 @@ renderdata = function(data,
   # Date-like display modes
   is_date_like <- date_format_string %in% c("Date", "Date_MDY_HM")
   
-  # Optional: format ID as "M/D/YYYY HH:MM" only when Date_MDY_HM
-  format_mdy_hm <- function(x) {
-    # Coerce to POSIXct robustly
-    if (inherits(x, c("POSIXct", "POSIXt"))) {
-      dt <- x
-    } else if (inherits(x, "Date")) {
-      dt <- as.POSIXct(x, tz = Sys.timezone())
-    } else if (is.numeric(x)) {
-      # Treat as Excel serial days by default
-      dt <- as.POSIXct(x * 86400, origin = "1899-12-30", tz = Sys.timezone())
-    } else if (is.character(x)) {
-      # Try a broad parse, then fall back to as.POSIXct
-      dt <- suppressWarnings(
-        lubridate::parse_date_time(
-          x,
-          orders = c("mdYIMSp","mdYIMp","mdYHM","mdYHMS",
-                     "YmdIMSp","YmdIMp","YmdHM","YmdHMS",
-                     "dmYIMSp","dmYIMp","dmYHM","dmYHMS"),
-          truncated = 1, exact = TRUE, tz = Sys.timezone()
-        )
-      )
-      na_idx <- which(is.na(dt))
-      if (length(na_idx)) {
-        dt[na_idx] <- suppressWarnings(as.POSIXct(x[na_idx], tz = Sys.timezone()))
-      }
-    } else {
-      # Last resort: return as character without reformatting
-      return(as.character(x))
-    }
-    
-    dt <- lubridate::floor_date(dt, unit = "minute")
-    
-    y  <- format(dt, "%Y")
-    m  <- as.integer(format(dt, "%m"))
-    d  <- as.integer(format(dt, "%d"))
-    hm <- format(dt, "%H:%M")
-    
-    sprintf("%d/%d/%s %s", m, d, y, hm)
-  }
-  
   # Build a view copy for table rendering
   data_view <- data
-  if (identical(date_format_string, "Date_MDY_HM")) {
-    # Render only; do not mutate underlying data
-    data_view[[id_var]] <- format_mdy_hm(data_view[[id_var]])
+  
+  if (identical(date_format_string, "Date_MDY_HM") ||
+      (identical(date_format_string, "Date") && is.character(data_view[[id_var]]))) {
+    data_view[[id_var]] <- format_id_MDY_HM(data_view[[id_var]])
   }
+  
   row_IDs_view <- data_view[, 1]
   
   if (select_choice == "Change_Response") {
@@ -120,7 +82,7 @@ renderdata = function(data,
           )
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(id_var, backgroundColor = 'lightgray', `white-space` = "nowrap") %>%
           formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
           formatRound(columns = remaining, digits = digits_rem)
       })
@@ -195,7 +157,7 @@ renderdata = function(data,
           )
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(id_var, backgroundColor = 'lightgray', `white-space` = "nowrap") %>%
           formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
           formatRound(columns = 2:ncol(data_view), digits = digits_non_id)
       })
@@ -234,7 +196,7 @@ renderdata = function(data,
           )
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(id_var, backgroundColor = 'lightgray', `white-space` = "nowrap") %>%
           formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
           formatRound(columns = remaining, digits = digits_rem)
       })
@@ -300,7 +262,7 @@ renderdata = function(data,
           )
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(id_var, backgroundColor = 'lightgray', `white-space` = "nowrap") %>%
           formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
           formatRound(columns = 2:ncol(data_view), digits = digits_non_id)
       })
@@ -343,7 +305,7 @@ renderdata = function(data,
           )
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(id_var, backgroundColor = 'lightgray', `white-space` = "nowrap") %>%
           formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
           formatRound(columns = remaining, digits = digits_rem)
       })
@@ -417,7 +379,7 @@ renderdata = function(data,
           )
         ) %>%
           formatStyle(response_var, backgroundColor = "#b0bed9") %>%
-          formatStyle(id_var, backgroundColor = 'lightgray') %>%
+          formatStyle(id_var, backgroundColor = 'lightgray', `white-space` = "nowrap") %>%
           formatStyle(1, target = "row", backgroundColor = styleEqual(row_IDs_view, iggies)) %>%
           formatRound(columns = 2:ncol(data_view), digits = digits_non_id)
       })

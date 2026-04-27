@@ -6,7 +6,6 @@ DataPanel = div(id="data_flex", style = "display:flex; gap:8px; align-items:flex
     
     fluidRow(column(6,inputPanel(selectInput("ID_Format",label = "ID Format",selected ="Date",choices = c("Date","Numeric","Character")))),
              column(6,disabled(actionButton("restore", "Restore Inputs", class = "btn-default custom-btn", style='width: 120px; padding:5px; vertical-align: -33px;')))),
-    fluidRow(column(12,radioButtons(inline=T,"sep","Separator",choices = c("Comma" = ",","Semicolon" = ";","Space" = " ","Tab" = "\t"),selected = ","))),
     
     div(fileInput("file1", "Select your data file", buttonLabel = "Browse",accept = c("text/csv",
                   "text/comma-separated-values,text/plain",".csv",".xlsx")), style="font-size:80%; font-family:Arial; width: 350px;"),
@@ -56,7 +55,7 @@ DataPanel = div(id="data_flex", style = "display:flex; gap:8px; align-items:flex
             
             fluidRow(column(12,inputPanel(selectInput("rainplot",label = "Raincloud Plot",selectize=FALSE, selected ="-",choices = c("-"))))),
             
-            fluidRow(column(12,inputPanel(selectInput("lineplot",label = "Line/Time Series Plot",selectize=FALSE, selected ="-",choices = c("-")))))))) %>%
+            fluidRow(column(12,inputPanel(selectInput("lineplot_feature",label = "Line/Time Series Plot",selectize=FALSE, selected ="-",choices = c("-")))))))) %>%
       
       bs_append (title="Wind/Wave/Current Decomposition", content = card(
         

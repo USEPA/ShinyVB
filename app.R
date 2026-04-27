@@ -113,13 +113,19 @@ server= function(input,output,session) {
     rv_import$ext <- NULL
     loading_project(FALSE)
     
-    ext <- tolower(tools::file_ext(input$file1$name))
+    path <- input$file1$datapath
+    ext  <- tolower(tools::file_ext(input$file1$name))
     
-    if (ext == "xlsx") {
-      init_data <<- read.xlsx(input$file1$datapath)
-    } else {
-      init_data <<- read.csv(input$file1$datapath, header = TRUE, sep = input$sep)
-    }
+    tryCatch({
+      if (ext %in% c("xlsx", "xls")) {
+        init_data <<- openxlsx::read.xlsx(path)
+      } else {
+        init_data <<- data.table::fread(path, sep = "auto", data.table = FALSE, showProgress = FALSE)
+      }
+    }, error = function(e) {
+      showNotification(paste("Error reading file:", conditionMessage(e)), type = "error")
+      init_data <<- NULL
+    })
     
     # Basic validations on the raw import
     if (any(duplicated(init_data[, 1]))) {
@@ -317,13 +323,11 @@ server= function(input,output,session) {
       
       pca_axes_max(ncol(init_data) - 2)
       
-      updateNumericInput(session, "num_axes",
-                         value = pca_axes_max(),
-                         max = pca_axes_max())
+      updateNumericInput(session, "num_axes",value = pca_axes_max(),max = pca_axes_max())
       
       updateSelectInput(session, "set_column_props", choices = c("-", col_names()))
       updateSelectInput(session, "rainplot", choices = c("-", col_names()))
-      updateSelectInput(session, "lineplot", choices = c("-", col_names()))
+      updateSelectInput(session, "lineplot_feature", choices = c("-", col_names()))
       updateSelectInput(session, "scatterx", choices = c("-", col_names()))
       updateSelectInput(session, "scattery", choices = c("-", col_names()))
       updateSelectInput(session, "speed", choices = c("-", col_names()))
@@ -331,8 +335,7 @@ server= function(input,output,session) {
       
       current_data_page(1)
       
-      renderdata(current_data(), response_var(), id_var, input$select_choice,
-                 date_format_string, column_props, ignored_rows, current_data_page(), output)
+      renderdata(current_data(), response_var(), id_var, input$select_choice, date_format_string, column_props, ignored_rows, current_data_page(), output)
       
       clear_modeling(TRUE)
       
@@ -406,7 +409,7 @@ server= function(input,output,session) {
     
     updateSelectInput(session, "set_column_props", choices = c("-", col_names()))
     updateSelectInput(session, "rainplot", choices = c("-", col_names()))
-    updateSelectInput(session, "lineplot", choices = c("-", col_names()))
+    updateSelectInput(session, "lineplot_feature", choices = c("-", col_names()))
     updateSelectInput(session, "scatterx", choices = c("-", col_names()))
     updateSelectInput(session, "scattery", choices = c("-", col_names()))
     updateSelectInput(session, "speed", choices = c("-", col_names()))
@@ -1220,7 +1223,7 @@ server= function(input,output,session) {
         updateNumericInput(session, "num_axes", value = pca_axes_max(), max = pca_axes_max())
         updateSelectInput(session, "set_column_props", choices = c("-", col_names()))
         updateSelectInput(session, "rainplot", choices = c("-", col_names()))
-        updateSelectInput(session, "lineplot", choices = c("-", col_names()))
+        updateSelectInput(session, "lineplot_feature", choices = c("-", col_names()))
         updateSelectInput(session, "scatterx", choices = c("-", col_names()))
         updateSelectInput(session, "scattery", choices = c("-", col_names()))
         updateSelectInput(session, "speed", choices = c("-", col_names()))
@@ -1824,7 +1827,7 @@ server= function(input,output,session) {
     
     updateSelectInput(session, "set_column_props", choices = c("-", new_column_names))
     updateSelectInput(session, "rainplot",         choices = c("-", new_column_names))
-    updateSelectInput(session, "lineplot",         choices = c("-", new_column_names))
+    updateSelectInput(session, "lineplot_feature",         choices = c("-", new_column_names))
     updateSelectInput(session, "scatterx", selected = input$scatterx, choices = c("-", new_column_names))
     updateSelectInput(session, "scattery", selected = input$scattery, choices = c("-", new_column_names))
     
@@ -2094,7 +2097,7 @@ server= function(input,output,session) {
     choices_vec <- c("-", new_column_names)
     updateSelectInput(session, "set_column_props", choices = choices_vec)
     updateSelectInput(session, "rainplot",         choices = choices_vec)
-    updateSelectInput(session, "lineplot",         choices = choices_vec)
+    updateSelectInput(session, "lineplot_feature",         choices = choices_vec)
     updateSelectInput(session, "scatterx", selected = input$scatterx, choices = choices_vec)
     updateSelectInput(session, "scattery", selected = input$scattery, choices = choices_vec)
     
@@ -2163,7 +2166,7 @@ server= function(input,output,session) {
     
     # Persist scaling parameters keyed by original feature names
     PCA_scaling_mean(setNames(pca_result$center, colnames(feat_data)))
-    PCA_scaling_sd(  setNames(pca_result$scale,  colnames(feat_data)))
+    PCA_scaling_sd(setNames(pca_result$scale,  colnames(feat_data)))
     
     # Assemble PCA scores for the selected number of axes
     pcs <- as.data.frame(pca_result$x[, seq_len(n_axes), drop = FALSE], check.names = FALSE)
@@ -2187,9 +2190,7 @@ server= function(input,output,session) {
     
     # Coefficients (loadings) with "Feature" column
     rot <- round(pca_result$rotation[, seq_len(n_axes), drop = FALSE], 4)
-    PCA_coefficients(
-      data.frame(Feature = rownames(rot), rot, row.names = NULL, check.names = FALSE)
-    )
+    PCA_coefficients(data.frame(Feature = rownames(rot), rot, row.names = NULL, check.names = FALSE))
     
     # Summary (Std. Dev., Variance Explained, Cumulative Var Explained)
     imp <- summary(pca_result)$importance[, seq_len(n_axes), drop = FALSE]
@@ -2323,7 +2324,7 @@ server= function(input,output,session) {
                       choices = c("-", cur_cols_no_id), selected = "-")
     updateSelectInput(session, "rainplot",
                       choices = c("-", cur_cols_no_id))
-    updateSelectInput(session, "lineplot",
+    updateSelectInput(session, "lineplot_feature",
                       choices = c("-", cur_cols_no_id))
     updateSelectInput(session, "scatterx",
                       selected = safe_keep(input$scatterx, cur_cols_no_id),
@@ -2473,7 +2474,7 @@ server= function(input,output,session) {
     updateSelectInput(session,"select_choice",selected="Change_Response")
     updateSelectInput(session,"set_column_props",selected='-', choices=c("-",col_names()))
     updateSelectInput(session,"rainplot",selected='-', choices=c("-",col_names()))
-    updateSelectInput(session,"lineplot",selected='-', choices=c("-",col_names()))
+    updateSelectInput(session,"lineplot_feature",selected='-', choices=c("-",col_names()))
     updateSelectInput(session,"scatterx",selected="-",choices=c("-",col_names()))
     updateSelectInput(session,"scattery",selected="-",choices=c("-",col_names()))
     
@@ -2790,7 +2791,7 @@ server= function(input,output,session) {
       redraw_rainplot(TRUE)
     } else if ((input$scatterx == colnames(current_data())[response_var()] || input$scattery == colnames(current_data())[response_var()]) && last_plot() == "scatter") {
       redraw_scatplot(TRUE)
-    } else if (input$lineplot == colnames(current_data())[response_var()] && last_plot() == "lineplot") {
+    } else if (input$lineplot_feature == colnames(current_data())[response_var()] && last_plot() == "lineplot_feature") {
       redraw_lineplot(TRUE)
     } else {
       return()
@@ -2803,7 +2804,7 @@ server= function(input,output,session) {
       redraw_rainplot(TRUE)
     } else if ((input$scatterx == colnames(current_data())[response_var()] || input$scattery == colnames(current_data())[response_var()]) && last_plot() == "scatter") {
       redraw_scatplot(TRUE)
-    } else if (input$lineplot == colnames(current_data())[response_var()] && last_plot() == "lineplot") {
+    } else if (input$lineplot_feature == colnames(current_data())[response_var()] && last_plot() == "lineplot_feature") {
       redraw_lineplot(TRUE)
     } else {
       return()
@@ -2816,7 +2817,7 @@ server= function(input,output,session) {
       redraw_rainplot(TRUE)
     } else if ((input$scatterx == colnames(current_data())[response_var()] || input$scattery == colnames(current_data())[response_var()]) && last_plot() == "scatter") {
       redraw_scatplot(TRUE)
-    } else if (input$lineplot == colnames(current_data())[response_var()] && last_plot() == "lineplot") {
+    } else if (input$lineplot_feature == colnames(current_data())[response_var()] && last_plot() == "lineplot_feature") {
       redraw_lineplot(TRUE)
     } else {
       return()
@@ -2888,69 +2889,60 @@ server= function(input,output,session) {
     }
   })
   
-  observeEvent(input$lineplot, ignoreInit = T, {
+  observeEvent(input$lineplot_feature, ignoreInit = TRUE, {
+    req(input$lineplot_feature, input$lineplot_feature != "-")
     
-    if (input$lineplot != "-") {
-      
-      if (is.null(ignored_rows)) {
-        line_data0 = current_data()
-      } else {
-        line_data0 = current_data()[-ignored_rows,]
-      }
-      
-      if (input$cens_choice == 'hide') {
-        
-        line_data0 = line_data0[!line_data0[,response_var()] %in% c(input$lc_val, input$rc_val),]
-        
-      } else if (input$cens_choice == 'replace') {
-        
-        line_data0[line_data0[,response_var()] == input$lc_val,response_var()] = input$lc_replace
-        line_data0[line_data0[,response_var()] == input$rc_val,response_var()] = input$rc_replace
-      }
-      
-      var_list = c(1,which(colnames(line_data0) == input$lineplot))
-      line_data1 = line_data0[,var_list]
-      
-      output$lineplott = renderPlotly({lineplot(line_data1,input$lineplot,date_format_string)})
-      
-      last_plot("lineplot")
-      
-      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-      updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Line Plot')
+    line_data0 <- if (is.null(ignored_rows)) current_data() else current_data()[-ignored_rows, , drop = FALSE]
+    
+    # Apply censoring choices
+    if (identical(input$cens_choice, "hide")) {
+      line_data0 <- line_data0[!line_data0[, response_var()] %in% c(input$lc_val, input$rc_val), , drop = FALSE]
+    } else if (identical(input$cens_choice, "replace")) {
+      line_data0[line_data0[, response_var()] == input$lc_val, response_var()] <- input$lc_replace
+      line_data0[line_data0[, response_var()] == input$rc_val, response_var()] <- input$rc_replace
     }
+    
+    # Pick ID (col 1) and selected feature
+    idx <- match(input$lineplot_feature, colnames(line_data0))
+    req(!is.na(idx), idx != 1)  # ensure a valid feature that isn't the ID
+    
+    line_data1 <- line_data0[, c(1, idx), drop = FALSE]
+    
+    output$lineplott <- renderPlotly({
+      lineplot(line_data1, input$lineplot_feature, date_format_string)
+    })
+    
+    last_plot("lineplot_feature")
+    updateTabsetPanel(session, inputId = "shinyVB", selected = "Data")
+    updateTabsetPanel(session, inputId = "data_tabs", selected = "Line Plot")
   })
   
-  observeEvent(redraw_lineplot(), ignoreInit = T, {
+  observeEvent(redraw_lineplot(), ignoreInit = TRUE, {
+    req(input$lineplot_feature, input$lineplot_feature != "-")
     
-    if (input$lineplot != "-") {
-      
-      if (is.null(ignored_rows)) {
-        line_data0 = current_data()
-      } else {
-        line_data0 = current_data()[-ignored_rows,]
-      }
-      
-      if (input$cens_choice == 'hide') {
-        
-        line_data0 = line_data0[!line_data0[,response_var()] %in% c(input$lc_val, input$rc_val),]
-        
-      } else if (input$cens_choice == 'replace') {
-        
-        line_data0[line_data0[,response_var()] == input$lc_val,response_var()] = input$lc_replace
-        line_data0[line_data0[,response_var()] == input$rc_val,response_var()] = input$rc_replace
-      }
-      
-      var_list = c(1,which(colnames(line_data0) == input$lineplot))
-      line_data1 = line_data0[,var_list]
-      
-      output$lineplott = renderPlotly({lineplot(line_data1,input$lineplot,date_format_string)})
-      
-      updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
-      updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Line Plot')
-      
-      redraw_lineplot(FALSE)
-      last_plot("lineplot")
+    line_data0 <- if (is.null(ignored_rows)) current_data() else current_data()[-ignored_rows, , drop = FALSE]
+    
+    if (identical(input$cens_choice, "hide")) {
+      line_data0 <- line_data0[!line_data0[, response_var()] %in% c(input$lc_val, input$rc_val), , drop = FALSE]
+    } else if (identical(input$cens_choice, "replace")) {
+      line_data0[line_data0[, response_var()] == input$lc_val, response_var()] <- input$lc_replace
+      line_data0[line_data0[, response_var()] == input$rc_val, response_var()] <- input$rc_replace
     }
+    
+    idx <- match(input$lineplot_feature, colnames(line_data0))
+    req(!is.na(idx), idx != 1)
+    
+    line_data1 <- line_data0[, c(1, idx), drop = FALSE]
+    
+    output$lineplott <- renderPlotly({
+      lineplot(line_data1, input$lineplot_feature, date_format_string)
+    })
+    
+    updateTabsetPanel(session, inputId = "shinyVB", selected = "Data")
+    updateTabsetPanel(session, inputId = "data_tabs", selected = "Line Plot")
+    
+    redraw_lineplot(FALSE)
+    last_plot("lineplot_feature")
   })
   
   observeEvent(input$scatterx, ignoreInit = T, {
@@ -3131,7 +3123,7 @@ server= function(input,output,session) {
       
       updateSelectInput(session, "set_column_props", choices = c("-", new_column_names))
       updateSelectInput(session, "rainplot", choices = c("-", new_column_names))
-      updateSelectInput(session, "lineplot", choices = c("-", new_column_names))
+      updateSelectInput(session, "lineplot_feature", choices = c("-", new_column_names))
       updateSelectInput(session, "scatterx", selected = input$scatterx, choices = c("-", new_column_names))
       updateSelectInput(session, "scattery", selected = input$scattery, choices = c("-", new_column_names))
       

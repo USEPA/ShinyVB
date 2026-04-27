@@ -274,27 +274,104 @@ model_dt <- function(df,date_format_string,num_rows_per_page,id_col = 1,id_width
     DT::formatStyle(id_col, `white-space` = "nowrap", `min-width` = id_width)
 }
 
-# Format a vector to "M/D/YYYY HH:MM" for display
+# Format a vector to "M/D/YYYY HH:MM" for display (handles AM/PM and extra spaces)
 format_id_MDY_HM <- function(x, tz = Sys.timezone()) {
-  dt <- x
-  if (inherits(dt, "Date")) {
-    dt <- as.POSIXct(dt, tz = tz)
-  } else if (inherits(dt, c("POSIXct", "POSIXt"))) {
-    # keep
-  } else if (is.numeric(dt)) {
-    # Treat numeric as Excel serial days (Windows origin)
-    dt <- as.POSIXct(dt * 86400, origin = "1899-12-30", tz = tz)
-  } else if (is.character(dt)) {
-    dt <- suppressWarnings(as.POSIXct(dt, tz = tz))
+  # Normalize multiple spaces and trim
+  normalize <- function(xc) trimws(gsub("\\s+", " ", as.character(xc)))
+  
+  # Parse character to POSIXct robustly
+  char_to_posix <- function(s) {
+    # Try lubridate first (AM/PM-aware)
+    dt <- suppressWarnings(
+      lubridate::parse_date_time(
+        s,
+        orders = c("mdY IMSp","mdY IMp","mdY HM","mdY HMS",
+                   "Ymd IMSp","Ymd IMp","Ymd HM","Ymd HMS",
+                   "dmY IMSp","dmY IMp","dmY HM","dmY HMS"),
+        truncated = 1, exact = TRUE, tz = tz
+      )
+    )
+    miss <- is.na(dt)
+    # Fallbacks with explicit formats
+    if (any(miss)) {
+      dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %I:%M:%S %p", tz = tz))
+    }
+    miss <- is.na(dt)
+    if (any(miss)) {
+      dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %I:%M %p", tz = tz))
+    }
+    dt
+  }
+  
+  # Build POSIXct vector by input type
+  if (inherits(x, c("POSIXct", "POSIXt"))) {
+    dt <- x
+    s  <- as.character(x)
+  } else if (inherits(x, "Date")) {
+    dt <- as.POSIXct(x, tz = tz)
+    s  <- as.character(x)
+  } else if (is.numeric(x)) {
+    # Treat numeric as Excel serial DAYS (Windows origin)
+    dt <- as.POSIXct(x * 86400, origin = "1899-12-30", tz = tz)
+    s  <- as.character(x)
+  } else if (is.character(x)) {
+    s  <- normalize(x)
+    dt <- char_to_posix(s)
   } else {
+    # Unknown type: return input as character
     return(as.character(x))
   }
-  dt <- lubridate::floor_date(dt, unit = "minute")
-  y  <- format(dt, "%Y")
-  m  <- as.integer(format(dt, "%m"))
-  d  <- as.integer(format(dt, "%d"))
-  hm <- format(dt, "%H:%M")
-  sprintf("%d/%d/%s %s", m, d, y, hm)
+  
+  # Floor to minute and format; keep originals where parsing failed
+  dt  <- lubridate::floor_date(dt, unit = "minute")
+  out <- s
+  ok  <- !is.na(dt)
+  if (any(ok)) {
+    y  <- format(dt[ok], "%Y")
+    m  <- as.integer(format(dt[ok], "%m"))
+    d  <- as.integer(format(dt[ok], "%d"))
+    hm <- format(dt[ok], "%H:%M")
+    out[ok] <- sprintf("%d/%d/%s %s", m, d, y, hm)
+  }
+  out
+}
+
+id_to_posix <- function(x, tz = Sys.timezone()) {
+  if (inherits(x, c("POSIXct", "POSIXt"))) return(x)
+  if (inherits(x, "Date")) return(as.POSIXct(x, tz = tz))
+  if (is.numeric(x))       return(as.POSIXct(x * 86400, origin = "1899-12-30", tz = tz))
+  
+  # Character: normalize whitespace, including non-breaking space \u00A0
+  s <- trimws(gsub("[[:space:]\u00A0]+", " ", as.character(x)))
+  
+  # Try lubridate (AM/PM-aware), then explicit formats
+  dt <- suppressWarnings(
+    lubridate::parse_date_time(
+      s,
+      orders = c("mdY IMSp","mdY IMp","mdY HM","mdY HMS",
+                 "Ymd IMSp","Ymd IMp","Ymd HM","Ymd HMS",
+                 "dmY IMSp","dmY IMp","dmY HM","dmY HMS"),
+      truncated = 1, exact = TRUE, tz = tz
+    )
+  )
+  miss <- is.na(dt)
+  if (any(miss)) {
+    dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %I:%M:%S %p", tz = tz))
+  }
+  miss <- is.na(dt)
+  if (any(miss)) {
+    dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %I:%M %p", tz = tz))
+  }
+  # Last-ditch 24h formats
+  miss <- is.na(dt)
+  if (any(miss)) {
+    dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %H:%M:%S", tz = tz))
+  }
+  miss <- is.na(dt)
+  if (any(miss)) {
+    dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %H:%M", tz = tz))
+  }
+  dt
 }
 
 clear_trans_table <- function(drop_transforms= TRUE,drop_interactions = TRUE,drop_AO= FALSE,column_props= NULL) {
@@ -632,7 +709,6 @@ format_pval <- function(p) {
 set_poly_coeffs <- function(feat, A, B, C) assign(feat, c(A, B, C), envir = POLY_COEFFS)
 get_poly_coeffs <- function(feat) get0(feat, envir = POLY_COEFFS, inherits = FALSE)
 del_poly_coeffs <- function(feat) if (!is.null(get0(feat, envir = POLY_COEFFS, inherits = FALSE))) rm(list = feat, envir = POLY_COEFFS)
-
 fit_poly_coeffs <- function(x, y, ignore = NULL) {
   x <- as.numeric(x); y <- as.numeric(y)
   mask <- is.finite(x) & is.finite(y)
