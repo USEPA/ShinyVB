@@ -234,12 +234,7 @@ parse_id_any_datetime_minute <- function(x, tz = Sys.timezone(), excel_ext = NUL
 }
 
 # Renders a modeling/prediction DT with consistent options and a wide, non-wrapping ID column.
-model_dt <- function(df,
-                     date_format_string,
-                     num_rows_per_page,
-                     id_col = 1,
-                     id_width = "180px",
-                     tz = Sys.timezone()) {
+model_dt <- function(df,date_format_string,num_rows_per_page,id_col = 1,id_width = "180px",tz = Sys.timezone()) {
   if (is.null(df)) return(NULL)
   
   # Format ID as "M/D/YYYY HH:MM" only when converted from numeric Excel serials
@@ -267,7 +262,7 @@ model_dt <- function(df,
       scrollY     = TRUE,
       columnDefs  = list(
         list(className = "dt-center", orderable = TRUE, targets = "_all"),
-        list(width = id_width, targets = 0)  # widen first column
+        list(width = id_width, targets = 0)
       ),
       initComplete = JS(
         "function(settings, json) {",
@@ -302,13 +297,9 @@ format_id_MDY_HM <- function(x, tz = Sys.timezone()) {
   sprintf("%d/%d/%s %s", m, d, y, hm)
 }
 
-clear_trans_table <- function(drop_transforms   = TRUE,
-                              drop_interactions = TRUE,
-                              drop_AO           = FALSE,
-                              column_props      = NULL) {
-  if (is.null(column_props)) {
-    column_props <- get0("column_props", envir = .GlobalEnv, ifnotfound = NULL)
-  }
+clear_trans_table <- function(drop_transforms= TRUE,drop_interactions = TRUE,drop_AO= FALSE,column_props= NULL) {
+  
+  if (is.null(column_props)) {column_props <- get0("column_props", envir = .GlobalEnv, ifnotfound = NULL)}
   
   df <- try(current_data(), silent = TRUE)
   if (inherits(df, "try-error") || is.null(df) || !is.data.frame(df) || ncol(df) == 0L) return(invisible(NULL))
@@ -642,7 +633,6 @@ set_poly_coeffs <- function(feat, A, B, C) assign(feat, c(A, B, C), envir = POLY
 get_poly_coeffs <- function(feat) get0(feat, envir = POLY_COEFFS, inherits = FALSE)
 del_poly_coeffs <- function(feat) if (!is.null(get0(feat, envir = POLY_COEFFS, inherits = FALSE))) rm(list = feat, envir = POLY_COEFFS)
 
-# Fit A, B, C for a single feature using current_data() and response_var()
 fit_poly_coeffs <- function(x, y, ignore = NULL) {
   x <- as.numeric(x); y <- as.numeric(y)
   mask <- is.finite(x) & is.finite(y)

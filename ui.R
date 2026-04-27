@@ -267,6 +267,34 @@ ui = fluidPage(
       height: 35px;
     }
     
+    #EN_pred_stand, #EN_stand, #XGB_pred_stand, #XGB_stand {
+      border: 1px solid #0d6efd !important;
+    }
+
+    #EN_pred_stand:hover, #EN_stand:hover, #XGB_pred_stand:hover, #XGB_stand:hover, #EN_pred_stand:focus, #EN_stand:focus, #XGB_pred_stand:focus, #XGB_stand:focus {
+      border-color: #0d6efd !important;
+      box-shadow: 0 0 0 0.2rem rgba(13,110,253,0.25);
+      outline: 0;
+    }
+
+    #EN_pred_dc,#EN_dec_crit,#XGB_pred_dc,#XGB_dec_crit {
+      border: 1px solid #198754 !important;
+    }
+
+    #EN_pred_dc:hover,#EN_dec_crit:hover,#XGB_pred_dc:hover,#XGB_dec_crit:hover,#EN_pred_dc:focus,#EN_dec_crit:focus,#XGB_pred_dc:focus,#XGB_dec_crit:focus {
+      border-color: #198754 !important;
+      box-shadow: 0 0 0 0.2rem rgba(25,135,84,0.25);
+      outline: 0;
+    }
+    
+    label[for='EN_pred_stand'],label[for='EN_stand'],label[for='XGB_pred_stand'],label[for='XGB_stand'] {
+      color: #0d6efd !important;
+    }
+
+    label[for='EN_pred_dc'],label[for='EN_dec_crit'],label[for='XGB_pred_dc'],label[for='XGB_dec_crit'] {
+      color: #198754 !important;
+    }
+    
     #LG_eval {
       padding: 0px 0px;
     }

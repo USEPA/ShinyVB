@@ -108,240 +108,251 @@ ModelingPanel <- div(id="modeling_flex", style = "display:flex; gap:8px; align-i
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
-    fluidRow(column(12,actionButton("save_project_modeling", "Save Project File", style = "margin-bottom:8px;"))),
-    fluidRow(column(12,fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData")))),
+    fluidRow(actionButton("save_project_modeling", "Save Project File", style = "margin-bottom:8px;")),
+    fluidRow(fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData"))),
   
   div(id = "modeling_output", style = "flex:1 1 auto; min-width:0;",
     tabsetPanel(id = "modeling_tabs",
                 
-                tabPanel("LG: Predict",
-                  tags$style(HTML("#lg_pred_nav .row { flex-wrap: nowrap; }
-                  
-                  #lg_pred_nav .row > div:first-child {
-                    flex: 0 0 200px !important;
-                    max-width: 200px !important;
-                    width: 200px !important;
-                  }
-                  
-                  #lg_pred_nav .row > div:last-child {
-                    flex: 1 1 auto !important;
-                    max-width: calc(100% - 200px) !important;
-                    width: calc(100% - 200px) !important;
-                  }
-                  
-                  #lg_pred_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
-                         
-                  div(id = "lg_pred_nav",bslib::navset_pill_list(widths = c(2, 10),well   = FALSE,
-                    bslib::nav_panel("Results Table",DT::dataTableOutput("LG_preds"),
-                      tags$style(type = "text/css", "#LGpreds {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Coefficients",fluidRow(column(6, DT::dataTableOutput("LG_pred_coeffs"))),
-                      tags$style(type = "text/css", "#LGpredcoeffs {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Prob Dens Plot",plotOutput("LG_pred_scatplot", height = "700px", width = "100%"),
-                      fluidRow(column(2, numericInput("LG_pred_dc", label = "Decision Criterion", value = 0.5, min = 0, max = 1, step = 0.01)),
-                      fluidRow(column(7, DT::dataTableOutput("LG_pred_confuse"))),uiOutput("LG_pred_confuse_text")))))),
+      tabPanel("LG: Predict",
+        tags$style(HTML("#lg_pred_nav .row { flex-wrap: nowrap; }
+        
+        #lg_pred_nav .row > div:first-child {
+          flex: 0 0 200px !important;
+          max-width: 200px !important;
+          width: 200px !important;
+        }
+        
+        #lg_pred_nav .row > div:last-child {
+          flex: 1 1 auto !important;
+          max-width: calc(100% - 200px) !important;
+          width: calc(100% - 200px) !important;
+        }
+        
+        #lg_pred_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
+        
+        div(id = "lg_pred_nav",
+          bslib::navset_pill_list(widths = c(2, 10), well = FALSE,
+            bslib::nav_panel("Results Table",DT::dataTableOutput("LG_preds"),
+              tags$style(type = "text/css", "#LG_preds {height: calc(100vh - 70px) !important;}")),
+            bslib::nav_panel("Coefficients",div(style = "width:600px;",DT::dataTableOutput("LG_pred_coeffs", width = "600px")),
+              tags$style(type = "text/css", "#LG_pred_coeffs {height: calc(100vh - 70px) !important;}")),
+            bslib::nav_panel("Prob Dens Plot",plotOutput("LG_pred_scatplot", height = "700px", width = "100%"),
+              fluidRow(numericInput("LG_pred_dc", label = "Decision Criterion", value = 0.5, min = 0, max = 1, step = 0.01)),
+              fluidRow(div(style = "width:600px;",DT::dataTableOutput("LG_pred_confuse", width = "600px"))),
+              uiOutput("LG_pred_confuse_text"))))),
                 
-                tabPanel("LG: Fitting",
-                  tags$style(HTML("#lg_fit_nav .row { flex-wrap: nowrap; }
-                  
-                  #lg_fit_nav .row > div:first-child {
-                    flex: 0 0 200px !important;
-                    max-width: 200px !important;
-                    width: 200px !important;
-                  }
-                  
-                  #lg_fit_nav .row > div:last-child {
-                    flex: 1 1 auto !important;
-                    max-width: calc(100% - 200px) !important;
-                    width: calc(100% - 200px) !important;
-                  }
-                  
-                  #lg_fit_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
-                         
-                  div(id = "lg_fit_nav",bslib::navset_pill_list(widths = c(2, 10),well   = FALSE,
-                    bslib::nav_panel("Results Table",DT::dataTableOutput("LG_fits"),
-                      tags$style(type = "text/css", "#LGfits {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Coefficients",fluidRow(column(6, DT::dataTableOutput("LG_coeffs"))),
-                      tags$style(type = "text/css", "#LGcoeffs {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Prob Dens Plot",plotOutput("LG_scatplot", height = "700px", width = "100%"),
-                      fluidRow(column(2, numericInput("LG_fit_dc", label = "Decision Criterion", value = 0.5, min = 0, max = 1, step = 0.01)),
-                      fluidRow(column(7, DT::dataTableOutput("LG_confuse"))),uiOutput("LG_confuse_text")))))),
+      tabPanel("LG: Fitting",
+        tags$style(HTML("#lg_fit_nav .row { flex-wrap: nowrap; }
+        
+        #lg_fit_nav .row > div:first-child {
+          flex: 0 0 200px !important;
+          max-width: 200px !important;
+          width: 200px !important;
+        }
+        
+        #lg_fit_nav .row > div:last-child {
+          flex: 1 1 auto !important;
+          max-width: calc(100% - 200px) !important;
+          width: calc(100% - 200px) !important;
+        }
+        
+        #lg_fit_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
+               
+        div(id = "lg_fit_nav",bslib::navset_pill_list(widths = c(2, 10),well   = FALSE,
+          bslib::nav_panel("Results Table",DT::dataTableOutput("LG_fits"),
+            tags$style(type = "text/css", "#LGfits {height: calc(100vh - 70px) !important;}")),
+          bslib::nav_panel("Coefficients",div(style = "width:600px;",DT::dataTableOutput("LG_coeffs", width = "600px")),
+            tags$style(type = "text/css", "#LGcoeffs {height: calc(100vh - 70px) !important;}")),
+          bslib::nav_panel("Prob Dens Plot",plotOutput("LG_scatplot", height = "700px", width = "100%"),
+            fluidRow(numericInput("LG_fit_dc", label = "Decision Criterion", value = 0.5, min = 0, max = 1, step = 0.01)),
+            fluidRow(div(style = "width:600px;",DT::dataTableOutput("LG_confuse", width = "600px"))),
+            uiOutput("LG_confuse_text"))))),
                 
-                tabPanel("XGBCL: Feat Select",fluidRow(column(9,DT::dataTableOutput('XGBCL_select'))),
-                         tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
+      tabPanel("XGBCL: Feat Select",fluidRow(column(9,DT::dataTableOutput('XGBCL_select'))),
+            tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
                 
-                tabPanel("XGBCL: Predict",
-                   tags$style(HTML("#xgbcl_pred_nav .row { flex-wrap: nowrap; }
-                  
-                  #xgbcl_pred_nav .row > div:first-child {
-                    flex: 0 0 200px !important;
-                    max-width: 200px !important;
-                    width: 200px !important;
-                  }
-                  
-                  #xgbcl_pred_nav .row > div:last-child {
-                    flex: 1 1 auto !important;
-                    max-width: calc(100% - 200px) !important;
-                    width: calc(100% - 200px) !important;
-                  }
-                  
-                  #xgbcl_pred_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
-                         
-                  div(id = "xgbcl_pred_nav",bslib::navset_pill_list(widths = c(2, 10),well   = FALSE,
-                    bslib::nav_panel("Results Table",DT::dataTableOutput("XGBCL_predictions"),
-                      tags$style(type = "text/css", "#XGBCLpreds {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("HP Values",fluidRow(column(10, DT::dataTableOutput("XGBCL_used_hp_pred"))),
-                      tags$style(type = "text/css", "#xgbclusedhppred {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("SHAP Values",fluidRow(column(6, DT::dataTableOutput("XGBCL_pred_shapes"))),
-                      tags$style(type = "text/css", "#XGBCLpredshapes {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Prob Dens Plot",plotOutput("XGBCL_pred_scatplot", height = "700px", width = "100%"),
-                      fluidRow(column(2, numericInput("XGBCL_pred_dc", label = "Decision Criterion", value = 0.5, min = 0, max = 1, step = 0.01)),
-                      fluidRow(column(7, DT::dataTableOutput("XGBCL_pred_confuse"))),uiOutput("XGBCL_pred_confuse_text")))))),
+      tabPanel("XGBCL: Predict",
+        tags$style(HTML("
+          #xgbcl_pred_nav .row { flex-wrap: nowrap; }
+          #xgbcl_pred_nav .row > div:first-child {
+            flex: 0 0 200px !important;
+            max-width: 200px !important;
+            width: 200px !important;
+          }
+          #xgbcl_pred_nav .row > div:last-child {
+            flex: 1 1 auto !important;
+            max-width: calc(100% - 200px) !important;
+            width: calc(100% - 200px) !important;
+          }
+          #xgbcl_pred_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
+        div(id = "xgbcl_pred_nav",
+            bslib::navset_pill_list(widths = c(2, 10), well = FALSE,
+            bslib::nav_panel("Results Table",DT::dataTableOutput("XGBCL_predictions"),
+              tags$style(type = "text/css", "#XGBCL_predictions {height: calc(100vh - 70px) !important;}")),
+            bslib::nav_panel("Hyperparameters",
+              fluidRow(div(style = "width:400px;",DT::dataTableOutput("XGBCL_used_hp_pred", width = "400px"))),
+                tags$style(type = "text/css", "#XGBCL_used_hp_pred {height: calc(100vh - 70px) !important;}")),
+            bslib::nav_panel("Feature SHAPs",
+                fluidRow(div(style = "width:400px;",DT::dataTableOutput("XGBCL_pred_shapes", width = "400px"))),
+              tags$style(type = "text/css", "#XGBCL_pred_shapes {height: calc(100vh - 70px) !important;}")),
+            bslib::nav_panel("Prob Dens Plot",plotOutput("XGBCL_pred_scatplot", height = "700px", width = "100%"),
+              fluidRow(numericInput("XGBCL_pred_dc", label = "Decision Criterion",value = 0.5, min = 0, max = 1, step = 0.01)),
+              fluidRow(div(style = "width:600px;",DT::dataTableOutput("XGBCL_pred_confuse", width = "600px"))),
+                uiOutput("XGBCL_pred_confuse_text"))))),
                 
-                tabPanel("XGBCL: Fitting",
-                  tags$style(HTML("#xgbcl_fit_nav .row { flex-wrap: nowrap; }
-                  
-                  #xgbcl_fit_nav .row > div:first-child {
-                    flex: 0 0 200px !important;
-                    max-width: 200px !important;
-                    width: 200px !important;
-                  }
-                  
-                  #xgbcl_fit_nav .row > div:last-child {
-                    flex: 1 1 auto !important;
-                    max-width: calc(100% - 200px) !important;
-                    width: calc(100% - 200px) !important;
-                  }
-                  
-                  #xgbcl_fit_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
-                         
-                  div(id = "xgbcl_fit_nav",bslib::navset_pill_list(widths = c(2, 10),well   = FALSE,
-                    bslib::nav_panel("Results Table",DT::dataTableOutput("XGBCL_fits"),
-                      tags$style(type = "text/css", "#XGBCLfits {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("HP Values",fluidRow(column(10, DT::dataTableOutput("XGBCL_used_hp"))),
-                      tags$style(type = "text/css", "#xgbclusedhp {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("SHAP Values",fluidRow(column(6, DT::dataTableOutput("XGBCL_shapes"))),
-                      tags$style(type = "text/css", "#xgbclshapes {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Prob Dens Plot",plotOutput("XGBCL_scatplot", height = "700px", width = "100%"),
-                      fluidRow(column(2, numericInput("XGBCL_dec_crit", label = "Decision Criterion", value = 0.5, min = 0, max = 1, step = 0.01)),
-                      fluidRow(column(7, DT::dataTableOutput("XGBCL_confuse"))),uiOutput("XGBCL_confuse_text")))))),
+      tabPanel("XGBCL: Fitting",
+        tags$style(HTML("
+          #xgbcl_fit_nav .row { flex-wrap: nowrap; }
+          #xgbcl_fit_nav .row > div:first-child {
+            flex: 0 0 200px !important;
+            max-width: 200px !important;
+            width: 200px !important;
+          }
+          #xgbcl_fit_nav .row > div:last-child {
+            flex: 1 1 auto !important;
+            max-width: calc(100% - 200px) !important;
+            width: calc(100% - 200px) !important;
+          }
+          #xgbcl_fit_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
+        div(id = "xgbcl_fit_nav",
+          bslib::navset_pill_list(widths = c(2, 10), well = FALSE,
+          bslib::nav_panel("Results Table",DT::dataTableOutput("XGBCL_fits"),
+            tags$style(type = "text/css", "#XGBCL_fits {height: calc(100vh - 70px) !important;}")),
+          bslib::nav_panel("Hyperparameters",
+            fluidRow(div(style = "width:400px;",DT::dataTableOutput("XGBCL_used_hp", width = "400px"))),
+              tags$style(type = "text/css", "#XGBCL_used_hp {height: calc(100vh - 70px) !important;}")),
+          bslib::nav_panel("Feature SHAPs",
+            fluidRow(div(style = "width:400px;",DT::dataTableOutput("XGBCL_shapes", width = "400px"))),
+              tags$style(type = "text/css", "#XGBCL_shapes {height: calc(100vh - 70px) !important;}")),
+          bslib::nav_panel("Prob Dens Plot",
+            plotOutput("XGBCL_scatplot", height = "700px", width = "100%"),
+            fluidRow(numericInput("XGBCL_dec_crit", label = "Decision Criterion",value = 0.5, min = 0, max = 1, step = 0.01)),
+            fluidRow(div(style = "width:600px;",DT::dataTableOutput("XGBCL_confuse", width = "600px"))),
+            uiOutput("XGBCL_confuse_text"))))),
                 
-                tabPanel("EN: Predict",
-                  tags$style(HTML("#EN_pred_nav .row { flex-wrap: nowrap; }
-                  
-                  #EN_pred_nav .row > div:first-child {
-                    flex: 0 0 200px !important;
-                    max-width: 200px !important;
-                    width: 200px !important;
-                  }
-                  
-                  #EN_pred_nav .row > div:last-child {
-                    flex: 1 1 auto !important;
-                    max-width: calc(100% - 200px) !important;
-                    width: calc(100% - 200px) !important;
-                  }
-                  
-                  #EN_pred_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
-                         
-                  div(id = "EN_pred_nav",bslib::navset_pill_list(widths = c(2, 10),well   = FALSE,
-                    bslib::nav_panel("Results Table",DT::dataTableOutput("EN_preds"),
-                      tags$style(type = "text/css", "#ENpreds {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Coefficients",fluidRow(column(4, DT::dataTableOutput("EN_pred_coeffs"))),
-                      tags$style(type = "text/css", "#ENpredcoeffs {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Scatterplot",plotlyOutput("EN_pred_scatplot", height = "700px", width = "100%"),
-                      fluidRow(column(2, numericInput("EN_pred_stand", label = "Regulatory Standard", value = 3, min = 0, max = 5, step = 0.01)),
-                        column(2, numericInput("EN_pred_dc", label = "Decision Criterion", value = 3, min = 0, max = 5, step = 0.01))),
-                      fluidRow(column(7, DT::dataTableOutput("EN_pred_confuse"))),uiOutput("EN_pred_confuse_text")),
-                    bslib::nav_panel("Lineplot",plotlyOutput("EN_pred_lineplot", height = "700px", width = "100%")),
-                    bslib::nav_panel("Residual Scatter",plotlyOutput("EN_pred_resid_scatter", height = "800px", width = "100%"))))),
+      tabPanel("EN: Predict",
+        tags$style(HTML("
+          #EN_pred_nav .row { flex-wrap: nowrap; }
+          #EN_pred_nav .row > div:first-child {
+            flex: 0 0 200px !important;
+            max-width: 200px !important;
+            width: 200px !important;
+          }
+          #EN_pred_nav .row > div:last-child {
+            flex: 1 1 auto !important;
+            max-width: calc(100% - 200px) !important;
+            width: calc(100% - 200px) !important;
+          }
+          #EN_pred_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
+        div(id = "EN_pred_nav",
+          bslib::navset_pill_list(widths = c(2, 10), well = FALSE,
+            bslib::nav_panel("Results Table",DT::dataTableOutput("EN_preds"),
+              tags$style(type = "text/css", "#EN_preds {height: calc(100vh - 70px) !important;}")),
+            bslib::nav_panel("Coefficients",
+              fluidRow(div(style = "width:400px;",DT::dataTableOutput("EN_pred_coeffs", width = "400px"))),
+              tags$style(type = "text/css", "#EN_pred_coeffs {height: calc(100vh - 70px) !important;}")),
+            bslib::nav_panel("Scatterplot",
+              plotlyOutput("EN_pred_scatplot", height = "700px", width = "100%"),
+              fluidRow(column(3, numericInput("EN_pred_stand", label = "Regulatory Standard",value = 3, min = 0, max = 5, step = 0.01)),
+                column(3, numericInput("EN_pred_dc", label = "Decision Criterion",value = 3, min = 0, max = 5, step = 0.01))),
+              fluidRow(div(style = "width:600px;",DT::dataTableOutput("EN_pred_confuse", width = "600px"))),
+              uiOutput("EN_pred_confuse_text")),
+            bslib::nav_panel("Lineplot",plotlyOutput("EN_pred_lineplot", height = "700px", width = "100%")),
+            bslib::nav_panel("Residual Scatter",plotlyOutput("EN_pred_resid_scatter", height = "800px", width = "100%"))))),
+      
+      tabPanel("EN: Fitting",
+        tags$style(HTML("
+          #EN_fit_nav .row > div:first-child {
+            flex: 0 0 200px !important;
+            max-width: 200px !important;
+            width: 200px !important;
+          }
+          
+          #EN_fit_nav .row > div:last-child {
+            flex: 1 1 auto !important;
+            max-width: calc(100% - 200px) !important;
+            width: calc(100% - 200px) !important;
+          }
+          
+          #EN_fit_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
+            div(id = "EN_fit_nav",
+              bslib::navset_pill_list(widths = c(2, 10), well = FALSE,
+                bslib::nav_panel("Results Table",DT::dataTableOutput("EN_fits"),
+                  tags$style(type = "text/css", "#ENfits {height: calc(100vh - 70px) !important;}")),
+                bslib::nav_panel("Coefficients",
+                  fluidRow(div(style = "width:400px;",DT::dataTableOutput("EN_coeffs", width = "400px"))),
+                    tags$style(type = "text/css", "#EN_coeffs {height: calc(100vh - 70px) !important;}")),
+                bslib::nav_panel("Scatterplot",
+                  plotlyOutput("EN_scatplot", height = "700px", width = "100%"),
+                  fluidRow(column(3, numericInput("EN_stand", label = "Regulatory Standard",value = 3, min = 0, max = 5, step = 0.01)),
+                    column(3, numericInput("EN_dec_crit", label = "Decision Criterion",value = 3, min = 0, max = 5, step = 0.01))),
+                  fluidRow(div(style = "width:600px;",DT::dataTableOutput("EN_confuse", width = "600px"))),
+                  uiOutput("EN_confuse_text")),
+                bslib::nav_panel("Lineplot",plotlyOutput("EN_lineplot", height = "700px", width = "100%")),
+                bslib::nav_panel("Residual Scatter",plotlyOutput("EN_resid_scatplot", height = "800px", width = "100%"))))),
                 
-                tabPanel("EN: Fitting",
-                  tags$style(HTML("#EN_fit_nav .row { flex-wrap: nowrap; }
-                  
-                  #EN_fit_nav .row > div:first-child {
-                    flex: 0 0 200px !important;
-                    max-width: 200px !important;
-                    width: 200px !important;
-                  }
-                  
-                  #EN_fit_nav .row > div:last-child {
-                    flex: 1 1 auto !important;
-                    max-width: calc(100% - 200px) !important;
-                    width: calc(100% - 200px) !important;
-                  }
-                  
-                  #EN_fit_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
-                         
-                  div(id = "EN_fit_nav",bslib::navset_pill_list(widths = c(2, 10),well   = FALSE,
-                    bslib::nav_panel("Results Table",DT::dataTableOutput("EN_fits"),
-                      tags$style(type = "text/css", "#ENfits {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Coefficients",fluidRow(column(4, DT::dataTableOutput("EN_coeffs"))),
-                      tags$style(type = "text/css", "#EN_coeffs {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("Scatterplot",plotlyOutput("EN_scatplot", height = "800px", width = "100%"),
-                      fluidRow(column(2, numericInput("EN_stand", label = "Regulatory Standard", value = 3, min = 0, max = 5, step = 0.01)),
-                        column(2, numericInput("EN_dec_crit", label = "Decision Criterion", value = 3, min = 0, max = 5, step = 0.01))),
-                      fluidRow(column(7, DT::dataTableOutput("EN_confuse"))),uiOutput("EN_confuse_text")),
-                    bslib::nav_panel("Lineplot",plotlyOutput("EN_lineplot", height = "700px", width = "100%")),
-                    bslib::nav_panel("Residual Scatter",plotlyOutput("EN_resid_scatplot", height = "800px", width = "100%"))))),
+    tabPanel("XGB: Feat Select",fluidRow(column(9,DT::dataTableOutput('XGB_select'))),
+        tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
                 
-                tabPanel("XGB: Feat Select",fluidRow(column(9,DT::dataTableOutput('XGB_select'))),
-                    tags$style(type = "text/css", "#xgbselecttable {height: calc(100vh - 70px) !important;}")),
-                
-                tabPanel("XGB: Predict",
-                  tags$style(HTML("#xgb_pred_nav .row { flex-wrap: nowrap; }
-                  
-                  #xgb_pred_nav .row > div:first-child {
-                    flex: 0 0 200px !important;
-                    max-width: 200px !important;
-                    width: 200px !important;
-                  }
-                  
-                  #xgb_pred_nav .row > div:last-child {
-                    flex: 1 1 auto !important;
-                    max-width: calc(100% - 200px) !important;
-                    width: calc(100% - 200px) !important;
-                  }
-                  
-                  #xgb_pred_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
-                         
-                  div(id = "xgb_pred_nav",bslib::navset_pill_list(widths = c(2, 10),well   = FALSE,
-                    bslib::nav_panel("Results Table",DT::dataTableOutput("XGB_predictions"),
-                      tags$style(type = "text/css", "#XGB_predictions {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("HP Values",fluidRow(column(10, DT::dataTableOutput("XGB_used_hp_pred"))),
-                      tags$style(type = "text/css", "#XGB_used_hp_pred {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("SHAP Values",fluidRow(column(5, DT::dataTableOutput("XGB_pred_shapes")))),
-                    bslib::nav_panel("Scatterplot",plotlyOutput("XGB_pred_scatplot", height = "800px", width = "100%"),
-                      fluidRow(column(2, numericInput("XGB_pred_stand", label = "Regulatory Standard", value = 3, min = 0, max = 5, step = 0.01)),
-                        column(2, numericInput("XGB_pred_dc",    label = "Decision Criterion", value = 3, min = 0, max = 5, step = 0.01))),
-                      fluidRow(column(7, DT::dataTableOutput("XGB_pred_confuse"))),uiOutput("XGB_pred_confuse_text")),
-                    bslib::nav_panel("Lineplot",plotlyOutput("XGB_pred_lineplot", height = "700px", width = "100%")),
-                    bslib::nav_panel("Residual Scatter",plotlyOutput("XGB_pred_resid_scatplot", height = "800px", width = "100%"))))),
-                
-                tabPanel("XGB: Fitting",
-                  tags$style(HTML("#xgb_fit_nav .row { flex-wrap: nowrap; }
-                  
-                  #xgb_fit_nav .row > div:first-child {
-                    flex: 0 0 200px !important;
-                    max-width: 200px !important;
-                    width: 200px !important;
-                  }
-                  
-                  #xgb_fit_nav .row > div:last-child {
-                    flex: 1 1 auto !important;
-                    max-width: calc(100% - 200px) !important;
-                    width: calc(100% - 200px) !important;
-                  }
-                  
-                  #xgb_fit_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
-                         
-                  div(id = "xgb_fit_nav",bslib::navset_pill_list(widths = c(2, 10),well   = FALSE,
-                    bslib::nav_panel("Results Table",DT::dataTableOutput("XGB_fits"),
-                      tags$style(type = "text/css", "#xgbfits {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("HP Values",fluidRow(column(10, DT::dataTableOutput("XGB_used_hp"))),
-                      tags$style(type = "text/css", "#XGB_used_hp {height: calc(100vh - 70px) !important;}")),
-                    bslib::nav_panel("SHAP Values",fluidRow(column(5, DT::dataTableOutput("XGB_shapes")))),
-                    bslib::nav_panel("Scatterplot",plotlyOutput("XGB_scatplot", height = "800px", width = "100%"),
-                      fluidRow(column(2, numericInput("XGB_stand", label = "Regulatory Standard", value = 3, min = 0, max = 5, step = 0.01)),
-                        column(2, numericInput("XGB_dec_crit",    label = "Decision Criterion", value = 3, min = 0, max = 5, step = 0.01))),
-                      fluidRow(column(7, DT::dataTableOutput("XGB_confuse"))),uiOutput("XGB_confuse_text")),
-                    bslib::nav_panel("Lineplot",plotlyOutput("XGB_lineplot", height = "700px", width = "100%")),
-                    bslib::nav_panel("Residual Scatter",plotlyOutput("XGB_resid_scatplot", height = "800px", width = "100%"))))))))
+    tabPanel("XGB: Predict",
+      tags$style(HTML("
+        #xgb_pred_nav .row { flex-wrap: nowrap; }
+        #xgb_pred_nav .row > div:first-child {
+          flex: 0 0 200px !important;
+          max-width: 200px !important;
+          width: 200px !important;
+        }
+        #xgb_pred_nav .row > div:last-child {
+          flex: 1 1 auto !important;
+          max-width: calc(100% - 200px) !important;
+          width: calc(100% - 200px) !important;
+        }
+        #xgb_pred_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
+      div(id = "xgb_pred_nav",
+        bslib::navset_pill_list(widths = c(2, 10), well = FALSE,
+          bslib::nav_panel("Results Table",DT::dataTableOutput("XGB_predictions"),
+            tags$style(type = "text/css", "#XGB_predictions {height: calc(100vh - 70px) !important;}")),
+          bslib::nav_panel("Hyperparameters",
+            fluidRow(div(style = "width:400px;",DT::dataTableOutput("XGB_used_hp_pred", width = "400px"))),
+              tags$style(type = "text/css", "#XGB_used_hp_pred {height: calc(100vh - 70px) !important;}")),
+          bslib::nav_panel("Feature SHAPs",
+            fluidRow(div(style = "width:400px;",DT::dataTableOutput("XGB_pred_shapes", width = "400px")))),
+          bslib::nav_panel("Scatterplot",plotlyOutput("XGB_pred_scatplot", height = "800px", width = "100%"),
+            fluidRow(column(3, numericInput("XGB_pred_stand", label = "Regulatory Standard", value = 3, min = 0, max = 5, step = 0.01)),
+              column(3, numericInput("XGB_pred_dc",label = "Decision Criterion", value = 3, min = 0, max = 5, step = 0.01))),
+            fluidRow(div(style = "width:600px;",DT::dataTableOutput("XGB_pred_confuse", width = "600px"))),
+            uiOutput("XGB_pred_confuse_text")),
+          bslib::nav_panel("Lineplot",plotlyOutput("XGB_pred_lineplot", height = "700px", width = "100%")),
+          bslib::nav_panel("Residual Scatter",plotlyOutput("XGB_pred_resid_scatplot", height = "800px", width = "100%"))))),
+    
+    tabPanel("XGB: Fitting",
+      tags$style(HTML("
+        #xgb_fit_nav .row { flex-wrap: nowrap; }
+        #xgb_fit_nav .row > div:first-child {
+          flex: 0 0 200px !important;
+          max-width: 200px !important;
+          width: 200px !important;
+        }
+        #xgb_fit_nav .row > div:last-child {
+          flex: 1 1 auto !important;
+          max-width: calc(100% - 200px) !important;
+          width: calc(100% - 200px) !important;
+        }
+        #xgb_fit_nav .nav.flex-column .nav-link { white-space: nowrap; }")),
+      div(id = "xgb_fit_nav",
+        bslib::navset_pill_list(widths = c(2, 10), well = FALSE,
+          bslib::nav_panel("Results Table",DT::dataTableOutput("XGB_fits"),
+            tags$style(type = "text/css", "#xgbfits {height: calc(100vh - 70px) !important;}")),
+          bslib::nav_panel("Hyperparameters",
+            fluidRow(div(style = "width:400px;",DT::dataTableOutput("XGB_used_hp", width = "400px"))),
+              tags$style(type = "text/css", "#XGB_used_hp {height: calc(100vh - 70px) !important;}")),
+          bslib::nav_panel("Feature SHAPs",
+            fluidRow(div(style = "width:400px;",DT::dataTableOutput("XGB_shapes", width = "400px")))),
+          bslib::nav_panel("Scatterplot",plotlyOutput("XGB_scatplot", height = "800px", width = "100%"),
+            fluidRow(column(3, numericInput("XGB_stand", label = "Regulatory Standard", value = 3, min = 0, max = 5, step = 0.01)),
+              column(3, numericInput("XGB_dec_crit",label = "Decision Criterion", value = 3, min = 0, max = 5, step = 0.01))),
+            fluidRow(div(style = "width:600px;",DT::dataTableOutput("XGB_confuse", width = "600px"))),
+            uiOutput("XGB_confuse_text")),
+          bslib::nav_panel("Lineplot",plotlyOutput("XGB_lineplot", height = "700px", width = "100%")),
+          bslib::nav_panel("Residual Scatter",plotlyOutput("XGB_resid_scatplot", height = "800px", width = "100%"))))))))

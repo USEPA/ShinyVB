@@ -2,7 +2,7 @@ version = "1.0.0"
 
 # Leaflet reactive variables
 bo = reactiveVal(0)
-map_clicks = reactiveValues(points = data.frame())
+map_clicks <- reactiveValues(points = data.frame(lat = numeric(0), lng = numeric(0)))
 
 # Read in WQX station and shoreline data
 station_data = data.frame(read.csv("stations.csv"))
