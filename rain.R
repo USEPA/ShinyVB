@@ -1,4 +1,4 @@
-raincloud = function(data,date_format_string) {
+raincloud = function(data) {
   
   data = data.frame(data)
   
@@ -17,9 +17,7 @@ raincloud = function(data,date_format_string) {
   stat4 = min(data[,2],na.rm=TRUE)
   stat5 = max(data[,2],na.rm=TRUE)-min(data[,2],na.rm=TRUE)
   
-  if (date_format_string == "Character") {
-    data[,1]=as_factor(as.character(data[,1]))
-  }
+  data[,1]=as_factor(as.character(data[,1]))
 
   rain = plot(ggplot(data, aes(1,data[,2])) +
          

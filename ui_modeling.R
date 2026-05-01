@@ -108,8 +108,10 @@ ModelingPanel <- div(id="modeling_flex", style = "display:flex; gap:8px; align-i
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
-    fluidRow(actionButton("save_project_modeling", "Save Project File", style = "margin-bottom:8px;")),
-    fluidRow(fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData"))),
+    fluidRow(column(12,actionButton("save_project", "Save Project File",class = "btn-default custom-btn btn-save",style = "width: 150px;"))),
+    fluidRow(column(12,actionButton("open_saved_file","Open Saved Project/Prediction File",class = "btn-default custom-btn btn-tall",style = "width: 300px;"),
+      div(style = "position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden;",
+      fileInput("load_saved_file",label = NULL,accept = c(".RData", ".rda"),multiple = FALSE))))),
   
   div(id = "modeling_output", style = "flex:1 1 auto; min-width:0;",
     tabsetPanel(id = "modeling_tabs",

@@ -4,11 +4,10 @@ DataPanel = div(id="data_flex", style = "display:flex; gap:8px; align-items:flex
               "height: calc(100vh - 70px); height: calc(100dvh - 70px);","overflow-y:auto;"),
     tags$style(type = "text/css", "#datasidepanel {height: calc(100vh - 70px) !important;}"),
     
-    fluidRow(column(6,inputPanel(selectInput("ID_Format",label = "ID Format",selected ="Date",choices = c("Date","Numeric","Character")))),
-             column(6,disabled(actionButton("restore", "Restore Inputs", class = "btn-default custom-btn", style='width: 120px; padding:5px; vertical-align: -33px;')))),
-    
-    div(fileInput("file1", "Select your data file", buttonLabel = "Browse",accept = c("text/csv",
-                  "text/comma-separated-values,text/plain",".csv",".xlsx")), style="font-size:80%; font-family:Arial; width: 350px;"),
+    div(id = "center-controls",style = "display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: Arial;",
+      fileInput("file1",label = NULL,buttonLabel = "Import Dataset",
+        accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv", ".xlsx"),width = "350px"),
+      disabled(actionButton("restore","Restore Inputs",class = "btn-default custom-btn",style = "width: 160px; padding: 5px; margin: 0;"))),
     h5(HTML("<i>Response Variable Censor Values</i>")),
     fluidRow(column(6,numericInput("lc_val", "Left-Censored", value=-9999)),
              column(6,numericInput("rc_val", "Right-Censored", value=9999))),
@@ -32,7 +31,7 @@ DataPanel = div(id="data_flex", style = "display:flex; gap:8px; align-items:flex
                   .inline-label { margin-right: 8px; font-size: 16px !important; }")),
                   div(style = "display:flex; align-items:center; gap:5px;",
                     tags$label("Crit Corr", `for` = "r_thresh", class = "inline-label"),
-                    div(style = "width: 75px; margin-top:3px;",   # nudge the box down
+                    div(style = "width: 75px; margin-top:3px;",
                       numericInput("r_thresh", label = NULL, value = 0.7, min = 0, max = 1, step = 0.01))))),
         fluidRow(column(6, disabled(actionButton("pca_check", "PCA", class = "btn-default custom-btn",style='width: 150px; vertical-align: -38px;'))),
                 column(6, class="align-center",div(style = "margin-top:4px;",numericInput("num_axes", "# Axes", value=2, min=2, max=20, step=1)))),
@@ -68,10 +67,10 @@ DataPanel = div(id="data_flex", style = "display:flex; gap:8px; align-items:flex
       
       bs_accordion_multi(multi=FALSE,open=c()),
     
-      fluidRow(column(12,actionButton("save_project_data", "Save Project File"))),
-      fluidRow(column(12,fileInput("load_file", "Load Project/Prediction File", buttonLabel = "Browse", accept = ".RData"))),
-
-  ),
+      fluidRow(column(12,actionButton("save_project", "Save Project File",class = "btn-default custom-btn btn-save",style = "width: 150px;"))),
+      fluidRow(column(12,actionButton("open_saved_file","Open Saved Project/Prediction File",class = "btn-default custom-btn btn-tall",style = "width: 300px;"),
+        div(style = "position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden;",
+          fileInput("load_saved_file",label = NULL,accept = c(".RData", ".rda"),multiple = FALSE))))),
   
   div(id = "data_main_panel", style = "flex:1 1 auto; min-width:0;",
                         tabsetPanel(id = "data_tabs",
@@ -87,7 +86,8 @@ DataPanel = div(id="data_flex", style = "display:flex; gap:8px; align-items:flex
                                     tabPanel("Transformations",
                                       div(id = "trans_container",
                                         div(id = "trans_table_wrap",DT::dataTableOutput("trans_table")),
-                                        div(id = "trans_side",actionButton("apply_transforms", "Add/Remove Selected Terms",class = "btn-primary", style = "width: 100%;"))),
+                                        div(id = "trans_side",style = "margin-top: 24px;",
+                                            actionButton("apply_transforms", "Add/Remove Selected Terms",class = "btn-special", style = "width: 100%;"))),
                                       tags$style(type = "text/css", HTML("
                                         /* Side-by-side layout that hugs content (prevents sidebar from flying to far right) */
                                         #trans_container {
@@ -128,7 +128,8 @@ DataPanel = div(id="data_flex", style = "display:flex; gap:8px; align-items:flex
                                     tabPanel("Interactions",
                                       div(id = "inter_container",
                                         div(id = "inter_table_wrap",DT::dataTableOutput("interactions_table")),
-                                        div(id = "interactions_side",actionButton("add_interactions", "Add/Remove Selected Terms",class = "btn-primary", style = "width: 100%;"))),
+                                        div(id = "interactions_side",style = "margin-top: 24px;",
+                                            actionButton("add_interactions", "Add/Remove Selected Terms",class = "btn-special", style = "width: 100%;"))),
                                       tags$style(type = "text/css", HTML("
                                         #inter_container {
                                           display: inline-flex;

@@ -65,6 +65,8 @@ source("xgbcl_feature_selection.R")
 source("xgbcl_pred_errors.R")
 source("xgbcl_pso.R")
 
+#_______________________________________________________________________ 
+
 server= function(input,output,session) {
   
   # Code to show what libraries are in use by the project
@@ -91,350 +93,22 @@ server= function(input,output,session) {
   iv$enable()
   loading_project(FALSE)
   
-  # Prediction tab text directions
-  output$directions = renderUI({
-    req(bo())
-    tagList(
-      tags$h5("IMPORTANT INFO:"),
-      tags$ul(
-        style = "list-style-type: disc; padding-left: 1.2em;",
-        tags$li("Left-most columns of imported data file MUST be 1) Unique ID and 2) Response Variable. These 2 columns can have any name and can contain missing data."),
-        tags$li("Imported data file MUST include column names EXACTLY equal to the name of features present in the chosen model."),
-        tags$li("Ordering of feature columns in the imported data file not important; all unmatched feature columns will be ignored."),
-        tags$li("If the chosen model contains A/O components, enter magnitude/direction data; the needed A/O components will be computed by VB."),
-        tags$li("If the chosen model contains transformed features, enter only the raw, untransformed feature data; the needed transform will be done by VB.")
-        ))
-  })
-  
-  # Upload excel/csv data file
-  observeEvent(input$file1, {
-    
-    rv_import$pending_df <- NULL
-    rv_import$ext <- NULL
-    loading_project(FALSE)
-    
-    path <- input$file1$datapath
-    ext  <- tolower(tools::file_ext(input$file1$name))
-    
-    tryCatch({
-      if (ext %in% c("xlsx", "xls")) {
-        init_data <<- openxlsx::read.xlsx(path)
-      } else {
-        init_data <<- data.table::fread(path, sep = "auto", data.table = FALSE, showProgress = FALSE)
-      }
-    }, error = function(e) {
-      showNotification(paste("Error reading file:", conditionMessage(e)), type = "error")
-      init_data <<- NULL
-    })
-    
-    # Basic validations on the raw import
-    if (any(duplicated(init_data[, 1]))) {
-      showModal(modalDialog(
-        "The ID (Column 1) is required to have unique values, but duplicate values were found. Please remedy prior to data importation.",
-        easyClose = FALSE, footer = div(modalButton("Close"))
-      ))
-      return(invisible())
-    } else if (any(is.na(init_data[, 1]))) {
-      showModal(modalDialog(
-        "The ID (Column 1) has missing values. Please remedy prior to data importation.",
-        easyClose = FALSE, footer = div(modalButton("Close"))
-      ))
-      return(invisible())
-    } else if (any(sapply(data.frame(init_data[, -1]), function(col) !is.numeric(col)))) {
-      showModal(modalDialog(
-        "This dataset contains non-numeric data. Please remedy prior to data importation.",
-        easyClose = FALSE, footer = div(modalButton("Close"))
-      ))
-      return(invisible())
-    } else {
-      
-      # Column props setup
-      col_props_temp <- hash()
-      for (i in 1:ncol(init_data)) {
-        .set(col_props_temp, keys = colnames(init_data)[i], values = c(prop1 = 2, prop2 = NA, prop3 = NA, prop4 = NA))
-      }
-      init_column_props <<- col_props_temp
-      column_props <<- col_props_temp
-      ignored_rows <<- NULL
-      PCA_dataset(NULL)
-      changed_model(TRUE)
-      
-      id_mode <- input$ID_Format %||% "Date"
-      
-      # ID Format handling (Date / Numeric / Character)
-      if (id_mode == "Date") {
-        
-        init_ID_format <<- "Date"
-        
-        id_col <- init_data[[1]]
-        
-        # Case A: .xlsx numeric -> Excel serial DAYS to POSIXct, floored to minute
-        if (is.numeric(id_col) && identical(ext, "xlsx")) {
-          init_data[, 1] <- lubridate::floor_date(
-            as.POSIXct(id_col * 86400, origin = "1899-12-30", tz = Sys.timezone()),
-            unit = "minute"
-          )
-          # Ask renderdata to show M/D/YYYY HH:MM for these converted numerics
-          date_format_string <<- "Date_MDY_HM"
-        } else {
-          # Default for non-numeric or non-xlsx
-          date_format_string <<- "Date"
-        }
-        
-        # Case B: Non-.xlsx numeric -> ask to convert from Excel serial
-        if (is.numeric(init_data[[1]]) && !identical(ext, "xlsx")) {
-          # Convert DAYS -> seconds for previews
-          win_all <- as.POSIXct(init_data[[1]] * 86400, origin = "1899-12-30", tz = Sys.timezone())
-          mac_all <- as.POSIXct(init_data[[1]] * 86400, origin = "1904-01-01",  tz = Sys.timezone())
-          
-          # Pick a single example index (first non-NA)
-          ex_idx <- which(!is.na(init_data[[1]]))[1]
-          if (is.na(ex_idx)) ex_idx <- 1L
-          
-          # Format M/D/YYYY HH:MM (no leading zeros on month/day)
-          fmt_mdy_hm <- function(dt) {
-            y  <- format(dt, "%Y")
-            m  <- as.integer(format(dt, "%m"))
-            d  <- as.integer(format(dt, "%d"))
-            hm <- format(dt, "%H:%M")
-            sprintf("%d/%d/%s %s", m, d, y, hm)
-          }
-          
-          win_example <- fmt_mdy_hm(win_all[ex_idx])
-          mac_example <- fmt_mdy_hm(mac_all[ex_idx])
-          
-          # Choose a sensible default (1970–2100) by scanning the whole column
-          plausible <- function(x) {
-            all(!is.na(x)) &&
-              all(x >= as.POSIXct("1970-01-01", tz = Sys.timezone()) &
-                    x <= as.POSIXct("2100-12-31", tz = Sys.timezone()))
-          }
-          default_choice <- if (plausible(win_all)) "win" else if (plausible(mac_all)) "mac" else "win"
-          
-          rv_import$pending_df <- init_data
-          rv_import$ext <- ext
-          
-          showModal(modalDialog(
-            title = "Convert numeric IDs to dates?",
-            tagList(
-              p("The ID column appears to be numeric. Convert to date/time?"),
-              radioButtons(
-                "excel_origin_choice",
-                label = NULL,
-                choices = setNames(
-                  c("win", "mac"),
-                  c(
-                    sprintf("Windows: %s", win_example),
-                    sprintf("Mac: %s", mac_example)
-                  )
-                ),
-                selected = default_choice
-              )
-            ),
-            easyClose = FALSE,
-            footer = tagList(
-              actionButton("confirm_excel_date_convert", "Convert"),
-              modalButton("Cancel")
-            )
-          ))
-          return(invisible())
-        }
-        
-        # Validate date-like IDs (characters/POSIXct) without altering display
-        id_valid <- parse_id_any_datetime_minute(
-          init_data[[1]],
-          tz = Sys.timezone(),
-          excel_ext = ext,
-          locale = "C"
-        )
-        if (anyNA(id_valid)) {
-          bad_idx <- which(is.na(id_valid))
-          raw_sample <- utils::head(as.character(init_data[[1]][bad_idx]), 3)
-          showModal(modalDialog(
-            paste0(
-              "Some ID values could not be recognized as dates/times. First failing rows: ",
-              paste(head(bad_idx, 5), collapse = ", "),
-              ". Sample values: ", paste(raw_sample, collapse = " | ")
-            ),
-            easyClose = FALSE, footer = div(modalButton("Close"))
-          ))
-          return(invisible())
-        }
-        
-      } else if (input$ID_Format == "Numeric") {
-        init_ID_format <<- "Numeric"
-        init_data[, 1] <- as.numeric(init_data[, 1])
-        if (anyNA(init_data[, 1])) {
-          showModal(modalDialog(
-            "The ID (Column 1) could not be coerced to numeric without introducing NA values.",
-            easyClose = FALSE, footer = div(modalButton("Close"))
-          ))
-          return(invisible())
-        }
-        if (any(duplicated(init_data[, 1]))) {
-          showModal(modalDialog(
-            "The ID (Column 1) must be unique after numeric coercion, but duplicate values were found.",
-            easyClose = FALSE, footer = div(modalButton("Close"))
-          ))
-          return(invisible())
-        }
-        date_format_string <<- "Numeric"
-        
-      } else if (input$ID_Format == "Character") {
-        init_ID_format <<- "Character"
-        init_data[, 1] <- as.character(init_data[, 1])
-        date_format_string <<- "Character"
-      }
-      
-      # Proceed with ShinyVB pipeline
-      current_data(init_data)
-      col_names(colnames(init_data[, -1]))
-      
-      clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = TRUE)
-      
-      # Filter the response variable to exclude left and right-censored tags
-      exclude_values <- c(input$lc_val, input$rc_val)
-      real_responses <- na.omit(init_data[!init_data[, response_var()] %in% exclude_values, response_var()])
-      
-      updateNumericInput(session, "LG_binarize_crit_value",
-                         value = round(median(real_responses), 2),
-                         min = min(real_responses), max = max(real_responses))
-      updateNumericInput(session, "XGBCL_binarize_crit_value",
-                         value = round(median(real_responses), 2),
-                         min = min(real_responses), max = max(real_responses))
-      
-      updateNumericInput(session, "lc_replace", value = round(min(real_responses), 3))
-      updateNumericInput(session, "rc_replace", value = round(max(real_responses), 3))
-      
-      iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses), max(real_responses)))
-      iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses), max(real_responses)))
-      
-      feat_data <- init_data[, 3:ncol(init_data)]
-      feats_being_used(colnames(feat_data))
-      feat_names(colnames(feat_data))
-      
-      enable("restore")
-      enable("set_column_props")
-      enable("corr_check")
-      enable("transforms")
-      enable("interacts")
-      enable("pca_check")
-      enable("run_iso_forest")
-      
-      pca_axes_max(ncol(init_data) - 2)
-      
-      updateNumericInput(session, "num_axes",value = pca_axes_max(),max = pca_axes_max())
-      
-      updateSelectInput(session, "set_column_props", choices = c("-", col_names()))
-      updateSelectInput(session, "rainplot", choices = c("-", col_names()))
-      updateSelectInput(session, "lineplot_feature", choices = c("-", col_names()))
-      updateSelectInput(session, "scatterx", choices = c("-", col_names()))
-      updateSelectInput(session, "scattery", choices = c("-", col_names()))
-      updateSelectInput(session, "speed", choices = c("-", col_names()))
-      updateSelectInput(session, "direct", choices = c("-", col_names()))
-      
-      current_data_page(1)
-      
-      renderdata(current_data(), response_var(), id_var, input$select_choice, date_format_string, column_props, ignored_rows, current_data_page(), output)
-      
-      clear_modeling(TRUE)
-      
-      updateTabsetPanel(session, inputId = "shinyVB", selected = "Data")
-      updateTabsetPanel(session, inputId = "data_tabs", selected = "Data Table")
-    }
-  }, ignoreInit = TRUE)
-  
-  # Handle "Convert" click in the modal (Numeric -> Date)
-  observeEvent(input$confirm_excel_date_convert, {
-    req(rv_import$pending_df)
-    removeModal()
-    
-    origin_choice <- input$excel_origin_choice %||% "win"
-    origin_str <- if (identical(origin_choice, "mac")) "1904-01-01" else "1899-12-30"
-    
-    init_data <- rv_import$pending_df
-    init_data[, 1] <- lubridate::floor_date(
-      as.POSIXct(init_data[[1]] * 86400, origin = origin_str, tz = Sys.timezone()),
-      unit = "minute"
-    )
-    
-    rv_import$pending_df <- NULL
-    rv_import$ext <- NULL
-    
-    init_ID_format <<- "Date"
-    # Optional: if you want these converted numerics to show as "M/D/YYYY HH:MM" in the table,
-    # set a display flag your renderdata recognizes (e.g., "Date_MDY_HM").
-    # If you prefer "as is", keep "Date".
-    date_format_string <<- "Date_MDY_HM"
-    
-    # Continue with your usual pipeline (unchanged)
-    current_data(init_data)
-    col_names(colnames(init_data[, -1]))
-    
-    clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = TRUE)
-    
-    exclude_values <- c(input$lc_val, input$rc_val)
-    real_responses <- na.omit(init_data[!init_data[, response_var()] %in% exclude_values, response_var()])
-    
-    updateNumericInput(session, "LG_binarize_crit_value",
-                       value = round(median(real_responses), 2),
-                       min = min(real_responses), max = max(real_responses))
-    updateNumericInput(session, "XGBCL_binarize_crit_value",
-                       value = round(median(real_responses), 2),
-                       min = min(real_responses), max = max(real_responses))
-    
-    updateNumericInput(session, "lc_replace", value = round(min(real_responses), 3))
-    updateNumericInput(session, "rc_replace", value = round(max(real_responses), 3))
-    
-    iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses), max(real_responses)))
-    iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses), max(real_responses)))
-    
-    feat_data <- init_data[, 3:ncol(init_data)]
-    feats_being_used(colnames(feat_data))
-    feat_names(colnames(feat_data))
-    
-    enable("restore")
-    enable("set_column_props")
-    enable("corr_check")
-    enable("transforms")
-    enable("interacts")
-    enable("pca_check")
-    enable("run_iso_forest")
-    
-    pca_axes_max(ncol(init_data) - 2)
-    
-    updateNumericInput(session, "num_axes",
-                       value = pca_axes_max(),
-                       max = pca_axes_max())
-    
-    updateSelectInput(session, "set_column_props", choices = c("-", col_names()))
-    updateSelectInput(session, "rainplot", choices = c("-", col_names()))
-    updateSelectInput(session, "lineplot_feature", choices = c("-", col_names()))
-    updateSelectInput(session, "scatterx", choices = c("-", col_names()))
-    updateSelectInput(session, "scattery", choices = c("-", col_names()))
-    updateSelectInput(session, "speed", choices = c("-", col_names()))
-    updateSelectInput(session, "direct", choices = c("-", col_names()))
-    
-    current_data_page(1)
-    
-    renderdata(current_data(), response_var(), id_var, input$select_choice,
-               date_format_string, column_props, ignored_rows, current_data_page(), output)
-    
-    clear_modeling(TRUE)
-    
-    updateTabsetPanel(session, inputId = "shinyVB", selected = "Data")
-    updateTabsetPanel(session, inputId = "data_tabs", selected = "Data Table")
-  })
+  session$onFlushed(function() {
+    shinyjs::disable("pred_file")
+    shinyjs::addClass("pred_file_wrap", "disabled")
+  }, once = TRUE)
   
   # Create a temporary SQL database
   temp_db = dbConnect(RSQLite::SQLite(), ":memory:")
   
-  # Render leaflet map
-  # output$map = renderLeaflet({
-  #   leaflet() |> 
-  #     addTiles() |> 
-  #     setView(270, 40, zoom = 5)
-  # })
+  # Disconnect the opened SQL database
+  session$onSessionEnded(function() {
+    dbDisconnect(temp_db)
+  })
+
+  #_______________________________________________________________________ 
+  
+  # MAPPING
   
   output$map <- renderLeaflet({
     leaflet() |>
@@ -460,7 +134,7 @@ server= function(input,output,session) {
   # Compute beach orientation based on map left-clicks
   observeEvent(input$map_click,  ignoreInit = T, {map_click(input$map_click,map_clicks,bo)})
   
-  # Take a step back in orientation process with right-clicks
+  # Step back in orientation process with right-clicks
   observeEvent(input$map_rightclick, {
     # Ensure correct structure
     if (!all(c("lat","lng") %in% names(map_clicks$points))) {
@@ -651,345 +325,304 @@ server= function(input,output,session) {
     sprintf("%d", as.integer(round(bo(), 0)))
   })
   
-  # Save Project File
-  observeEvent(c(input$save_project_data,input$save_project_modeling,input$save_project_prediction), ignoreInit=T, {
-    
-    if (is.null(init_data)) {
-      showModal(modalDialog(
-        title = NULL,
-        "No data have been imported yet.",
-        footer = NULL,
-        easyClose = TRUE
-      ))
-      
-    } else {
-
-      tempFile = tempfile(fileext = ".RData")
-      
-      save_list = list(
-        type = "Project",
-        Version = version,
-        temp_db = temp_db,
-        bo = bo(),
-        current_data = current_data(),
-        response_var = response_var(),
-        col_names = col_names(),
-        feat_names = feat_names(),
-        feats_being_used = feats_being_used(),
-        fs_feats_used = fs_feats_used(),
-        init_data = init_data,
-        ignored_rows = ignored_rows,
-        init_ID_format = init_ID_format,
-        date_format_string = date_format_string,
-        saved_lc_val = input$lc_val,
-        saved_rc_val = input$rc_val,
-        saved_num_axes = input$num_axes,
-        init_column_props = init_column_props,
-        column_props = column_props,
-        PCA_scaling_mean = if (isTRUE(final_model_PCA())) PCA_scaling_mean() else NULL,
-        PCA_scaling_sd   = if (isTRUE(final_model_PCA())) PCA_scaling_sd()   else NULL,
-        PCA_coefficients = {
-          if (!isTRUE(final_model_PCA())) {
-            NULL
-          } else {
-            rot <- PCA_coefficients()
-            if (is.null(rot)) {
-              NULL
-            } else {
-              # Coerce to numeric matrix with rownames = features, colnames = PCs
-              if (is.data.frame(rot)) {
-                key_candidates <- intersect(names(rot), c("Feature","feature","Variable","variable","Name","name","feat"))
-                key <- if (length(key_candidates)) key_candidates[1] else NULL
-                if (!is.null(key)) {
-                  rn <- as.character(rot[[key]])
-                  rot_num <- rot[, setdiff(names(rot), key), drop = FALSE]
-                  for (nm in names(rot_num)) rot_num[[nm]] <- suppressWarnings(as.numeric(rot_num[[nm]]))
-                  rot <- as.matrix(rot_num); rownames(rot) <- rn
-                } else {
-                  rot <- as.matrix(rot)
-                }
-              } else if (!is.matrix(rot)) {
-                rot <- as.matrix(rot)
-              }
-              # Auto‑transpose if needed using mean names as hint
-              base_vars <- names(PCA_scaling_mean())
-              rn <- rownames(rot); cn <- colnames(rot)
-              if (!is.null(base_vars) &&
-                  (is.null(rn) || !any(rn %in% base_vars)) &&
-                  (!is.null(cn) && any(cn %in% base_vars))) {
-                rot <- t(rot)
-              }
-              rot
-            }
-          }
-        },
-        PCA_dataset = PCA_dataset(),
-        PCA_summary_df = PCA_summary_df(),
-        pca_axes_max = pca_axes_max(),
-        pca_axes = pca_axes(),
-        pcax_being_used = pcax_being_used(),
-        fs_pcax_used = fs_pcax_used(),
-        final_model_PCA = final_model_PCA(),
-        rv_ao_map = shiny::reactiveValuesToList(rv_ao_map, all.names = TRUE),
-        rv_pred = { p <- shiny::reactiveValuesToList(rv_pred, all.names = TRUE); p$pending <- NULL; p },
-        poly_coeffs = as.list(POLY_COEFFS),
-        
-        LG_pred_results = LG_pred_results(),
-        LG_pred_coeffs = LG_pred_coeffs(),
-        LG_pred_confuse_results = LG_pred_confuse_results(),
-        LG_pred_scat_dat = LG_pred_scat_dat(),
-        LG_pred_standardize = LG_pred_standardize(),
-        LG_pred_thresh = LG_pred_thresh(),
-        LG_results = LG_results(),
-        LG_coeffs = LG_coeffs(),
-        LG_confuse_results = LG_confuse_results(),
-        LG_scat_dat = LG_scat_dat(),
-        LG_model = LG_model,
-        LG_thresh = LG_thresh(),
-        LG_crit_prob = LG_crit_prob(),
-        LG_standardize = LG_pred_standardize(),
-        LG_model_PCA = LG_model_PCA(),
-        LG_final_features = LG_final_features(),
-        LG_pred_table_data = LG_pred_table_data(),
-        
-        XGBCL_pred_results = XGBCL_pred_results(),
-        XGBCL_pred_coeffs = XGBCL_pred_coeffs(),
-        XGBCL_pred_confuse_results = XGBCL_pred_confuse_results(),
-        XGBCL_pred_scat_dat = XGBCL_pred_scat_dat(),
-        XGBCL_pred_standardize = XGBCL_pred_standardize(),
-        XGBCL_pred_thresh = XGBCL_pred_thresh(),
-        XGBCL_selection_results = XGBCL_selection_results(),
-        XGBCL_results = XGBCL_results(),
-        XGBCL_coeffs = XGBCL_coeffs(),
-        XGBCL_confuse_results = XGBCL_confuse_results(),
-        XGBCL_scat_dat = XGBCL_scat_dat(),
-        XGBCL_model = XGBCL_model,
-        XGBCL_thresh = XGBCL_thresh(),
-        XGBCL_crit_prob = XGBCL_crit_prob(),
-        XGBCL_standardize = XGBCL_standardize(),
-        XGBCL_model_PCA = XGBCL_model_PCA(),
-        XGBCL_final_features = XGBCL_final_features(),
-        XGBCL_pred_table_data = XGBCL_pred_table_data(),
-        XGBCL_final_data = XGBCL_final_data(),
-        Optimal_CLHP = Optimal_CLHP,
-        
-        XGB_pred_results = XGB_pred_results(),
-        XGB_pred_coeffs = XGB_pred_coeffs(),
-        XGB_pred_confuse_results = XGB_pred_confuse_results(),
-        XGB_pred_scat_dat = XGB_pred_scat_dat(),
-        XGB_pred_standardize = XGB_pred_standardize(),
-        XGB_selection_results = XGB_selection_results(),
-        XGB_results = XGB_results(),
-        XGB_coeffs = XGB_coeffs(),
-        XGB_confuse_results = XGB_confuse_results(),
-        XGB_stand = input$XGB_stand,
-        XGB_dec_crit = input$XGB_dec_crit,
-        XGB_scat_dat = XGB_scat_dat(),
-        XGB_model = XGB_model,
-        XGB_standardize = XGB_standardize(),
-        XGB_model_PCA = XGB_model_PCA(),
-        XGB_final_features = XGB_final_features(),
-        XGB_pred_table_data = XGB_pred_table_data(),
-        XGB_final_data = XGB_final_data(),
-        Optimal_HP = Optimal_HP,
-        
-        EN_pred_results = EN_pred_results(),
-        EN_pred_coeffs = EN_pred_coeffs(),
-        EN_pred_confuse_results = EN_pred_confuse_results(),
-        EN_pred_scat_dat = EN_pred_scat_dat(),
-        EN_pred_standardize = EN_pred_standardize(),
-        EN_results = EN_results(),
-        EN_coeffs = EN_coeffs(),
-        EN_confuse_results = EN_confuse_results(),
-        EN_stand = input$EN_stand,
-        EN_dec_crit = input$EN_dec_crit,
-        EN_scat_dat = EN_scat_dat(),
-        EN_model = EN_model,
-        EN_standardize = EN_standardize(),
-        EN_model_PCA = EN_model_PCA(),
-        EN_final_features = EN_final_features(),
-        EN_pred_table_data = EN_pred_table_data()
-      )
-      
-      save(save_list, file = tempFile)
-      
-      resourcePath = paste0("download_", basename(tempFile))
-      addResourcePath(resourcePath, dirname(tempFile))
-      
-      url = paste0(
-        session$clientData$url_protocol, "//",
-        session$clientData$url_hostname, ":",
-        session$clientData$url_port, "/",
-        resourcePath, "/", basename(tempFile)
-      )
-      
-      session$sendCustomMessage(type = 'download', list(
-        filename = "Project_File.RData",
-        url = url
-      ))
-    }
-  })
+  #_______________________________________________________________________ 
   
-  # Save Prediction File
-  output$save_prediction = downloadHandler(filename = function() {paste("Prediction_File.RData")}, content = function(file) {
+  # DATA IMPORT/EXPORT AND PROJECT MANAGEMENT
+  
+  # Upload excel/csv data file
+  observeEvent(input$file1, {
+    rv_import$pending_df <- NULL
+    rv_import$ext <- NULL
+    loading_project(FALSE)
     
-    save_list = list(
-      type = "Prediction",
-      Version = version,
-      temp_db = temp_db,
-      bo = bo(),
-      current_data = current_data(),
-      response_var = response_var(),
-      col_names = col_names(),
-      feat_names = feat_names(),
-      feats_being_used = feats_being_used(),
-      fs_feats_used = fs_feats_used(),
-      init_data = init_data,
-      ignored_rows = ignored_rows,
-      init_ID_format = init_ID_format,
-      date_format_string = date_format_string,
-      saved_lc_val = input$lc_val,
-      saved_rc_val = input$rc_val,
-      saved_num_axes = input$num_axes,
-      init_column_props = init_column_props,
-      column_props = column_props,
-      PCA_scaling_mean = if (isTRUE(final_model_PCA())) PCA_scaling_mean() else NULL,
-      PCA_scaling_sd   = if (isTRUE(final_model_PCA())) PCA_scaling_sd()   else NULL,
-      PCA_coefficients = {
-        if (!isTRUE(final_model_PCA())) {
+    path <- input$file1$datapath
+    ext  <- tolower(tools::file_ext(input$file1$name))
+    
+    # Read file
+    tryCatch({
+      if (ext %in% c("xlsx", "xls")) {
+        init_data <<- openxlsx::read.xlsx(path)
+      } else {
+        init_data <<- data.table::fread(path, sep = "auto", data.table = FALSE, showProgress = FALSE)
+      }
+    }, error = function(e) {
+      showNotification(paste("Error reading file:", conditionMessage(e)), type = "error")
+      init_data <<- NULL
+    })
+    
+    # Basic validations on the raw import
+    if (is.null(init_data) || ncol(init_data) < 2) {
+      showModal(modalDialog(
+        "The file must contain at least two columns (ID and response).",
+        easyClose = FALSE, footer = div(modalButton("Close"))
+      ))
+      return(invisible())
+    }
+    if (any(duplicated(init_data[, 1]))) {
+      showModal(modalDialog(
+        "The ID (Column 1) is required to have unique values, but duplicate values were found. Please remedy prior to data importation.",
+        easyClose = FALSE, footer = div(modalButton("Close"))
+      ))
+      return(invisible())
+    }
+    if (any(is.na(init_data[, 1]))) {
+      showModal(modalDialog(
+        "The ID (Column 1) has missing values. Please remedy prior to data importation.",
+        easyClose = FALSE, footer = div(modalButton("Close"))
+      ))
+      return(invisible())
+    }
+    if (any(sapply(data.frame(init_data[, -1, drop = FALSE]), function(col) !is.numeric(col)))) {
+      showModal(modalDialog(
+        "This dataset contains non-numeric data (outside of the ID column). Please remedy prior to data importation.",
+        easyClose = FALSE, footer = div(modalButton("Close"))
+      ))
+      return(invisible())
+    }
+    
+    # ID handling: always character
+    init_data[, 1] <- as.character(init_data[, 1])
+    
+    # Column props setup
+    col_props_temp <- hash()
+    for (i in seq_len(ncol(init_data))) {
+      .set(col_props_temp,
+           keys   = colnames(init_data)[i],
+           values = c(prop1 = 2, prop2 = NA, prop3 = NA, prop4 = NA))
+    }
+    init_column_props <<- col_props_temp
+    column_props <<- col_props_temp
+    ignored_rows <<- NULL
+    PCA_dataset(NULL)
+    changed_model(TRUE)
+    
+    # Proceed with ShinyVB pipeline
+    current_data(init_data)
+    col_names(colnames(init_data[, -1, drop = FALSE]))
+    
+    clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = TRUE)
+    
+    # Filter the response variable to exclude left and right-censored tags
+    exclude_values <- c(input$lc_val, input$rc_val)
+    real_responses <- na.omit(init_data[!init_data[, response_var()] %in% exclude_values, response_var()])
+    
+    updateNumericInput(session, "LG_binarize_crit_value",value = round(median(real_responses), 2),min = min(real_responses), max = max(real_responses))
+    updateNumericInput(session, "XGBCL_binarize_crit_value",value = round(median(real_responses), 2),min = min(real_responses), max = max(real_responses))
+    updateNumericInput(session, "lc_replace", value = round(min(real_responses), 3))
+    updateNumericInput(session, "rc_replace", value = round(max(real_responses), 3))
+    
+    iv$add_rule("LG_binarize_crit_value", sv_between(min(real_responses), max(real_responses)))
+    iv$add_rule("XGBCL_binarize_crit_value", sv_between(min(real_responses), max(real_responses)))
+    
+    feat_data <- init_data[, 3:ncol(init_data), drop = FALSE]
+    feats_being_used(colnames(feat_data))
+    feat_names(colnames(feat_data))
+    
+    enable("restore")
+    enable("set_column_props")
+    enable("corr_check")
+    enable("transforms")
+    enable("interacts")
+    enable("pca_check")
+    enable("run_iso_forest")
+    
+    pca_axes_max(ncol(init_data) - 2)
+    updateNumericInput(session, "num_axes", value = pca_axes_max(), max = pca_axes_max())
+    updateSelectInput(session, "set_column_props", choices = c("-", col_names()))
+    updateSelectInput(session, "rainplot", choices = c("-", col_names()))
+    updateSelectInput(session, "lineplot_feature", choices = c("-", col_names()))
+    updateSelectInput(session, "scatterx", choices = c("-", col_names()))
+    updateSelectInput(session, "scattery", choices = c("-", col_names()))
+    updateSelectInput(session, "speed", choices = c("-", col_names()))
+    updateSelectInput(session, "direct", choices = c("-", col_names()))
+    
+    current_data_page(1)
+    
+    # Render with character ID
+    renderdata(current_data(),response_var(),input$select_choice,column_props,ignored_rows,current_data_page(),output)
+    
+    clear_modeling(TRUE)
+    
+    updateTabsetPanel(session, inputId = "shinyVB", selected = "Data")
+    updateTabsetPanel(session, inputId = "data_tabs", selected = "Data Table")
+  }, ignoreInit = TRUE)
+
+  # Save Project/Prediction file
+  observeEvent(list(input$save_project, input$save_prediction), ignoreInit = TRUE, {
+    req(init_data)
+    
+    # Which button fired?
+    which <- if (input$save_project > rv_save$sp) "Project"
+    else if (input$save_prediction > rv_save$sd) "Prediction"
+    else return(invisible())
+    
+    # Update counters immediately
+    rv_save$sp <- input$save_project
+    rv_save$sd <- input$save_prediction
+    
+    save_type <- which
+    fname <- if (which == "Project") "Project_File.RData" else "Prediction_File.RData"
+    
+    # Compute PCA coefficients
+    pca_coefficients = {
+      if (!isTRUE(final_model_PCA())) {
+        NULL
+      } else {
+        rot <- PCA_coefficients()
+        if (is.null(rot)) {
           NULL
         } else {
-          rot <- PCA_coefficients()
-          if (is.null(rot)) {
-            NULL
-          } else {
-            # Coerce to numeric matrix with rownames = features, colnames = PCs
-            if (is.data.frame(rot)) {
-              key_candidates <- intersect(names(rot), c("Feature","feature","Variable","variable","Name","name","feat"))
-              key <- if (length(key_candidates)) key_candidates[1] else NULL
-              if (!is.null(key)) {
-                rn <- as.character(rot[[key]])
-                rot_num <- rot[, setdiff(names(rot), key), drop = FALSE]
-                for (nm in names(rot_num)) rot_num[[nm]] <- suppressWarnings(as.numeric(rot_num[[nm]]))
-                rot <- as.matrix(rot_num); rownames(rot) <- rn
-              } else {
-                rot <- as.matrix(rot)
-              }
-            } else if (!is.matrix(rot)) {
+          # Coerce to numeric matrix with rownames = features, colnames = PCs
+          if (is.data.frame(rot)) {
+            key_candidates <- intersect(names(rot), c("Feature","feature","Variable","variable","Name","name","feat"))
+            key <- if (length(key_candidates)) key_candidates[1] else NULL
+            if (!is.null(key)) {
+              rn <- as.character(rot[[key]])
+              rot_num <- rot[, setdiff(names(rot), key), drop = FALSE]
+              for (nm in names(rot_num)) rot_num[[nm]] <- suppressWarnings(as.numeric(rot_num[[nm]]))
+              rot <- as.matrix(rot_num); rownames(rot) <- rn
+            } else {
               rot <- as.matrix(rot)
             }
-            # Auto‑transpose if needed using mean names as hint
-            base_vars <- names(PCA_scaling_mean())
-            rn <- rownames(rot); cn <- colnames(rot)
-            if (!is.null(base_vars) &&
-                (is.null(rn) || !any(rn %in% base_vars)) &&
-                (!is.null(cn) && any(cn %in% base_vars))) {
-              rot <- t(rot)
-            }
-            rot
+          } else if (!is.matrix(rot)) {
+            rot <- as.matrix(rot)
           }
+          # Auto‑transpose if needed using mean names as hint
+          base_vars <- names(PCA_scaling_mean())
+          rn <- rownames(rot); cn <- colnames(rot)
+          if (!is.null(base_vars) &&
+              (is.null(rn) || !any(rn %in% base_vars)) &&
+              (!is.null(cn) && any(cn %in% base_vars))) {
+            rot <- t(rot)
+          }
+          rot
         }
-      },
-      PCA_dataset = PCA_dataset(),
-      PCA_summary_df = PCA_summary_df(),
-      pca_axes_max = pca_axes_max(),
-      pca_axes = pca_axes(),
-      pcax_being_used = pcax_being_used(),
-      fs_pcax_used = fs_pcax_used(),
-      final_model_PCA = final_model_PCA(),
-      rv_ao_map = shiny::reactiveValuesToList(rv_ao_map, all.names = TRUE),
-      rv_pred = { p <- shiny::reactiveValuesToList(rv_pred, all.names = TRUE); p$pending <- NULL; p },
-      poly_coeffs = as.list(POLY_COEFFS),
+      }
+    }
+    
+    # Build extras
+    extras <- list(
+      bo                   = bo(),
+      current_data         = current_data(),
+      response_var         = response_var(),
+      col_names            = col_names(),
+      feat_names           = feat_names(),
+      feats_being_used     = feats_being_used(),
+      fs_feats_used        = fs_feats_used(),
+      init_data            = init_data,
+      ignored_rows         = ignored_rows,
+      saved_lc_val         = input$lc_val,
+      saved_rc_val         = input$rc_val,
+      saved_num_axes       = input$num_axes,
+      init_column_props    = init_column_props,
+      column_props         = column_props,
+      PCA_scaling_mean     = if (isTRUE(final_model_PCA())) PCA_scaling_mean() else NULL,
+      PCA_scaling_sd       = if (isTRUE(final_model_PCA())) PCA_scaling_sd()   else NULL,
+      PCA_coefficients     = pca_coefficients,
+      PCA_dataset          = PCA_dataset(),
+      PCA_summary_df       = PCA_summary_df(),
+      pca_axes_max         = pca_axes_max(),
+      pca_axes             = pca_axes(),
+      pcax_being_used      = pcax_being_used(),
+      fs_pcax_used         = fs_pcax_used(),
+      final_model_PCA      = final_model_PCA(),
+      rv_ao_map            = reactiveValuesToList(rv_ao_map, all.names = TRUE),
+      rv_pred              = { p <- reactiveValuesToList(rv_pred, all.names = TRUE); p$pending <- NULL; p },
+      poly_coeffs          = as.list(POLY_COEFFS),
       
-      LG_pred_results = LG_pred_results(),
-      LG_pred_coeffs = LG_pred_coeffs(),
+      # LG block
+      LG_pred_results         = LG_pred_results(),
+      LG_pred_coeffs          = LG_pred_coeffs(),
       LG_pred_confuse_results = LG_pred_confuse_results(),
-      LG_pred_scat_dat = LG_pred_scat_dat(),
-      LG_pred_standardize = LG_pred_standardize(),
-      LG_pred_thresh = LG_pred_thresh(),
-      LG_results = LG_results(),
-      LG_coeffs = LG_coeffs(),
-      LG_confuse_results = LG_confuse_results(),
-      LG_scat_dat = LG_scat_dat(),
-      LG_model = LG_model,
-      LG_thresh = LG_thresh(),
-      LG_crit_prob = LG_crit_prob(),
-      LG_standardize = LG_pred_standardize(),
-      LG_model_PCA = LG_model_PCA(),
-      LG_final_features = LG_final_features(),
-      LG_pred_table_data = LG_pred_table_data(),
+      LG_pred_scat_dat        = LG_pred_scat_dat(),
+      LG_pred_standardize     = LG_pred_standardize(),
+      LG_pred_thresh          = LG_pred_thresh(),
+      LG_results              = LG_results(),
+      LG_coeffs               = LG_coeffs(),
+      LG_confuse_results      = LG_confuse_results(),
+      LG_scat_dat             = LG_scat_dat(),
+      LG_model                = LG_model,
+      LG_thresh               = LG_thresh(),
+      LG_crit_prob            = LG_crit_prob(),
+      LG_standardize          = LG_pred_standardize(),
+      LG_model_PCA            = LG_model_PCA(),
+      LG_final_features       = LG_final_features(),
+      LG_pred_table_data      = LG_pred_table_data(),
       
-      XGBCL_pred_results = XGBCL_pred_results(),
-      XGBCL_pred_coeffs = XGBCL_pred_coeffs(),
+      # XGBCL block
+      XGBCL_pred_results         = XGBCL_pred_results(),
+      XGBCL_pred_coeffs          = XGBCL_pred_coeffs(),
       XGBCL_pred_confuse_results = XGBCL_pred_confuse_results(),
-      XGBCL_pred_scat_dat = XGBCL_pred_scat_dat(),
-      XGBCL_pred_standardize = XGBCL_pred_standardize(),
-      XGBCL_pred_thresh = XGBCL_pred_thresh(),
-      XGBCL_selection_results = XGBCL_selection_results(),
-      XGBCL_results = XGBCL_results(),
-      XGBCL_coeffs = XGBCL_coeffs(),
-      XGBCL_confuse_results = XGBCL_confuse_results(),
-      XGBCL_scat_dat = XGBCL_scat_dat(),
-      XGBCL_model = XGBCL_model,
-      XGBCL_thresh = XGBCL_thresh(),
-      XGBCL_crit_prob = XGBCL_crit_prob(),
-      XGBCL_standardize = XGBCL_standardize(),
-      XGBCL_model_PCA = XGBCL_model_PCA(),
-      XGBCL_final_features = XGBCL_final_features(),
-      XGBCL_pred_table_data = XGBCL_pred_table_data(),
-      XGBCL_final_data = XGBCL_final_data(),
-      Optimal_CLHP = Optimal_CLHP,
+      XGBCL_pred_scat_dat        = XGBCL_pred_scat_dat(),
+      XGBCL_pred_standardize     = XGBCL_pred_standardize(),
+      XGBCL_pred_thresh          = XGBCL_pred_thresh(),
+      XGBCL_selection_results    = XGBCL_selection_results(),
+      XGBCL_results              = XGBCL_results(),
+      XGBCL_coeffs               = XGBCL_coeffs(),
+      XGBCL_confuse_results      = XGBCL_confuse_results(),
+      XGBCL_scat_dat             = XGBCL_scat_dat(),
+      XGBCL_model                = XGBCL_model,
+      XGBCL_thresh               = XGBCL_thresh(),
+      XGBCL_crit_prob            = XGBCL_crit_prob(),
+      XGBCL_standardize          = XGBCL_standardize(),
+      XGBCL_model_PCA            = XGBCL_model_PCA(),
+      XGBCL_final_features       = XGBCL_final_features(),
+      XGBCL_pred_table_data      = XGBCL_pred_table_data(),
+      XGBCL_final_data           = XGBCL_final_data(),
+      Optimal_CLHP               = Optimal_CLHP,
       
-      XGB_pred_results = XGB_pred_results(),
-      XGB_pred_coeffs = XGB_pred_coeffs(),
+      # XGB block
+      XGB_pred_results         = XGB_pred_results(),
+      XGB_pred_coeffs          = XGB_pred_coeffs(),
       XGB_pred_confuse_results = XGB_pred_confuse_results(),
-      XGB_pred_scat_dat = XGB_pred_scat_dat(),
-      XGB_pred_standardize = XGB_pred_standardize(),
-      XGB_selection_results = XGB_selection_results(),
-      XGB_results = XGB_results(),
-      XGB_coeffs = XGB_coeffs(),
-      XGB_confuse_results = XGB_confuse_results(),
-      XGB_stand = input$XGB_stand,
-      XGB_dec_crit = input$XGB_dec_crit,
-      XGB_scat_dat = XGB_scat_dat(),
-      XGB_model = XGB_model,
-      XGB_standardize = XGB_standardize(),
-      XGB_model_PCA = XGB_model_PCA(),
-      XGB_final_features = XGB_final_features(),
-      XGB_pred_table_data = XGB_pred_table_data(),
-      XGB_final_data = XGB_final_data(),
-      Optimal_HP = Optimal_HP,
+      XGB_pred_scat_dat        = XGB_pred_scat_dat(),
+      XGB_pred_standardize     = XGB_pred_standardize(),
+      XGB_selection_results    = XGB_selection_results(),
+      XGB_results              = XGB_results(),
+      XGB_coeffs               = XGB_coeffs(),
+      XGB_confuse_results      = XGB_confuse_results(),
+      XGB_stand                = input$XGB_stand,
+      XGB_dec_crit             = input$XGB_dec_crit,
+      XGB_scat_dat             = XGB_scat_dat(),
+      XGB_model                = XGB_model,
+      XGB_standardize          = XGB_standardize(),
+      XGB_model_PCA            = XGB_model_PCA(),
+      XGB_final_features       = XGB_final_features(),
+      XGB_pred_table_data      = XGB_pred_table_data(),
+      XGB_final_data           = XGB_final_data(),
+      Optimal_HP               = Optimal_HP,
       
-      EN_pred_results = EN_pred_results(),
-      EN_pred_coeffs = EN_pred_coeffs(),
+      # EN block
+      EN_pred_results         = EN_pred_results(),
+      EN_pred_coeffs          = EN_pred_coeffs(),
       EN_pred_confuse_results = EN_pred_confuse_results(),
-      EN_pred_scat_dat = EN_pred_scat_dat(),
-      EN_pred_standardize = EN_pred_standardize(),
-      EN_results = EN_results(),
-      EN_coeffs = EN_coeffs(),
-      EN_confuse_results = EN_confuse_results(),
-      EN_stand = input$EN_stand,
-      EN_dec_crit = input$EN_dec_crit,
-      EN_scat_dat = EN_scat_dat(),
-      EN_model = EN_model,
-      EN_standardize = EN_standardize(),
-      EN_model_PCA = EN_model_PCA(),
-      EN_final_features = EN_final_features(),
-      EN_pred_table_data = EN_pred_table_data()
+      EN_pred_scat_dat        = EN_pred_scat_dat(),
+      EN_pred_standardize     = EN_pred_standardize(),
+      EN_results              = EN_results(),
+      EN_coeffs               = EN_coeffs(),
+      EN_confuse_results      = EN_confuse_results(),
+      EN_stand                = input$EN_stand,
+      EN_dec_crit             = input$EN_dec_crit,
+      EN_scat_dat             = EN_scat_dat(),
+      EN_model                = EN_model,
+      EN_standardize          = EN_standardize(),
+      EN_model_PCA            = EN_model_PCA(),
+      EN_final_features       = EN_final_features(),
+      EN_pred_table_data      = EN_pred_table_data()
     )
     
-    save(save_list, file = file)
+    do_save(save_type, fname, temp_db = temp_db, session = session, extras = extras)
   })
-
+  
   # Load project/prediction file
-  observeEvent(input$load_file, ignoreInit = TRUE, {
+  observeEvent(input$load_saved_file, ignoreInit = TRUE, {
     
-    req(input$load_file)
+    req(input$load_saved_file)
     
     loading_project(TRUE)
     on.exit(loading_project(FALSE), add = TRUE)
     
-    load_element <- input$load_file
+    load_element <- input$load_saved_file
     temp_env <- new.env(parent = emptyenv())
     load(load_element$datapath, envir = temp_env)
     
@@ -1016,7 +649,26 @@ server= function(input,output,session) {
       }
     }
     
-    temp_db <<- sl$temp_db
+    # Restore SQL database
+    if (!is.null(sl$temp_db_dump)) {
+      # If an old connection exists, close it
+      if (exists("temp_db", inherits = TRUE)) {
+        try({
+          if (DBI::dbIsValid(temp_db)) DBI::dbDisconnect(temp_db)
+        }, silent = TRUE)
+      }
+
+      temp_db <<- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+      DBI::dbExecute(temp_db, "PRAGMA foreign_keys = ON;")
+
+      DBI::dbWithTransaction(temp_db, {
+        for (t in names(sl$temp_db_dump)) {
+          DBI::dbWriteTable(temp_db, t, sl$temp_db_dump[[t]],
+                            overwrite = TRUE, row.names = FALSE)
+        }
+      })
+    }
+
     bo(sl$bo)
     current_data(sl$current_data)
     response_var(sl$response_var)
@@ -1026,8 +678,6 @@ server= function(input,output,session) {
     fs_feats_used(sl$fs_feats_used)
     init_data <<- sl$init_data
     ignored_rows <<- sl$ignored_rows
-    init_ID_format <<- (sl$init_ID_format %||% "Date")
-    date_format_string <<- (sl$date_format_string %||% "Date")
     saved_lc_val <- sl$saved_lc_val
     saved_rc_val <- sl$saved_rc_val
     saved_num_axes <- sl$saved_num_axes
@@ -1156,33 +806,10 @@ server= function(input,output,session) {
     EN_final_features(sl$EN_final_features)
     EN_pred_table_data(sl$EN_pred_table_data)
     
-    # ID column restore (no legacy mapping)
-    # Respect the saved init_ID_format and date_format_string.
-    # - "Date": leave as saved, but if "Date_MDY_HM" + numeric, normalize to POSIXct for display
-    # - "Numeric": coerce to numeric
-    # - "Character": coerce to character
-    
-    if (identical(init_ID_format, "Date")) {
-      # Normalize saved numeric IDs if they were meant to display as M/D/YYYY HH:MM
-      if (identical(date_format_string, "Date_MDY_HM") && is.numeric(init_data[, 1])) {
-        init_data[, 1] <- lubridate::floor_date(
-          as.POSIXct(init_data[[1]] * 86400, origin = "1899-12-30", tz = Sys.timezone()),
-          unit = "minute"
-        )
-      }
-    } else if (identical(init_ID_format, "Numeric")) {
-      init_data[, 1] <- suppressWarnings(as.numeric(init_data[, 1]))
-    } else if (identical(init_ID_format, "Character")) {
-      init_data[, 1] <- as.character(init_data[, 1])
-    }
-    
     # Push updated ID column to current_data
     temp_data <- current_data()
-    temp_data[, 1] <- init_data[, 1]
+    temp_data[, 1] <- as.character(init_data[, 1])
     current_data(temp_data)
-    
-    # Reflect mode in the UI
-    updateSelectInput(session, "ID_Format", selected = init_ID_format)
     
     available <- character(0)
     if (!is.null(LG_results()))    available <- c(available, "Logistic_Regression")
@@ -1230,8 +857,7 @@ server= function(input,output,session) {
         updateSelectInput(session, "direct", choices = c("-", col_names()))
         
         current_data_page(1)
-        renderdata(current_data(), response_var(), id_var, input$select_choice,
-                   date_format_string, column_props, ignored_rows, current_data_page(), output)
+        renderdata(current_data(), response_var(), input$select_choice, column_props, ignored_rows, current_data_page(), output)
         
         output$XGBCL_optim_hp <- DT::renderDataTable(server = TRUE, {
           datatable(Optimal_CLHP, rownames = FALSE, extensions = "Buttons",
@@ -1286,7 +912,10 @@ server= function(input,output,session) {
     
   })
   
-# FEATURE CORRELATION OPTIONS
+  #_______________________________________________________________________ 
+  
+  # FEATURE CORRELATIONS
+  
   # Swap correlation output
   output$correlations_ui <- renderUI({
     if (identical(corr_choice$corr_view, "plot")) {
@@ -1387,7 +1016,6 @@ server= function(input,output,session) {
     updateTabsetPanel(session, inputId = "shinyVB",  selected = "Data")
     updateTabsetPanel(session, inputId = "data_tabs", selected = "Correlations")
   })
-  
   output$corrtable <- DT::renderDT({
     req(identical(corr_choice$corr_view, "table"))
     tab <- corr_tab(); req(!is.null(tab))
@@ -1447,12 +1075,16 @@ server= function(input,output,session) {
       tl.srt      = 45
     )
   }, height = 900, width = 900)
-
+  
+  #_______________________________________________________________________ 
+  
+  # FEATURE TRANSFORMATIONS
+  
   # Create a feature transformation data table
   observeEvent(input$transforms, ignoreInit = TRUE, {
-
+    
     clear_trans_table(drop_transforms = TRUE, drop_interactions = FALSE, drop_AO = FALSE)
-
+    
     # Prepare data (exclude ignored rows)
     cd <- current_data()
     if (!is.null(ignored_rows) && length(ignored_rows) > 0) {
@@ -1473,7 +1105,7 @@ server= function(input,output,session) {
       trans_pat <- sprintf("^(%s)", paste(escape_regex(TRANS_PREFIXES), collapse = "|"))
       feature_names <- feature_names[!grepl(trans_pat, feature_names, perl = TRUE)]
     }
-
+    
     transforms <- c("None", "Log10", "Inverse", "Square", "Square Root", "Quad Root", "Polynomial")
     
     results <- vector("list", length = length(feature_names) * length(transforms))
@@ -1512,7 +1144,7 @@ server= function(input,output,session) {
             pval <- unname(ct$p.value)
           }
         }
-
+        
         results[[k]] <- data.frame(
           Feature     = fname,
           Transform   = tf,
@@ -1836,151 +1468,55 @@ server= function(input,output,session) {
                        value = length(new_column_names) - 1,
                        max   = length(new_column_names) - 1)
     
-    renderdata(current_data(), response_var(), id_var, input$select_choice,
-               date_format_string, column_props, ignored_rows, current_data_page(), output)
+    renderdata(current_data(), response_var(), input$select_choice,column_props, ignored_rows, current_data_page(), output)
     
     # 4) Notify
-    msg <- sprintf(
-      "Transforms updated. Added: %s. Removed columns: %d.",
-      if (length(added)) paste(added, collapse = ", ") else "none",
-      removed_count
+    showNotification(
+      tags$span("Dataset updated with Selected Transformations",
+                style = "color: #222222; font-weight: 600;"),
+      type = "message",
+      duration = 2,
+      closeButton = FALSE
     )
-    showNotification(msg, type = "message")
   })
   
-  # Rebuild interactions table and render it. Set navigate=TRUE only when invoked from the UI button.
-  rebuild_interactions_table <- function(navigate = FALSE) {
-    df <- current_data()
-    if (is.null(df) || !is.data.frame(df) || ncol(df) < 3L) {
-      rv_inter$table <- NULL
-      output$interactions_table <- DT::renderDataTable(server = FALSE, {
-        DT::datatable(
-          data.frame(Message = "No data available."),
-          rownames = FALSE, selection = "none",
-          options = list(dom = 't', paging = FALSE)
-        )
-      })
-      return(invisible(NULL))
-    }
-    
-    # Exclude ignored rows (supports reactive or non-reactive form)
-    ir <- tryCatch(ignored_rows(), error = function(e) ignored_rows)
-    if (!is.null(ir) && length(ir) > 0) {
-      if (is.logical(ir) && length(ir) == nrow(df)) {
-        df <- df[!ir, , drop = FALSE]
-      } else {
-        df <- df[setdiff(seq_len(nrow(df)), as.integer(ir)), , drop = FALSE]
-      }
-    }
-    
-    # Response and base features
-    rv_name <- colnames(df)[response_var()]
-    y <- as.numeric(df[[rv_name]])
-    
-    # Use your helper to get candidates (excludes ID/response/derived; includes A/O as requested)
-    base_feats <- get_interaction_candidates(df, include_AO = TRUE)
-    if (length(base_feats) < 2L) {
-      rv_inter$table <- NULL
-      output$interactions_table <- DT::renderDataTable(server = FALSE, {
-        DT::datatable(
-          data.frame(Message = "Not enough numeric features to compute interactions."),
-          rownames = FALSE, selection = "none",
-          options = list(dom = 't', paging = FALSE)
-        )
-      })
-      return(invisible(NULL))
-    }
-    
-    # Threshold (safe default)
-    thr <- input$r_thresh
-    if (is.null(thr) || !is.finite(thr)) thr <- 0.7
-    
-    # Compute correlations for pairs i < j
-    res <- vector("list", length = 0L)
-    k <- 1L
-    for (ii in seq_len(length(base_feats) - 1L)) {
-      a <- base_feats[ii]
-      xa <- as.numeric(df[[a]])
-      for (jj in (ii + 1L):length(base_feats)) {
-        b <- base_feats[jj]
-        xb <- as.numeric(df[[b]])
-        prod <- xa * xb
-        mask <- is.finite(prod) & is.finite(y)
-        if (sum(mask) >= 3 && stats::sd(prod[mask]) > 0 && stats::sd(y[mask]) > 0) {
-          ct <- suppressWarnings(stats::cor.test(prod[mask], y[mask], method = "pearson"))
-          r  <- unname(ct$estimate)
-          p  <- unname(ct$p.value)
-          if (is.finite(r) && abs(r) >= thr) {
-            res[[k]] <- data.frame(
-              Feat1       = a,
-              Feat2       = b,
-              Correlation = as.numeric(r),
-              p_val       = as.numeric(p),
-              stringsAsFactors = FALSE
-            )
-            k <- k + 1L
-          }
-        }
-      }
-    }
-    
-    inter_tbl <- if (length(res)) do.call(rbind, res) else NULL
-    rv_inter$table <- inter_tbl
-    
-    output$interactions_table <- DT::renderDataTable(server = FALSE, {
-      if (is.null(inter_tbl) || nrow(inter_tbl) == 0) {
-        DT::datatable(
-          data.frame(Message = "No interactions exceed the threshold."),
-          rownames = FALSE, selection = "none",
-          options = list(dom = 't', paging = FALSE)
-        )
-      } else {
-        # Format columns per your primer
-        inter_tbl$Correlation <- round(inter_tbl$Correlation, 4)
-        inter_tbl$p_Value <- ifelse(
-          is.na(inter_tbl$p_val),
-          NA_character_,
-          ifelse(inter_tbl$p_val < 1e-4, "<0.0001",
-                 formatC(inter_tbl$p_val, format = "fg", digits = 4))
-        )
-        DT::datatable(
-          inter_tbl[, c("Feat1","Feat2","Correlation","p_Value")],
-          rownames  = FALSE,
-          selection = "multiple",
-          options = list(
-            autoWidth  = FALSE,
-            dom        = 'tip',
-            paging     = TRUE,
-            pageLength = 50,
-            ordering   = FALSE,
-            scrollX    = TRUE,
-            columnDefs = list(list(targets = 0:3, className = "dt-center"))
-          )
-        )
-      }
-    })
-    
-    if (isTRUE(navigate)) {
-      updateTabsetPanel(session, inputId = 'shinyVB',  selected = 'Data')
-      updateTabsetPanel(session, inputId = 'data_tabs', selected = "Interactions")
-    }
-    
-    invisible(NULL)
-  }
+  #_______________________________________________________________________ 
   
-  # Trigger when user opens Interactions UI
-  observeEvent(input$interacts, ignoreInit = TRUE, {
-    rebuild_interactions_table(navigate = TRUE)
+  # FEATURE INTERACTIONS
+  
+  # Build interactions table
+  observeEvent(input$interacts, {
+    
+    build_interactions(
+      df            = current_data(),
+      response_idx  = response_var(),
+      ignored       = ignored_rows,
+      threshold     = input$r_thresh,
+      rv_inter      = rv_inter,
+      output        = output,
+      session       = session,
+      navigate      = TRUE
+    )
   })
   
   thr_debounced <- shiny::debounce(reactive(input$r_thresh), 100)
   
   # Rebuild on threshold changes
   observeEvent(thr_debounced(), ignoreInit = TRUE, {
-    rebuild_interactions_table(navigate = FALSE)
+    
+    build_interactions(
+      df            = current_data(),
+      response_idx  = response_var(),
+      ignored       = ignored_rows,
+      threshold     = input$r_thresh,
+      rv_inter      = rv_inter,
+      output        = output,
+      session       = session,
+      navigate      = TRUE
+    )
   })
   
-  # Apply (add/remove) selected interactions to the data table
+  # Apply (add/remove) selected interactions to the main data table
   observeEvent(input$add_interactions, {
     inter_tbl <- rv_inter$table
     if (is.null(inter_tbl) || !is.data.frame(inter_tbl) || nrow(inter_tbl) == 0L) {
@@ -2106,18 +1642,25 @@ server= function(input,output,session) {
                        value = length(new_column_names) - 1,
                        max   = length(new_column_names) - 1)
     
-    renderdata(current_data(), response_var(), id_var, input$select_choice,
-               date_format_string, column_props, ignored_rows, current_data_page(), output)
+    renderdata(current_data(), response_var(), input$select_choice,column_props, ignored_rows, current_data_page(), output)
     
     # Summary notification
     if (n_added + n_updated + n_removed == 0L) {
-      showNotification("No interaction changes applied.", type = "message")
+      showNotification("No interaction changes applied.", type = "message",duration=2,closeButton = FALSE)
     } else {
-      showNotification(sprintf("Interactions applied. Added: %d, Updated: %d, Removed: %d",
-                               n_added, n_updated, n_removed),
-                       type = "message")
+      showNotification(
+        tags$span("Dataset updated with Selected Interactions",
+                  style = "color: #222222; font-weight: 600;"),
+        type = "message",
+        duration = 2,
+        closeButton = FALSE
+      )
     }
   })
+  
+  #_______________________________________________________________________ 
+  
+  # PRINCIPAL COMPONENTS
   
   # Create PCA dataset for later analysis
   observeEvent(input$pca_check, ignoreInit = TRUE, {
@@ -2172,16 +1715,11 @@ server= function(input,output,session) {
     pcs <- as.data.frame(pca_result$x[, seq_len(n_axes), drop = FALSE], check.names = FALSE)
     colnames(pcs) <- paste0("PC", seq_len(n_axes))
     
-    # Build the PCA dataset: ID + Response + PCs (no need for date_format_string branching)
+    # Build the PCA dataset: ID + Response + PCs
     id_idx   <- 1L
     resp_idx <- response_var()
-    PCA_data <- cbind(
-      data[, id_idx,   drop = FALSE],
-      data[, resp_idx, drop = FALSE],
-      pcs
-    )
+    PCA_data <- cbind(data[, id_idx,   drop = FALSE],data[, resp_idx, drop = FALSE],pcs)
     colnames(PCA_data)[1:2] <- c(colnames(data)[id_idx], colnames(data)[resp_idx])
-    
     PCA_dataset(PCA_data)
     
     # Axes bookkeeping
@@ -2215,18 +1753,18 @@ server= function(input,output,session) {
     if (!is.null(PCA_dataset())) {
       
       output$PCA_coeffs = DT::renderDataTable(server = T, {data = datatable(PCA_coefficients(),rownames = F,selection =
-                    list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                    list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                    className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                              list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                           "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$PCA_summary = DT::renderDataTable(server = T, {data = datatable(PCA_summary_df(),rownames = F,selection =
-                    list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-                    list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-                    className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-                    "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                               list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                               list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                 className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                            "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
-      renderPCAdata(PCA_dataset(),date_format_string,output)
+      renderPCAdata(PCA_dataset(),output)
       
       refresh_trigger(FALSE)
       
@@ -2234,7 +1772,7 @@ server= function(input,output,session) {
       
       output$PCA_coeffs = NULL
       output$PCA_summary = NULL
-      renderPCAdata(PCA_dataset(),date_format_string,output)
+      renderPCAdata(PCA_dataset(),output)
       refresh_trigger(FALSE)
     }
   })
@@ -2244,7 +1782,11 @@ server= function(input,output,session) {
     iv$add_rule("num_axes", sv_between(2,pca_axes_max()))
   })
   
-  # Toggling dataset manipulation options
+  #_______________________________________________________________________ 
+  
+  # DATASET MANIPULATION
+  
+  # Toggling ignore/enable row buttons
   observeEvent(input$select_choice, ignoreInit = T, {
     
     if (input$select_choice == "D/E_Rows") {
@@ -2255,7 +1797,7 @@ server= function(input,output,session) {
       disable("enable_rows")
     }
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+    renderdata(current_data(),response_var(),input$select_choice,column_props,ignored_rows,current_data_page(),output)
   })
   
   # Provide dataset cell editing
@@ -2273,7 +1815,7 @@ server= function(input,output,session) {
     
     current_data(temp_data)
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+    renderdata(current_data(),response_var(),input$select_choice,column_props,ignored_rows,current_data_page(),output)
   })
   
   # Change the response variable
@@ -2372,8 +1914,7 @@ server= function(input,output,session) {
     updateNumericInput(session, "lc_replace", value = rmin)
     updateNumericInput(session, "rc_replace", value = rmax)
     
-    renderdata(current_data(), response_var(), id_var, input$select_choice,
-               date_format_string, column_props, ignored_rows, current_data_page(), output)
+    renderdata(current_data(), response_var(),input$select_choice,column_props, ignored_rows, current_data_page(), output)
     
     # Reset PCA-related state
     pca_axes_max(max(0L, ncol(init_data) - 2L))
@@ -2406,10 +1947,8 @@ server= function(input,output,session) {
     ignored_rows <<- if (length(new_ignored)) new_ignored else NULL
     
     # Re-render
-    renderdata(current_data(), response_var(), id_var, input$select_choice,
-               date_format_string, column_props, ignored_rows, current_data_page(), output)
+    renderdata(current_data(), response_var(), input$select_choice,column_props, ignored_rows, current_data_page(), output)
   })
-  
   observeEvent(input$enable_rows, ignoreInit = TRUE, {
     # Drop transformed + interaction + A/O columns
     clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = FALSE)
@@ -2429,8 +1968,7 @@ server= function(input,output,session) {
     ignored_rows <<- if (length(new_ignored)) new_ignored else NULL
     
     # Re-render
-    renderdata(current_data(), response_var(), id_var, input$select_choice,
-               date_format_string, column_props, ignored_rows, current_data_page(), output)
+    renderdata(current_data(), response_var(), input$select_choice,column_props, ignored_rows, current_data_page(), output)
   })
   
   # Restore the original dataset
@@ -2439,21 +1977,6 @@ server= function(input,output,session) {
     response_var(2)
     
     clear_trans_table(drop_transforms = TRUE, drop_interactions = TRUE, drop_AO = TRUE)
-    
-    if (init_ID_format == "YMD") {
-      init_data[,1] = ymd(init_data[,1])
-      date_format_string <<- "toLocaleDateString"
-    } else if (init_ID_format == "MDY") {
-      init_data[,1] = mdy(init_data[,1])
-      date_format_string <<- "toLocaleDateString"
-    } else if (init_ID_format == "MDYHM") {
-      init_data[,1] = parse_date_time(init_data[,1],c('%m/%d/%y %H:%M'),exact=TRUE)
-      date_format_string <<- "toLocaleString"
-    } else if (init_ID_format == "Character") {
-      date_format_string <<- "Character"
-    } else if (init_ID_format == "Numeric") {
-      date_format_string <<- "Numeric"
-    }
     
     temp_data = init_data[,3:ncol(init_data)]
     
@@ -2480,8 +2003,8 @@ server= function(input,output,session) {
     
     current_data_page(1)
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
-    renderPCAdata(PCA_dataset(),date_format_string,output)
+    renderdata(current_data(),response_var(),input$select_choice,column_props,ignored_rows,current_data_page(),output)
+    renderPCAdata(PCA_dataset(),output)
     
     clear_modeling(TRUE)
     
@@ -2687,7 +2210,7 @@ server= function(input,output,session) {
     # .set(column_props,keys=input$set_column_props,values=c(input$sig_digies,values(column_props,keys=input$set_column_props)[2],
     #         values(column_props,keys=input$set_column_props)[3],values(column_props,keys=input$set_column_props)[4]))
     
-    renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+    renderdata(current_data(),response_var(),input$select_choice,column_props,ignored_rows,current_data_page(),output)
     
   })
   
@@ -2762,9 +2285,9 @@ server= function(input,output,session) {
     iso_results[,6] = round((iso_results[,2] * iso_results[,3] * iso_results[,4] * iso_results[,5])^0.25 - 0.7071,3)
     
     output$iso_leverage = DT::renderDataTable(server = T, {data = datatable(iso_results,rownames = F,selection = list(selection = "multiple",
-                      selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
-                      buttons = c('copy', 'csv', 'excel'),pageLength = num_rows_per_page,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-                      initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
+                                                                                                                      selected = list(rows = NULL),target = "row"),editable = F,extensions="Buttons",options = list(paging = TRUE,dom="ltBp",
+                                                                                                                                                                                                                    buttons = c('copy', 'csv', 'excel'),pageLength = num_rows_per_page,scrollY = TRUE,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                                                                                                                                                                                                                    initComplete =JS("function(settings, json) {","$(this.api().table().header()).css({'background-color':'#073744', 'color': '#fff'});","}")))})
     
     updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
     updateTabsetPanel(session, inputId = 'data_tabs', selected = 'IsoForest Leverage')
@@ -2780,11 +2303,15 @@ server= function(input,output,session) {
     
     if (current_page != current_data_page()) {
       current_data_page(current_page)
-      renderdata(current_data(),response_var(),id_var,input$select_choice,date_format_string,column_props,ignored_rows,current_data_page(),output)
+      renderdata(current_data(),response_var(),input$select_choice,column_props,ignored_rows,current_data_page(),output)
     }
   })
   
-  # Plotting functions
+  #_______________________________________________________________________ 
+  
+  # PLOTTING
+  
+  # Censored data options
   observeEvent(input$cens_choice, ignoreInit = T, {
     
     if (input$rainplot == colnames(current_data())[response_var()] && last_plot() == "raincloud") {
@@ -2797,7 +2324,6 @@ server= function(input,output,session) {
       return()
     }
   })
-  
   observeEvent(input$lc_replace, ignoreInit = T, {
     
     if (input$rainplot == colnames(current_data())[response_var()] && last_plot() == "raincloud") {
@@ -2810,7 +2336,6 @@ server= function(input,output,session) {
       return()
     }
   })
-  
   observeEvent(input$rc_replace, ignoreInit = T, {
     
     if (input$rainplot == colnames(current_data())[response_var()] && last_plot() == "raincloud") {
@@ -2824,6 +2349,7 @@ server= function(input,output,session) {
     }
   })
   
+  # Raincloud Plots
   observeEvent(input$rainplot, ignoreInit = T, {
     
     if (input$rainplot != "-") {
@@ -2847,7 +2373,7 @@ server= function(input,output,session) {
       rain_data1 = cbind(rain_data0[,id_var],rain_data0[,input$rainplot])
       colnames(rain_data1) = c("ID",input$rainplot)
       
-      output$rainplot = renderPlot({raincloud(rain_data1,date_format_string)})
+      output$rainplot = renderPlot({raincloud(rain_data1)})
       
       last_plot("raincloud")
       
@@ -2855,7 +2381,6 @@ server= function(input,output,session) {
       updateTabsetPanel(session, inputId = 'data_tabs', selected = "Raincloud")
     }
   })
-  
   observeEvent(redraw_rainplot(), ignoreInit = T, {
     
     if (input$rainplot != "-") {
@@ -2879,7 +2404,7 @@ server= function(input,output,session) {
       rain_data1 = cbind(rain_data0[,id_var],rain_data0[,input$rainplot])
       colnames(rain_data1) = c("ID",input$rainplot)
       
-      output$rainplot = renderPlot({raincloud(rain_data1,date_format_string)})
+      output$rainplot = renderPlot({raincloud(rain_data1)})
       
       updateTabsetPanel(session, inputId = 'shinyVB', selected = 'Data')
       updateTabsetPanel(session, inputId = 'data_tabs', selected = "Raincloud")
@@ -2889,7 +2414,9 @@ server= function(input,output,session) {
     }
   })
   
+  # Lineplots
   observeEvent(input$lineplot_feature, ignoreInit = TRUE, {
+    
     req(input$lineplot_feature, input$lineplot_feature != "-")
     
     line_data0 <- if (is.null(ignored_rows)) current_data() else current_data()[-ignored_rows, , drop = FALSE]
@@ -2909,14 +2436,13 @@ server= function(input,output,session) {
     line_data1 <- line_data0[, c(1, idx), drop = FALSE]
     
     output$lineplott <- renderPlotly({
-      lineplot(line_data1, input$lineplot_feature, date_format_string)
+      lineplot(line_data1, input$lineplot_feature)
     })
     
     last_plot("lineplot_feature")
     updateTabsetPanel(session, inputId = "shinyVB", selected = "Data")
     updateTabsetPanel(session, inputId = "data_tabs", selected = "Line Plot")
   })
-  
   observeEvent(redraw_lineplot(), ignoreInit = TRUE, {
     req(input$lineplot_feature, input$lineplot_feature != "-")
     
@@ -2935,7 +2461,7 @@ server= function(input,output,session) {
     line_data1 <- line_data0[, c(1, idx), drop = FALSE]
     
     output$lineplott <- renderPlotly({
-      lineplot(line_data1, input$lineplot_feature, date_format_string)
+      lineplot(line_data1, input$lineplot_feature)
     })
     
     updateTabsetPanel(session, inputId = "shinyVB", selected = "Data")
@@ -2945,6 +2471,7 @@ server= function(input,output,session) {
     last_plot("lineplot_feature")
   })
   
+  # Scatterplots
   observeEvent(input$scatterx, ignoreInit = T, {
     
     if (input$scatterx != "-" & input$scattery!= "-") {
@@ -2977,7 +2504,6 @@ server= function(input,output,session) {
       
     }
   })
-  
   observeEvent(input$scattery, ignoreInit = T, {
     
     if (input$scatterx != "-" & input$scattery!= "-") {
@@ -3009,7 +2535,6 @@ server= function(input,output,session) {
       updateTabsetPanel(session, inputId = 'data_tabs', selected = 'Scatterplot')
     }
   })
-  
   observeEvent(redraw_scatplot(), ignoreInit = T, {
     
     if (input$scatterx != "-" & input$scattery!= "-") {
@@ -3042,6 +2567,10 @@ server= function(input,output,session) {
       redraw_scatplot(FALSE)
     }
   })
+  
+  #_______________________________________________________________________ 
+  
+  # ALONGSHORE/ONSHORE COMPONENTS
   
   # Update A/O component column names
   observeEvent(input$component_type, {
@@ -3137,7 +2666,7 @@ server= function(input,output,session) {
       
       clear_modeling(TRUE)
       
-      renderdata(current_data(), response_var(), id_var, input$select_choice, date_format_string, column_props, ignored_rows, current_data_page(), output)
+      renderdata(current_data(), response_var(),input$select_choice,column_props, ignored_rows, current_data_page(), output)
       
     } else {
       showModal(modalDialog(
@@ -3147,25 +2676,9 @@ server= function(input,output,session) {
     }
   })
   
-  # Toggle between regular features and PCA datasets
-  observeEvent(input$use_pca_data, ignoreInit = T, {
-    
-    changed_model(TRUE)
-    
-    if (input$use_pca_data) {
-      
-      shinyjs::disable("feats_to_use")
-      shinyjs::enable("pcax_to_use")
-      
-    } else {
-      
-      shinyjs::enable("feats_to_use")
-      shinyjs::disable("pcax_to_use")
-    }
-    
-    # clear_modeling(TRUE)
-    
-  })
+  #_______________________________________________________________________ 
+  
+  # MISCELLANEOUS MODELING TAB STUFF
   
   # Perform book-keeping functions when the "Modeling" tab is selected
   observeEvent(input$shinyVB, ignoreInit = T, {
@@ -3226,7 +2739,27 @@ server= function(input,output,session) {
     }
   })
   
-  #Select All/Deselect All features for modeling
+  # Toggle between raw features and PCA datasets
+  observeEvent(input$use_pca_data, ignoreInit = T, {
+    
+    changed_model(TRUE)
+    
+    if (input$use_pca_data) {
+      
+      shinyjs::disable("feats_to_use")
+      shinyjs::enable("pcax_to_use")
+      
+    } else {
+      
+      shinyjs::enable("feats_to_use")
+      shinyjs::disable("pcax_to_use")
+    }
+    
+    # clear_modeling(TRUE)
+    
+  })
+
+  #Select/Deselect all features for modeling
   observeEvent(input$feats_select, ignoreInit = TRUE, {
     # If PCA is active and feats_to_use is disabled, do nothing
     if (isTRUE(input$use_pca_data)) return(invisible(NULL))
@@ -3317,12 +2850,16 @@ server= function(input,output,session) {
     
   })
   
-  # Clear output based on non-reactive variables
+  # Clear xgboost output based on non-reactive variables
   observeEvent(refresh_trigger(), ignoreInit = TRUE, {
     output$XGBCL_optim_hp = NULL
     output$XGB_optim_hp = NULL
     refresh_trigger(FALSE)
   })
+
+  #_______________________________________________________________________
+  
+  # LOGISTIC REGRESSION PIPELINES
   
   # LG predictions
   debounced_LG_pred_dc = debounce(reactive(input$LG_pred_dc), plot_delay)
@@ -3524,26 +3061,26 @@ server= function(input,output,session) {
       output$LG_preds <- DT::renderDataTable(server = TRUE, {
         df <- LG_pred_results()
         names(df)[2] <- "Exceedance"
-        model_dt(df, date_format_string, num_rows_per_page)
+        model_dt(df,num_rows_per_page)
       })
       
       output$LG_pred_coeffs = DT::renderDataTable(server = T, {data = datatable(LG_pred_coeffs(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-                      target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
-                      paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-                      initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                               target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                                paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                                                                                                                                                                                                                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       x_name = colnames(LG_pred_scat_dat())[[2]]
       y_name = colnames(LG_pred_scat_dat())[[3]]
       
       output$LG_pred_scatplot = renderPlot(ggplot(LG_pred_scat_dat(), aes(x=LG_pred_scat_dat()[,3], fill=as.factor(LG_pred_scat_dat()[,2]))) +
-        geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
-         scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
-         geom_vline(xintercept = debounced_LG_pred_dc(), linetype = "dashed", color = "darkgreen") +
-         labs(x = "Predicted Probability", y = "Density", fill="OBS") +
-         theme_bw() +
-         theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
-         theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
-         theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+                                             geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
+                                             scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                                             geom_vline(xintercept = debounced_LG_pred_dc(), linetype = "dashed", color = "darkgreen") +
+                                             labs(x = "Predicted Probability", y = "Density", fill="OBS") +
+                                             theme_bw() +
+                                             theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                                             theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                                             theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
       LG_pred_confuse_results(confuse(LG_pred_scat_dat()[,2:3],0.5,debounced_LG_pred_dc()))
       
@@ -3564,15 +3101,15 @@ server= function(input,output,session) {
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$LG_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-          list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
-          options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-          columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                                   list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
+                                                                                 options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                                columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
           {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$LG_pred_confuse_text = renderText({paste0("Sensitivity = ",round(LG_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-          round(LG_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_pred_confuse_results()$Accuracy,3),
-          "; Positive F1 = ",round(PF1_score,3),
-          "; Negative F1 = ",round(NF1_score,3))})
+                                                       round(LG_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_pred_confuse_results()$Accuracy,3),
+                                                       "; Positive F1 = ",round(PF1_score,3),
+                                                       "; Negative F1 = ",round(NF1_score,3))})
       
       refresh_trigger(FALSE)
       
@@ -3671,7 +3208,7 @@ server= function(input,output,session) {
       
       # fit training model
       logreg_model = glmnet(x=as.matrix(modeling_data[,-1]),modeling_data[,1],lambda=lambda, alpha=alpha, na.action="na.omit",family="binomial",
-                     type.measure=input$LG_eval,standardize=input$LG_standard,intercept=TRUE)
+                            type.measure=input$LG_eval,standardize=input$LG_standard,intercept=TRUE)
       
       LG_model <<- logreg_model
       
@@ -3687,7 +3224,7 @@ server= function(input,output,session) {
           fitted_coeffs[h,2] = 0
         }
       }
-
+      
       fitted_coeffs[,3] = round(exp(fitted_coeffs[,2]),4)
       # fitted_coeffs[1,3] = NA
       colnames(fitted_coeffs) = c("Feature","Coefficient","Odds Ratio")
@@ -3703,7 +3240,7 @@ server= function(input,output,session) {
       
       colnames(fitted_model_results) = c(colnames(data0)[1],colnames(data0)[rv],"Fitted_Prob",feats_to_use)
       LG_results(fitted_model_results[order(fitted_model_results[,1]),])
-
+      
       LG_scat_dat(LG_results()[,1:3])
       
       LG_confuse_results(confuse(LG_scat_dat()[,2:3],0.5,input$LG_fit_dc))
@@ -3726,26 +3263,26 @@ server= function(input,output,session) {
       output$LG_fits <- DT::renderDataTable(server = TRUE, {
         df <- LG_results()
         names(df)[2] <- "Exceedance"
-        model_dt(df, date_format_string, num_rows_per_page)
+        model_dt(df,num_rows_per_page)
       })
       
       output$LG_coeffs = DT::renderDataTable(server = T, {data = datatable(LG_coeffs(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-          target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
-          paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-          initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                     target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                      paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                                                                                                                                                                                                      initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       x_name = colnames(LG_scat_dat())[[2]]
       y_name = colnames(LG_scat_dat())[[3]]
       
       output$LG_scatplot = renderPlot(ggplot(LG_scat_dat(), aes(x=LG_scat_dat()[,3], fill=as.factor(LG_scat_dat()[,2]))) +
-          geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
-          scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
-          geom_vline(xintercept = debounced_LG_fit_dc(), linetype = "dashed", color = "darkgreen") +
-          labs(x = "Fitted Probability", y = "Density", fill="OBS") +
-          theme_bw() +
-          theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
-          theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
-          theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+                                        geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
+                                        scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                                        geom_vline(xintercept = debounced_LG_fit_dc(), linetype = "dashed", color = "darkgreen") +
+                                        labs(x = "Fitted Probability", y = "Density", fill="OBS") +
+                                        theme_bw() +
+                                        theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                                        theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                                        theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
       
       LG_confuse_results(confuse(LG_scat_dat()[,2:3],debounced_LG_fit_dc(),debounced_LG_fit_dc()))
@@ -3767,15 +3304,15 @@ server= function(input,output,session) {
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$LG_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-          list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
-          options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-          columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                              list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
+                                                                            options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                           columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
           {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$LG_confuse_text = renderText({paste0("Sensitivity = ",round(LG_confuse_results()$Sensitivity,3),"; Specificity = ",
-          round(LG_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_confuse_results()$Accuracy,3),
-          "; Positive F1 = ",round(PF1_score,3),
-          "; Negative F1 = ",round(NF1_score,3))})
+                                                  round(LG_confuse_results()$Specificity,3),"; Accuracy = ",round(LG_confuse_results()$Accuracy,3),
+                                                  "; Positive F1 = ",round(PF1_score,3),
+                                                  "; Negative F1 = ",round(NF1_score,3))})
       
       refresh_trigger(FALSE)
       
@@ -3790,13 +3327,17 @@ server= function(input,output,session) {
     }
   })
   
+  #_______________________________________________________________________
+  
+  # XGBOOST CLASSIFICATION PIPELINES
+  
   # XGBCL HP optimization
   observeEvent(c(input$XGBCL_optimize_HP,refresh_XGBCL_Optim_HP()), ignoreInit = T, {
     
     output$XGBCL_optim_hp = DT::renderDataTable(server=T,{data = datatable(t(Optimal_CLHP),rownames=T,colnames=NULL,extensions='Buttons',selection=list(selected =
-          list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
-          scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-          initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                                                          list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
+                                                                                                                                                                                                                                                 scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                                                                                 initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
     
     showModal(modalDialog(title="HP Optimization", card(
       fluidRow(
@@ -4048,10 +3589,10 @@ server= function(input,output,session) {
       
       output$XGBCL_select = DT::renderDataTable(server=T,{
         data = datatable(XGBCL_selection_results(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-                  target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = num_rows_per_page,scrollX = F,
-                  scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-                  initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
-        formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
+                                                                             target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = num_rows_per_page,scrollX = F,
+                                                                                                                                                           scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                           initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
+          formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
         
         data$x$data[[1]] = as.numeric(data$x$data[[1]])
         data$x$data[[3]] = as.numeric(data$x$data[[3]])
@@ -4163,11 +3704,11 @@ server= function(input,output,session) {
       }
       
       xgbcl_pred_results = xgbcl_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$XGBCL_eval,input$lc_val,input$rc_val,input$lc_lowval,
-        input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
-        input$XGBCL_standard,xgbcl_tree_method_set(),xgbcl_booster_set(),dartcl_normalize_type_set(),dartcl_sample_type_set(),
-        ratecl_drop_set(),skipcl_drop_set(),Optimal_CLHP$eta,Optimal_CLHP$gamma,Optimal_CLHP$max_depth,
-        Optimal_CLHP$min_child_weight,Optimal_CLHP$subsample,Optimal_CLHP$colsample_bytree,Optimal_CLHP$nrounds,
-        input$XGBCL_binarize,input$XGBCL_binarize_crit_value)
+                                              input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
+                                              input$XGBCL_standard,xgbcl_tree_method_set(),xgbcl_booster_set(),dartcl_normalize_type_set(),dartcl_sample_type_set(),
+                                              ratecl_drop_set(),skipcl_drop_set(),Optimal_CLHP$eta,Optimal_CLHP$gamma,Optimal_CLHP$max_depth,
+                                              Optimal_CLHP$min_child_weight,Optimal_CLHP$subsample,Optimal_CLHP$colsample_bytree,Optimal_CLHP$nrounds,
+                                              input$XGBCL_binarize,input$XGBCL_binarize_crit_value)
       
       XGBCL_pred_results(data.frame(xgbcl_pred_results[[1]]))
       
@@ -4198,24 +3739,24 @@ server= function(input,output,session) {
       output$XGBCL_predictions <- DT::renderDataTable(server = TRUE, {
         df <- XGBCL_pred_results()
         names(df)[2] <- "Exceedance"
-        model_dt(df, date_format_string, num_rows_per_page)
+        model_dt(df,num_rows_per_page)
       })
       
       output$XGBCL_pred_shapes = DT::renderDataTable(server = T, {data = datatable(XGBCL_pred_coeffs(),rownames = F,selection =
-          list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-          list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-          className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-          "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                     list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                                     list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                       className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                                  "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGBCL_pred_scatplot = renderPlot(ggplot(XGBCL_pred_scat_dat(), aes(x=XGBCL_pred_scat_dat()[,3], fill=as.factor(XGBCL_pred_scat_dat()[,2]))) +
-          geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
-          scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
-          geom_vline(xintercept = debounced_XGBCL_pred_dc(), linetype = "dashed", color = "darkgreen") +
-          labs(x = "Predicted Probability", y = "Density", fill="OBS") +
-          theme_bw() +
-          theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
-          theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
-          theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+                                                geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
+                                                scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                                                geom_vline(xintercept = debounced_XGBCL_pred_dc(), linetype = "dashed", color = "darkgreen") +
+                                                labs(x = "Predicted Probability", y = "Density", fill="OBS") +
+                                                theme_bw() +
+                                                theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                                                theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                                                theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
       XGBCL_pred_confuse_results(confuse(XGBCL_pred_scat_dat()[,2:3],debounced_XGBCL_pred_dc(),debounced_XGBCL_pred_dc()))
       
@@ -4236,19 +3777,19 @@ server= function(input,output,session) {
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$XGBCL_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-                      options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-                      columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                                      list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
+                                                                                    options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                                   columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
                       {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGBCL_pred_confuse_text = renderText({paste0("Sensitivity = ",round(XGBCL_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-                      round(XGBCL_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_pred_confuse_results()$Accuracy,3),
-                      "; Positive F1 = ",round(PF1_score,3),
-                      "; Negative F1 = ",round(NF1_score,3))})
+                                                          round(XGBCL_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_pred_confuse_results()$Accuracy,3),
+                                                          "; Positive F1 = ",round(PF1_score,3),
+                                                          "; Negative F1 = ",round(NF1_score,3))})
       
       output$XGBCL_used_hp_pred <- DT::renderDataTable(server = TRUE, {
         x <- Optimal_CLHP
-
+        
         if (inherits(x, "tbl_df")) x <- as.data.frame(x)
         
         if (is.null(dim(x))) {
@@ -4448,26 +3989,26 @@ server= function(input,output,session) {
     if (!is.null(XGBCL_results())) {
       
       output$XGBCL_shapes = DT::renderDataTable(server = T, {data = datatable(XGBCL_coeffs(),rownames = F,selection =
-        list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-        list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-        className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-        "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                                list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                  className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                             "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGBCL_fits <- DT::renderDataTable(server = TRUE, {
         df <- XGBCL_results()
         names(df)[2] <- "Exceedance"
-        model_dt(df, date_format_string, num_rows_per_page)
+        model_dt(df,num_rows_per_page)
       })
       
       output$XGBCL_scatplot = renderPlot(ggplot(XGBCL_scat_dat(), aes(x=XGBCL_scat_dat()[,3], fill=as.factor(XGBCL_scat_dat()[,2]))) +
-         geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
-         scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
-         geom_vline(xintercept = debounced_XGBCL_dec_crit(), linetype = "dashed", color = "darkgreen") +
-         labs(x = "Fitted Probability", y = "Density", fill="OBS") +
-         theme_bw() +
-         theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
-         theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
-         theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
+                                           geom_density(alpha = 0.6, color = "black", linewidth = 0.5) +
+                                           scale_fill_manual(values = c("0" = "gray", "1" = "cadetblue")) +
+                                           geom_vline(xintercept = debounced_XGBCL_dec_crit(), linetype = "dashed", color = "darkgreen") +
+                                           labs(x = "Fitted Probability", y = "Density", fill="OBS") +
+                                           theme_bw() +
+                                           theme(panel.grid.minor = element_line(linewidth = 0.1), panel.grid.major = element_line(linewidth = 0.1)) +
+                                           theme(axis.text=element_text(size=16, face="bold"),axis.title=element_text(size=20,face="bold")) +
+                                           theme(legend.position.inside = c(0.75, 0.9),legend.text = element_text(size=14),legend.title=element_text(size=16)))
       
       XGBCL_confuse_results(confuse(XGBCL_scat_dat()[,2:3],debounced_XGBCL_dec_crit(),debounced_XGBCL_dec_crit()))
       
@@ -4488,15 +4029,15 @@ server= function(input,output,session) {
       colnames(xgbcl_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$XGBCL_confuse = DT::renderDataTable(server = T, {data = datatable(xgbcl_confuse_table,rownames = F,selection = 
-          list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
-          options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-          columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                                 list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
+                                                                               options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                              columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
           {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGBCL_confuse_text = renderText({paste0("Sensitivity = ",round(XGBCL_confuse_results()$Sensitivity,3),"; Specificity = ",
-          round(XGBCL_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_confuse_results()$Accuracy,3),
-          "; Positive F1 = ",round(PF1_score,3),
-          "; Negative F1 = ",round(NF1_score,3))})
+                                                     round(XGBCL_confuse_results()$Specificity,3),"; Accuracy = ",round(XGBCL_confuse_results()$Accuracy,3),
+                                                     "; Positive F1 = ",round(PF1_score,3),
+                                                     "; Negative F1 = ",round(NF1_score,3))})
       
       output$XGBCL_used_hp <- DT::renderDataTable(server = TRUE, {
         x <- Optimal_CLHP
@@ -4867,6 +4408,10 @@ server= function(input,output,session) {
     ))
   })
   
+  #_______________________________________________________________________
+  
+  # XGBOOST PIPELINES
+  
   # XGB feature Selection
   observeEvent(input$run_XGB_select, ignoreInit = T, {
     
@@ -4963,9 +4508,9 @@ server= function(input,output,session) {
       
       output$XGB_select = DT::renderDataTable(server=T,{
         data = datatable(XGB_selection_results(),rownames=F,selection=list(selected = list(rows = NULL, cols = NULL),
-              target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = num_rows_per_page,scrollX = F,
-              scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-              initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
+                                                                           target = "row",mode="single"),editable=F,extensions="Buttons", options = list(autoWidth=F,dom='tB',paging = F,pageLength = num_rows_per_page,scrollX = F,
+                                                                                                                                                         scrollY = TRUE,buttons = c('copy', 'csv', 'excel'),columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                         initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}"))) %>%
           formatRound(columns=c(1,3:6), digits=c(0,4,4,4,4))
         
         data$x$data[[1]] = as.numeric(data$x$data[[1]])
@@ -5041,9 +4586,9 @@ server= function(input,output,session) {
   observeEvent(c(input$XGB_optimize_HP,refresh_XGB_Optim_HP()), ignoreInit = T, {
     
     output$XGB_optim_hp = DT::renderDataTable(server=T,{data = datatable(t(Optimal_HP),rownames=T,colnames=NULL,extensions='Buttons',selection=list(selected =
-              list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
-              scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
-              initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                                                      list(rows = NULL, cols = NULL),target = "row",mode="single"),editable=F,options = list(autoWidth=F,dom='t',paging = F,scrollX = F,
+                                                                                                                                                                                                                                             scrollY = F,columnDefs = list(list(className = 'dt-center',orderable=T,targets='_all')),
+                                                                                                                                                                                                                                             initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
     
     showModal(modalDialog(title="HP Optimization", card(
       fluidRow(
@@ -5223,9 +4768,9 @@ server= function(input,output,session) {
     }
     
     xgb_pred_results = xgb_call_predict(data,rv,id_var,input$model_seed,ignored_rows,feats_to_use,input$lc_val,input$rc_val,input$lc_lowval,
-      input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
-      input$XGB_standard,Optimal_HP$eta,Optimal_HP$gamma,Optimal_HP$max_depth,
-      Optimal_HP$min_child_weight,Optimal_HP$subsamp,Optimal_HP$colsamp,Optimal_HP$nrounds,MC_subbin,create_data)
+                                        input$lc_upval,input$rc_lowval,input$rc_upval,input$train_pct/100,input$MC_runs,input$num_folds,input$loggy,input$randomize,
+                                        input$XGB_standard,Optimal_HP$eta,Optimal_HP$gamma,Optimal_HP$max_depth,
+                                        Optimal_HP$min_child_weight,Optimal_HP$subsamp,Optimal_HP$colsamp,Optimal_HP$nrounds,MC_subbin,create_data)
     
     XGB_pred_results(xgb_pred_results[[1]])
     
@@ -5275,13 +4820,13 @@ server= function(input,output,session) {
       results[,3] = round(results[,3],3)
       XGB_pred_results(results)
       
-      output$XGB_predictions <- DT::renderDataTable(server = TRUE, { model_dt(XGB_pred_results(),  date_format_string, num_rows_per_page) })
+      output$XGB_predictions <- DT::renderDataTable(server = TRUE, { model_dt(XGB_pred_results(),num_rows_per_page) })
       
       output$XGB_pred_shapes = DT::renderDataTable(server = T, {data = datatable(XGB_pred_coeffs(),rownames = F,selection =
-          list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-          list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-          className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-          "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                   list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                                   list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                     className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                                "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGB_pred_scatplot = renderPlotly(scatter_confuse(XGB_pred_scat_dat(),debounced_XGB_pred_stand(),debounced_XGB_pred_dc()))
       
@@ -5304,28 +4849,28 @@ server= function(input,output,session) {
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$XGB_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-        list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
-        options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-        columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                                    list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions='Buttons',
+                                                                                  options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                                 columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
         {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGB_pred_confuse_text = renderText({paste0("Sensitivity = ",round(XGB_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-        round(XGB_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_pred_confuse_results()$Accuracy,3),
-        "; Positive F1 = ",round(PF1_score,3),
-        "; Negative F1 = ",round(NF1_score,3))})
+                                                        round(XGB_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_pred_confuse_results()$Accuracy,3),
+                                                        "; Positive F1 = ",round(PF1_score,3),
+                                                        "; Negative F1 = ",round(NF1_score,3))})
       
       resid_data = XGB_pred_scat_dat()[,c(1,3)] %>% mutate(Residuals = round(XGB_pred_scat_dat()[,2]-XGB_pred_scat_dat()[,3],3))
       output$XGB_pred_resid_scatplot = renderPlotly(resid_scatter(resid_data))
       
       output$XGB_pred_lineplot = renderPlotly(plot_ly(XGB_pred_scat_dat(), x = ~XGB_pred_scat_dat()[,1], y = ~XGB_pred_scat_dat()[,2], name="Observations",
-              type="scatter", mode = "lines",text = ~paste("<b>ID: </b>",XGB_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",
-              XGB_pred_scat_dat()[,2],sep=""),hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5)) %>%
-        add_trace(y = ~XGB_pred_scat_dat()[,3], name="Predictions", mode = 'lines',
-              text = ~paste("<b>ID: </b>",XGB_pred_scat_dat()[,1],"<br><b>Predicted Value:</b> ",round(XGB_pred_scat_dat()[,3],3),sep=""),
-              hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-        layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",font=list(size=20)),
-              range=c(min(0.99*min(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]),1.01*min(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3])),
-              max(0.99*max(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]),1.01*max(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]))))))
+                                                      type="scatter", mode = "lines",text = ~paste("<b>ID: </b>",XGB_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",
+                                                                                                   XGB_pred_scat_dat()[,2],sep=""),hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5)) %>%
+                                                add_trace(y = ~XGB_pred_scat_dat()[,3], name="Predictions", mode = 'lines',
+                                                          text = ~paste("<b>ID: </b>",XGB_pred_scat_dat()[,1],"<br><b>Predicted Value:</b> ",round(XGB_pred_scat_dat()[,3],3),sep=""),
+                                                          hoveron = 'points',hoverinfo='text', line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+                                                layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",font=list(size=20)),
+                                                                                                                             range=c(min(0.99*min(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]),1.01*min(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3])),
+                                                                                                                                     max(0.99*max(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]),1.01*max(XGB_pred_scat_dat()[,2],XGB_pred_scat_dat()[,3]))))))
       
       output$XGB_used_hp_pred <- DT::renderDataTable(server = TRUE, {
         x <- Optimal_HP
@@ -5528,32 +5073,32 @@ server= function(input,output,session) {
       xgb_stepr = round((max(XGB_results()[,2])-min(XGB_results()[,2]))/100,2)
       
       updateNumericInput(session, "XGB_stand",
-         # value = round(mean(XGB_results()[,2]),2),
-         max = round(max(XGB_results()[,2]),2),
-         min = round(min(XGB_results()[,2]),2),
-         step = xgb_stepr
+                         # value = round(mean(XGB_results()[,2]),2),
+                         max = round(max(XGB_results()[,2]),2),
+                         min = round(min(XGB_results()[,2]),2),
+                         step = xgb_stepr
       )
       
       xgb_stepdc = round((max(XGB_results()[,3])-min(XGB_results()[,3]))/100,2)
       
       updateNumericInput(session, "XGB_dec_crit",
-         # value = round(mean(XGB_results()[,3]),2),
-         max = round(max(XGB_results()[,3]),2),
-         min = round(min(XGB_results()[,3]),2),
-         step = xgb_stepdc
+                         # value = round(mean(XGB_results()[,3]),2),
+                         max = round(max(XGB_results()[,3]),2),
+                         min = round(min(XGB_results()[,3]),2),
+                         step = xgb_stepdc
       )
       
       output$XGB_shapes = DT::renderDataTable(server = T, {data = datatable(XGB_coeffs(),rownames = F,selection =
-        list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
-        list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
-        className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
-        "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                              list(selected = list(rows = NULL, cols = NULL),target = "row",mode = "single"),editable = F,extensions="Buttons", options =
+                                                                              list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = T,columnDefs = list(list(
+                                                                                className = 'dt-center',orderable = T,targets = '_all')),initComplete = JS("function(settings, json) {",
+                                                                                                                                                           "$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       results = XGB_results()
       results[,2] = round(results[,2],3)
       XGB_results(results)
       
-      output$XGB_fits <- DT::renderDataTable(server = TRUE, { model_dt(XGB_results(), date_format_string, num_rows_per_page) })
+      output$XGB_fits <- DT::renderDataTable(server = TRUE, { model_dt(XGB_results(),num_rows_per_page) })
       
       output$XGB_scatplot = renderPlotly(scatter_confuse(XGB_scat_dat(),debounced_XGB_stand(),debounced_XGB_dec_crit()))
       
@@ -5561,13 +5106,13 @@ server= function(input,output,session) {
       output$XGB_resid_scatplot = renderPlotly(resid_scatter(xgb_resid_data))
       
       output$XGB_lineplot = renderPlotly(plot_ly(XGB_scat_dat(), x = ~XGB_scat_dat()[,1], y = ~XGB_scat_dat()[,2], name="Observations", type="scatter", mode = "lines",
-                text = ~paste("<b>ID: </b>",XGB_scat_dat()[,1],"<br><b>Observed Value:</b> ",XGB_scat_dat()[,2],sep=""),hoveron = 'points',hoverinfo='text',
-                line = list(color = "#2c3e50", width = 1.5)) %>%
-          add_trace(y = ~XGB_scat_dat()[,3], name="Fitted_Values", mode = 'lines',text = ~paste("<b>ID: </b>",XGB_scat_dat()[,1],"<br><b>Fitted Value:</b> ",
-                round(XGB_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-          layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fitted Values",font=list(size=20)),
-                range=c(min(0.99*min(XGB_scat_dat()[,2],XGB_scat_dat()[,3]),1.01*min(XGB_scat_dat()[,2],XGB_scat_dat()[,3])),max(0.99*max(XGB_scat_dat()[,2],
-                XGB_scat_dat()[,3]),1.01*max(XGB_scat_dat()[,2],XGB_scat_dat()[,3]))))))
+                                                 text = ~paste("<b>ID: </b>",XGB_scat_dat()[,1],"<br><b>Observed Value:</b> ",XGB_scat_dat()[,2],sep=""),hoveron = 'points',hoverinfo='text',
+                                                 line = list(color = "#2c3e50", width = 1.5)) %>%
+                                           add_trace(y = ~XGB_scat_dat()[,3], name="Fitted_Values", mode = 'lines',text = ~paste("<b>ID: </b>",XGB_scat_dat()[,1],"<br><b>Fitted Value:</b> ",
+                                                                                                                                 round(XGB_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+                                           layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fitted Values",font=list(size=20)),
+                                                                                                                        range=c(min(0.99*min(XGB_scat_dat()[,2],XGB_scat_dat()[,3]),1.01*min(XGB_scat_dat()[,2],XGB_scat_dat()[,3])),max(0.99*max(XGB_scat_dat()[,2],
+                                                                                                                                                                                                                                                  XGB_scat_dat()[,3]),1.01*max(XGB_scat_dat()[,2],XGB_scat_dat()[,3]))))))
       
       XGB_confuse_results(confuse(XGB_scat_dat()[,2:3],debounced_XGB_stand(),debounced_XGB_dec_crit()))
       
@@ -5588,15 +5133,15 @@ server= function(input,output,session) {
       colnames(xgb_confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$XGB_confuse = DT::renderDataTable(server = T, {data = datatable(xgb_confuse_table,rownames = F,selection = 
-          list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
-          options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-          columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                               list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions = 'Buttons',
+                                                                             options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                            columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
           {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$XGB_confuse_text = renderText({paste0("Sensitivity = ",round(XGB_confuse_results()$Sensitivity,3),"; Specificity = ",
-          round(XGB_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_confuse_results()$Accuracy,3),
-          "; Positive F1 = ",round(PF1_score,3),
-          "; Negative F1 = ",round(NF1_score,3))})
+                                                   round(XGB_confuse_results()$Specificity,3),"; Accuracy = ",round(XGB_confuse_results()$Accuracy,3),
+                                                   "; Positive F1 = ",round(PF1_score,3),
+                                                   "; Negative F1 = ",round(NF1_score,3))})
       
       output$XGB_used_hp <- DT::renderDataTable(server = TRUE, {
         x <- Optimal_HP
@@ -5974,7 +5519,11 @@ server= function(input,output,session) {
     ))
   })
   
-  # Elastic Net predictions
+  #_______________________________________________________________________
+  
+  # ELASTIC NET PIPELINES
+  
+  # EN predictions
   debounced_EN_pred_stand = debounce(reactive(input$EN_pred_stand), plot_delay)
   debounced_EN_pred_dc = debounce(reactive(input$EN_pred_dc), plot_delay)
   
@@ -6147,27 +5696,27 @@ server= function(input,output,session) {
       en_stepr = round((max(EN_pred_results()[,2])-min(EN_pred_results()[,2]))/100,2)
       
       updateNumericInput(session, "EN_pred_stand",
-         # value = round(mean(EN_pred_results()[,2]),2),
-         max = round(max(EN_pred_results()[,2]),2),
-         min = round(min(EN_pred_results()[,2]),2),
-         step = en_stepr
+                         # value = round(mean(EN_pred_results()[,2]),2),
+                         max = round(max(EN_pred_results()[,2]),2),
+                         min = round(min(EN_pred_results()[,2]),2),
+                         step = en_stepr
       )
       
       en_stepdc = round((max(EN_pred_results()[,3])-min(EN_pred_results()[,3]))/100,2)
       
       updateNumericInput(session, "EN_pred_dc",
-         # value = round(mean(EN_pred_results()[,3]),2),
-         max = round(max(EN_pred_results()[,3]),2),
-         min = round(min(EN_pred_results()[,3]),2),
-         step = en_stepdc
+                         # value = round(mean(EN_pred_results()[,3]),2),
+                         max = round(max(EN_pred_results()[,3]),2),
+                         min = round(min(EN_pred_results()[,3]),2),
+                         step = en_stepdc
       )
       
-      output$EN_preds <- DT::renderDataTable(server = TRUE, { model_dt(EN_pred_results(),  date_format_string, num_rows_per_page) })
+      output$EN_preds <- DT::renderDataTable(server = TRUE, { model_dt(EN_pred_results(),num_rows_per_page) })
       
       output$EN_pred_coeffs = DT::renderDataTable(server = T, {data = datatable(EN_pred_coeffs(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
-        target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
-        paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
-        initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
+                                                                                                                               target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
+                                                                                                                                                                                                                paging = F,scrollX = F,scrollY = T,columnDefs = list(list(className = 'dt-center',orderable = T,targets = '_all')),
+                                                                                                                                                                                                                initComplete = JS("function(settings, json) {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$EN_pred_scatplot = renderPlotly(scatter_confuse(EN_pred_scat_dat(),debounced_EN_pred_stand(),debounced_EN_pred_dc()))
       
@@ -6176,13 +5725,13 @@ server= function(input,output,session) {
       output$EN_pred_resid_scatter = renderPlotly(resid_scatter(resid_data))
       
       output$EN_pred_lineplot = renderPlotly(plot_ly(EN_pred_scat_dat(), x = ~EN_pred_scat_dat()[,1], y = ~EN_pred_scat_dat()[,2], name="Observations", type="scatter",
-              mode = "lines",text = ~paste("<b>ID: </b>",EN_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_pred_scat_dat()[,2],sep=""),
-              hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5)) %>%
-        add_trace(y = ~EN_pred_scat_dat()[,3], name="Predictions", mode = 'lines',text = ~paste("<b>ID: </b>",EN_pred_scat_dat()[,1],"<br><b>Prediction:</b> ",
-              round(EN_pred_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-        layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",
-              font=list(size=20)),range=c(min(0.99*min(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]),1.01*min(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3])),
-              max(0.99*max(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]),1.01*max(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]))))))
+                                                     mode = "lines",text = ~paste("<b>ID: </b>",EN_pred_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_pred_scat_dat()[,2],sep=""),
+                                                     hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5)) %>%
+                                               add_trace(y = ~EN_pred_scat_dat()[,3], name="Predictions", mode = 'lines',text = ~paste("<b>ID: </b>",EN_pred_scat_dat()[,1],"<br><b>Prediction:</b> ",
+                                                                                                                                       round(EN_pred_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+                                               layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Predictions",
+                                                                                                                                         font=list(size=20)),range=c(min(0.99*min(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]),1.01*min(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3])),
+                                                                                                                                                                     max(0.99*max(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]),1.01*max(EN_pred_scat_dat()[,2],EN_pred_scat_dat()[,3]))))))
       
       EN_pred_confuse_results(confuse(EN_pred_scat_dat()[,2:3],debounced_EN_pred_stand(),debounced_EN_pred_dc()))
       
@@ -6203,15 +5752,15 @@ server= function(input,output,session) {
       colnames(confuse_table) = c("True Positives","True Negatives", "False Positives","False Negatives")
       
       output$EN_pred_confuse = DT::renderDataTable(server = T, {data = datatable(confuse_table,rownames = F,selection = 
-        list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
-        options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
-        columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
+                                                                                   list(selected = list(rows = NULL, cols = NULL), target = "row",mode = "single"),editable = F,extensions="Buttons",
+                                                                                 options = list(autoWidth = F,dom='tB',buttons = c('copy', 'csv', 'excel'),paging = F,scrollX = F,scrollY = F,
+                                                                                                columnDefs = list(list(className = 'dt-center',orderable = F,targets = '_all')),initComplete = JS("function(settings, json) 
         {","$(this.api().table().header()).css({'background-color': '#073744', 'color': '#fff'});","}")))})
       
       output$EN_pred_confuse_text = renderText({paste0("Sensitivity = ",round(EN_pred_confuse_results()$Sensitivity,3),"; Specificity = ",
-        round(EN_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_pred_confuse_results()$Accuracy,3),
-        "; Positive F1 = ",round(PF1_score,3),
-        "; Negative F1 = ",round(NF1_score,3))})
+                                                       round(EN_pred_confuse_results()$Specificity,3),"; Accuracy = ",round(EN_pred_confuse_results()$Accuracy,3),
+                                                       "; Positive F1 = ",round(PF1_score,3),
+                                                       "; Negative F1 = ",round(NF1_score,3))})
       
       refresh_trigger(FALSE) 
       
@@ -6229,7 +5778,7 @@ server= function(input,output,session) {
     }
   })
   
-  # Elastic Net fitting
+  # EN fitting
   debounced_EN_stand = debounce(reactive(input$EN_stand), plot_delay)
   debounced_EN_dec_crit = debounce(reactive(input$EN_dec_crit), plot_delay)
   
@@ -6361,7 +5910,7 @@ server= function(input,output,session) {
          min = round(min(EN_results()[,3]),2),
          step = en_stepdc)
       
-      output$EN_fits <- DT::renderDataTable(server = TRUE, { model_dt(EN_results(), date_format_string, num_rows_per_page) })
+      output$EN_fits <- DT::renderDataTable(server = TRUE, { model_dt(EN_results(),num_rows_per_page) })
       
       output$EN_coeffs = DT::renderDataTable(server = T, {data = datatable(EN_coeffs(),rownames = F,selection = list(selected = list(rows = NULL, cols = NULL),
           target = "row",mode = "single"),editable = F,extensions="Buttons",options = list(autoWidth = F, dom='tB',buttons = c('copy', 'csv', 'excel'),
@@ -6375,13 +5924,13 @@ server= function(input,output,session) {
       output$EN_resid_scatplot = renderPlotly(resid_scatter(resid_data))
       
       output$EN_lineplot = renderPlotly(plot_ly(EN_scat_dat(), x = ~EN_scat_dat()[,1], y = ~EN_scat_dat()[,2], name="Observations", type="scatter",
-              mode = "lines",text = ~paste("<b>ID: </b>",EN_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_scat_dat()[,2],sep=""),
-              hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5)) %>%
-        add_trace(y = ~EN_scat_dat()[,3], name="Fitted_Value", mode = 'lines',text = ~paste("<b>ID: </b>",EN_scat_dat()[,1],"<br><b>Fitted_Value:</b> ",
-              round(EN_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
-        layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fitted_Values",
-              font=list(size=20)),range=c(min(0.99*min(EN_scat_dat()[,2],EN_scat_dat()[,3]),1.01*min(EN_scat_dat()[,2],EN_scat_dat()[,3])),
-              max(0.99*max(EN_scat_dat()[,2],EN_scat_dat()[,3]),1.01*max(EN_scat_dat()[,2],EN_scat_dat()[,3]))))))
+          mode = "lines",text = ~paste("<b>ID: </b>",EN_scat_dat()[,1],"<br><b>Observed Value:</b> ",EN_scat_dat()[,2],sep=""),
+          hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5)) %>%
+          add_trace(y = ~EN_scat_dat()[,3], name="Fitted_Value", mode = 'lines',text = ~paste("<b>ID: </b>",EN_scat_dat()[,1],"<br><b>Fitted_Value:</b> ",
+          round(EN_scat_dat()[,3],3),sep=""),hoveron = 'points',hoverinfo='text',line = list(color = "#2c3e50", width = 1.5, dash='dash')) %>%
+          layout(xaxis = list(title = list(text='ID',font=list(size=20))),yaxis = list(title = list(text="Observations/Fitted_Values",
+          font=list(size=20)),range=c(min(0.99*min(EN_scat_dat()[,2],EN_scat_dat()[,3]),1.01*min(EN_scat_dat()[,2],EN_scat_dat()[,3])),
+          max(0.99*max(EN_scat_dat()[,2],EN_scat_dat()[,3]),1.01*max(EN_scat_dat()[,2],EN_scat_dat()[,3]))))))
       
       EN_confuse_results(confuse(EN_scat_dat()[,2:3],debounced_EN_stand(),debounced_EN_dec_crit()))
       
@@ -6428,9 +5977,26 @@ server= function(input,output,session) {
     }
   })
   
-  # Perform book-keeping functions when the "Prediction" tab is selected
+  #_______________________________________________________________________
+  
+  # PREDICTION TAB
+  
+  # Text directions
+  output$directions = renderUI({
+    req(bo())
+    tagList(
+      tags$h5("IMPORTANT INFO:"),
+      tags$ul(
+        style = "list-style-type: disc; padding-left: 1.2em;",
+        tags$li("Leftmost imported columns: 1) Unique ID  2) Response; these can have any names; missing values OK"),
+        tags$li("Some imported column names must exactly match each of model's feature names; feature column order irrelevant; unmatched columns ignored"),
+        tags$li("If model has A/O components, enter magnitude/direction, VB will compute A/O; If model has transformed/interaction features, enter raw data, VB will convert")
+      ))
+  })
+  
+  # Perform book-keeping functions when tab is selected
   observeEvent(input$shinyVB, {
-
+    
     if (isTRUE(loading_project())) return()
     if (!identical(input$shinyVB, "Prediction")) return()
     if (is.null(current_data())) return()
@@ -6446,7 +6012,7 @@ server= function(input,output,session) {
       selected = if (is.null(input$model_choice)) "None" else input$model_choice,
       choices  = c("None", models_created())
     )
-
+    
     if (isTRUE(final_model_PCA())) {
       output$pca_model_text <- renderText(HTML("NOTE: PCA axes being used as features."))
     } else {
@@ -6454,41 +6020,43 @@ server= function(input,output,session) {
     }
   }, ignoreInit = TRUE)
   
-  # Keep track of the current page in the prediction data table
-  observeEvent(input$pd_data_state, {
+  # Keep track of the current page in the data table
+  observeEvent(input$pd_data_state, ignoreInit = TRUE, {
     if (isTRUE(loading_project())) return()
     
-    # Ensure state exists and has the fields we need
-    req(input$pd_data_state$start, input$pd_data_state$length)
-    x <- input$pd_data_state$start
-    y <- input$pd_data_state$length
-    if (!is.numeric(x) || !is.numeric(y) || y <= 0) return()
+    st <- input$pd_data_state
+    req(st$start, st$length)
     
-    current_page <- 1 + x / y  # DataTables uses 0-based start; page = 1 + start/pageLength
+    x <- suppressWarnings(as.numeric(st$start))
+    y <- suppressWarnings(as.numeric(st$length))
+    if (is.na(x) || is.na(y) || y <= 0) return()
+    
+    # DataTables is 0-based: page = floor(start / pageLength) + 1
+    current_page <- floor(x / y) + 1
     
     if (!identical(current_page, current_pred_page())) {
       current_pred_page(current_page)
-      renderpreddata(pred_table_data(), column_props, current_pred_page(), init_ID_format, output)
+      df <- pred_table_data(); req(!is.null(df))
+      df[[1]] <- as.character(df[[1]])
+      renderpreddata(df, column_props, current_pred_page(), output)
     }
-  }, ignoreInit = TRUE)
+  })
   
-  # Upload data file into prediction data table
+  # Upload a data file into the data table
   observeEvent(input$pred_file, ignoreInit = TRUE, {
+    req(input$pred_file)
+    req(input$model_choice, input$model_choice != "None")
     
-    if (input$model_choice == "None") {
-      showModal(modalDialog("No model has been chosen.", easyClose = FALSE,
-                            footer = div(modalButton('Close'))))
-      return()
-    }
+    # Read file (preserve names)
+    pred_file_data <<- read_input_file(input$pred_file$datapath, input$pred_file$name)
     
-    ext <- tools::file_ext(input$pred_file$name)
-    if (ext == "xlsx") {
-      pred_file_data <<- read.xlsx(input$pred_file$datapath)
-    } else {
-      pred_file_data <<- read.csv(input$pred_file$datapath, header = TRUE, sep = input$sep)
-    }
+    # ID always character; avoid factors
+    pred_file_data[[1]] <- as.character(pred_file_data[[1]])
     
-    # Basic validations
+    # Normalize header names for comparisons
+    names(pred_file_data) <- clean_names(names(pred_file_data))
+    
+    # Basic validations (assumes first two columns are ID + RV)
     if (any(sapply(data.frame(pred_file_data[, -c(1:2), drop = FALSE]),
                    function(col) !is.numeric(col)))) {
       showModal(modalDialog(
@@ -6504,35 +6072,15 @@ server= function(input,output,session) {
     }
     
     # Determine model features
-    if (input$model_choice == "Logistic_Regression") {
-      columns_to_grab <- LG_final_features()
-    } else if (input$model_choice == "XGB_Classifier") {
-      columns_to_grab <- XGBCL_final_features()
-    } else if (input$model_choice == "XGBoost") {
-      columns_to_grab <- XGB_final_features()
-    } else if (input$model_choice == "Elastic_Net") {
-      columns_to_grab <- EN_final_features()
-    }
-    
-    # Ensure feature names are unique characters
+    columns_to_grab <- switch(input$model_choice,
+                              "Logistic_Regression" = LG_final_features(),
+                              "XGB_Classifier"      = XGBCL_final_features(),
+                              "XGBoost"             = XGB_final_features(),
+                              "Elastic_Net"         = EN_final_features(),
+                              character(0))
     columns_to_grab <- unique(as.character(columns_to_grab))
     
-    # Identify interaction terms up front
-    inter_terms <- columns_to_grab[grepl(INTER_PATTERN, columns_to_grab, perl = TRUE)]
-    
-    # Helpers for interactions
-    get_inter_components <- function(term) {
-      # Strip "Int.." prefix, then split by "__" to get component names
-      s <- sub(INTER_PATTERN, "", term, perl = TRUE)
-      strsplit(s, INTER_SEP, fixed = TRUE)[[1]]
-    }
-    get_base <- function(x) {
-      if (grepl(TRANS_PATTERN, x, perl = TRUE)) {
-        if (exists("base_name", mode = "function")) base_name(x) else sub(TRANS_PATTERN, "", x, perl = TRUE)
-      } else x
-    }
-    
-    # Detect A/O needs, including transformed A/O and interactions involving A/O
+    # Detect A/O needs + inter terms (unchanged)
     ao_all <- c("WindA","WindO","CurrentA","CurrentO","WaveA","WaveO")
     need_wind    <- any(c("WindA","WindO") %in% columns_to_grab) ||
       any(grepl(paste0(TRANS_PATTERN, "(WindA|WindO)$"), columns_to_grab, perl = TRUE))
@@ -6541,7 +6089,6 @@ server= function(input,output,session) {
     need_wave    <- any(c("WaveA","WaveO") %in% columns_to_grab) ||
       any(grepl(paste0(TRANS_PATTERN, "(WaveA|WaveO)$"), columns_to_grab, perl = TRUE))
     
-    # Include interaction terms in A/O need detection
     inter_terms <- columns_to_grab[grepl(INTER_PATTERN, columns_to_grab, perl = TRUE)]
     if (length(inter_terms)) {
       comps <- lapply(inter_terms, get_inter_components)
@@ -6551,6 +6098,7 @@ server= function(input,output,session) {
       need_wave    <- need_wave    || any(bases %in% c("WaveA","WaveO"))
     }
     
+    # Stash for pred_map_confirm
     rv_pred$pending <- list(
       df     = pred_file_data,
       cols   = columns_to_grab,
@@ -6561,7 +6109,7 @@ server= function(input,output,session) {
     )
     
     if (need_wind || need_current || need_wave) {
-      # Ask user to map raw columns for the required group(s)
+      # Show mapping modal (unchanged)
       showModal(modalDialog(
         title = "Assign columns for A/O components",
         easyClose = FALSE,
@@ -6576,22 +6124,16 @@ server= function(input,output,session) {
         ")),
           div(class = "ao-map",
               if (need_wind) tagList(
-                selectInput("map_wind_speed", "Wind Speed",
-                            choices = colnames(pred_file_data), width = "75%"),
-                selectInput("map_wind_dir", "Wind Direction",
-                            choices = colnames(pred_file_data), width = "75%")
+                selectInput("map_wind_speed", "Wind Speed", choices = colnames(pred_file_data), width = "75%"),
+                selectInput("map_wind_dir",   "Wind Direction", choices = colnames(pred_file_data), width = "75%")
               ),
               if (need_current) tagList(
-                selectInput("map_current_speed", "Current Speed",
-                            choices = colnames(pred_file_data), width = "75%"),
-                selectInput("map_current_dir", "Current Direction",
-                            choices = colnames(pred_file_data), width = "75%")
+                selectInput("map_current_speed", "Current Speed", choices = colnames(pred_file_data), width = "75%"),
+                selectInput("map_current_dir",   "Current Direction", choices = colnames(pred_file_data), width = "75%")
               ),
               if (need_wave) tagList(
-                selectInput("map_wave_height", "Wave Height",
-                            choices = colnames(pred_file_data), width = "75%"),
-                selectInput("map_wave_dir", "Wave Direction",
-                            choices = colnames(pred_file_data), width = "75%")
+                selectInput("map_wave_height", "Wave Height", choices = colnames(pred_file_data), width = "75%"),
+                selectInput("map_wave_dir",    "Wave Direction", choices = colnames(pred_file_data), width = "75%")
               )
           )
         ),
@@ -6600,47 +6142,16 @@ server= function(input,output,session) {
           actionButton("pred_map_confirm", "Continue")
         )
       ))
-      
-      # Stash state to continue after user confirms
-      rv_pred$pending <- list(
-        df    = pred_file_data,
-        cols  = columns_to_grab,
-        needs = list(wind = need_wind, current = need_current, wave = need_wave),
-        model = input$model_choice
-      )
       return()
     }
     
-    # No A/O mapping needed: require only raw bases for transformed AND interaction features
-    # Exclude transformed and interaction feature names themselves from ui_required
-    trans_in_model <- columns_to_grab[grepl(TRANS_PATTERN, columns_to_grab, perl = TRUE)]
-    ui_required    <- columns_to_grab[
-      !grepl(TRANS_PATTERN, columns_to_grab, perl = TRUE) &
-        !grepl(INTER_PATTERN, columns_to_grab, perl = TRUE)
-    ]
+    # Compute RAW columns required for the UI
+    ui_required <- compute_ui_required(columns_to_grab, rv_ao_map)
     
-    # Add bases for transformed features
-    if (length(trans_in_model)) {
-      bases <- if (exists("base_name", mode = "function")) {
-        vapply(trans_in_model, base_name, FUN.VALUE = character(1))
-      } else {
-        sub(TRANS_PATTERN, "", trans_in_model, perl = TRUE)
-      }
-      ui_required <- unique(c(ui_required, bases))
-    }
-    
-    # Add bases for interaction terms (exclude AO bases since no A/O mapping in this branch)
-    if (length(inter_terms)) {
-      inter_bases <- unlist(lapply(inter_terms, function(t) {
-        comps <- get_inter_components(t)
-        vapply(comps, get_base, FUN.VALUE = character(1))
-      }), use.names = FALSE)
-      inter_bases <- inter_bases[!(inter_bases %in% ao_all)]
-      ui_required <- unique(c(ui_required, inter_bases))
-    }
-    
-    # Validate raw columns exist in imported file
-    missing_columns <- setdiff(ui_required, colnames(pred_file_data))
+    # Validate required columns exist
+    ui_required_norm <- clean_names(ui_required)
+    available_norm   <- clean_names(colnames(pred_file_data))
+    missing_columns <- setdiff(ui_required_norm, available_norm)
     if (length(missing_columns) > 0) {
       showModal(modalDialog(
         title = "Error",
@@ -6651,66 +6162,59 @@ server= function(input,output,session) {
       return()
     }
     
-    # Build prediction-entry table with only raw inputs (no transformed/interaction columns)
-    rv_name <- colnames(current_data())[response_var()]
-    temp_data <- data.frame(matrix(NA, nrow = nrow(pred_file_data), ncol = length(ui_required) + 6))
-    temp_data[, 1:2] <- pred_file_data[, 1:2, drop = FALSE]
-    temp_data[, 3:(2 + length(ui_required))] <- pred_file_data[, ui_required, drop = FALSE]
+    # Map normalized names back to original names
+    idx_map <- match(ui_required_norm, available_norm)
+    ui_required_orig <- colnames(pred_file_data)[idx_map]
+    
+    # Determine/remember response variable name
+    rv_name <- pred_resp_name()
+    if (is.null(rv_name)) {
+      nm  <- colnames(current_data()); idx <- response_var()
+      if (is.null(nm) || length(nm) < idx || is.na(idx)) {
+        showModal(modalDialog(
+          title = "Error",
+          "Response variable is not set or not found in current_data().",
+          easyClose = TRUE
+        ))
+        return()
+      }
+      rv_name <- nm[idx]; pred_resp_name(rv_name)
+    }
+    pred_ui_required(ui_required_orig)
+    
+    # Build prediction-entry table (Character ID)
+    n_rows <- nrow(pred_file_data)
+    temp_data <- data.frame(matrix(NA, nrow = n_rows, ncol = length(ui_required_orig) + 6), check.names = FALSE)
+    temp_data[, 1:2] <- pred_file_data[, 1:2, drop = FALSE]                                # ID + Response
+    temp_data[, 3:(2 + length(ui_required_orig))] <- pred_file_data[, ui_required_orig, drop = FALSE]
     temp_data[, (ncol(temp_data) - 3):ncol(temp_data)] <- -999
-    colnames(temp_data) <- c("Sample_ID", rv_name, ui_required, "Prediction","Lower_Bound","Upper_Bound","Outcome")
+    temp_data[, 1] <- as.character(temp_data[, 1])                                         # enforce Character ID
+    colnames(temp_data) <- c("Sample_ID", rv_name, ui_required_orig,"Prediction", "Lower_Bound", "Upper_Bound", "Outcome")
+    
+    # Store and render (Character mode for ID)
+    switch(input$model_choice,
+           "Logistic_Regression" = LG_pred_table_data(temp_data),
+           "XGB_Classifier"      = XGBCL_pred_table_data(temp_data),
+           "XGBoost"             = XGB_pred_table_data(temp_data),
+           "Elastic_Net"         = EN_pred_table_data(temp_data))
+    pred_table_data(temp_data)
+    
+    current_pred_page(1)
+    renderpreddata(temp_data, column_props, current_pred_page(), output)
     
     updateNumericInput(session, "num_preds", value = nrow(temp_data))
-    current_pred_page(1)
-    
-    if (input$model_choice == "Logistic_Regression") {
-      LG_pred_table_data(temp_data)
-    } else if (input$model_choice == "XGB_Classifier") {
-      XGBCL_pred_table_data(temp_data)
-    } else if (input$model_choice == "XGBoost") {
-      XGB_pred_table_data(temp_data)
-    } else if (input$model_choice == "Elastic_Net") {
-      EN_pred_table_data(temp_data)
-    }
-    
-    # Date formatting (unchanged)
-    if (init_ID_format == "YMD") {
-      temp_data[, 1] <- ymd(temp_data[, 1]);        date_format_string <<- "toLocaleDateString"
-    } else if (init_ID_format == "MDY") {
-      temp_data[, 1] <- mdy(temp_data[, 1]);        date_format_string <<- "toLocaleDateString"
-    } else if (init_ID_format == "MDYHM") {
-      temp_data[, 1] <- parse_date_time(temp_data[, 1], c('%m/%d/%y %H:%M'), exact = TRUE)
-      date_format_string <<- "toLocaleString"
-    } else if (init_ID_format == "Character") {
-      date_format_string <<- "Character"
-    } else if (init_ID_format == "Numeric") {
-      date_format_string <<- "Numeric"
-    }
-    
-    renderpreddata(temp_data, column_props, current_pred_page(), init_ID_format, output)
   })
   
-  # Compute A/O components from mapped Magnitude/Direction columns in imported prediction file
+  # Compute A/O components from mapped Magnitude/Direction columns in imported file
   observeEvent(input$pred_map_confirm, {
     req(rv_pred$pending)
+    
     df    <- rv_pred$pending$df
     needs <- rv_pred$pending$needs
     model <- rv_pred$pending$model
     cols  <- unique(as.character(rv_pred$pending$cols))
     
-    `%||%` <- function(a, b) if (!is.null(a) && nzchar(a)) a else b
-    
-    # Helpers for interactions and transformed bases
-    get_inter_components <- function(term) {
-      s <- sub(INTER_PATTERN, "", term, perl = TRUE)
-      strsplit(s, INTER_SEP, fixed = TRUE)[[1]]
-    }
-    get_base <- function(x) {
-      if (grepl(TRANS_PATTERN, x, perl = TRUE)) {
-        if (exists("base_name", mode = "function")) base_name(x) else sub(TRANS_PATTERN, "", x, perl = TRUE)
-      } else x
-    }
-    
-    # Ensure canonical names from training are known (rv_ao_map should have canonical names)
+    # Ensure canonical A/O raw input names from training are known
     canon_missing <- c(
       if (needs$wind    && (is.null(rv_ao_map$wind_speed)    || is.null(rv_ao_map$wind_dir)))   "Wind",
       if (needs$current && (is.null(rv_ao_map$current_speed) || is.null(rv_ao_map$current_dir))) "Currents",
@@ -6740,98 +6244,38 @@ server= function(input,output,session) {
       showNotification("Please select both Wave Height and Wave Direction.", type = "error"); return()
     }
     
-    # Copy/rename imported columns into canonical (training) names and compute A/O
+    # Copy/rename imported columns into canonical (training) names and compute A/O components with the centralized helper
     if (needs$wind) {
       sp_name <- rv_ao_map$wind_speed
       dr_name <- rv_ao_map$wind_dir
-      df[[sp_name]] <- as.numeric(df[[input$map_wind_speed]])
-      df[[dr_name]] <- as.numeric(df[[input$map_wind_dir]])
-      df[["WindA"]] <- -df[[sp_name]] * cos((df[[dr_name]] - bo()) * pi/180)
-      df[["WindO"]] <-  df[[sp_name]] * sin((df[[dr_name]] - bo()) * pi/180)
+      df[[sp_name]] <- suppressWarnings(as.numeric(df[[input$map_wind_speed]]))
+      df[[dr_name]] <- suppressWarnings(as.numeric(df[[input$map_wind_dir]]))
     }
     if (needs$current) {
       sp_name <- rv_ao_map$current_speed
       dr_name <- rv_ao_map$current_dir
-      df[[sp_name]] <- as.numeric(df[[input$map_current_speed]])
-      df[[dr_name]] <- as.numeric(df[[input$map_current_dir]])
-      df[["CurrentA"]] <- -df[[sp_name]] * cos((df[[dr_name]] - bo()) * pi/180)
-      df[["CurrentO"]] <-  df[[sp_name]] * sin((df[[dr_name]] - bo()) * pi/180)
+      df[[sp_name]] <- suppressWarnings(as.numeric(df[[input$map_current_speed]]))
+      df[[dr_name]] <- suppressWarnings(as.numeric(df[[input$map_current_dir]]))
     }
     if (needs$wave) {
       ht_name <- rv_ao_map$wave_height
       dr_name <- rv_ao_map$wave_dir
-      df[[ht_name]] <- as.numeric(df[[input$map_wave_height]])
-      df[[dr_name]] <- as.numeric(df[[input$map_wave_dir]])
-      df[["WaveA"]] <- -df[[ht_name]] * cos((df[[dr_name]] - bo()) * pi/180)
-      df[["WaveO"]] <-  df[[ht_name]] * sin((df[[dr_name]] - bo()) * pi/180)
+      df[[ht_name]] <- suppressWarnings(as.numeric(df[[input$map_wave_height]]))
+      df[[dr_name]] <- suppressWarnings(as.numeric(df[[input$map_wave_dir]]))
     }
     
-    # Build list of RAW columns required for the prediction UI (not transformed/interaction names)
-    ao_groups <- list(
-      wind    = list(ao = c("WindA","WindO"),
-                     raw = c(rv_ao_map$wind_speed %||% "Wind Speed",
-                             rv_ao_map$wind_dir   %||% "Wind Direction")),
-      current = list(ao = c("CurrentA","CurrentO"),
-                     raw = c(rv_ao_map$current_speed %||% "Current Speed",
-                             rv_ao_map$current_dir   %||% "Current Direction")),
-      wave    = list(ao = c("WaveA","WaveO"),
-                     raw = c(rv_ao_map$wave_height %||% "Wave Height",
-                             rv_ao_map$wave_dir    %||% "Wave Direction"))
-    )
-    ao_all <- unlist(lapply(ao_groups, `[[`, "ao"), use.names = FALSE)
+    # Compute A/O components (WindA/WindO, CurrentA/CurrentO, WaveA/WaveO) in df
+    df <- compute_AO(df, rv_ao_map, bo())
     
-    # Identify transformed and interaction terms in the model
-    trans_in_model <- cols[grepl(TRANS_PATTERN, cols, perl = TRUE)]
-    inter_terms    <- cols[grepl(INTER_PATTERN, cols, perl = TRUE)]
+    # Compute RAW columns required for the prediction UI (bases for transforms + interaction components + A/O raw inputs)
+    ui_required <- compute_ui_required(cols, rv_ao_map)
     
-    # Start with non-transformed, non-interaction, non-A/O model features
-    ui_required <- cols[
-      !grepl(TRANS_PATTERN, cols, perl = TRUE) &
-        !grepl(INTER_PATTERN, cols, perl = TRUE) &
-        !(cols %in% ao_all)
-    ]
-    
-    # For any A/O groups needed (in model), add their canonical raw inputs (mapped)
-    if (any(cols %in% ao_groups$wind$ao))    ui_required <- c(ui_required, ao_groups$wind$raw)
-    if (any(cols %in% ao_groups$current$ao)) ui_required <- c(ui_required, ao_groups$current$raw)
-    if (any(cols %in% ao_groups$wave$ao))    ui_required <- c(ui_required, ao_groups$wave$raw)
-    
-    # Add bases for transformed features (skip A/O bases; raw inputs for A/O already added)
-    if (length(trans_in_model)) {
-      bases <- if (exists("base_name", mode = "function")) {
-        vapply(trans_in_model, base_name, FUN.VALUE = character(1))
-      } else {
-        sub(TRANS_PATTERN, "", trans_in_model, perl = TRUE)
-      }
-      for (b in bases) {
-        if (b %in% ao_all) next
-        ui_required <- c(ui_required, b)
-      }
-    }
-    
-    # Add bases for interaction terms
-    if (length(inter_terms)) {
-      for (t in inter_terms) {
-        parts <- get_inter_components(t)
-        for (p in parts) {
-          b <- get_base(p)
-          if (b %in% c("WindA","WindO")) {
-            ui_required <- c(ui_required, ao_groups$wind$raw)
-          } else if (b %in% c("CurrentA","CurrentO")) {
-            ui_required <- c(ui_required, ao_groups$current$raw)
-          } else if (b %in% c("WaveA","WaveO")) {
-            ui_required <- c(ui_required, ao_groups$wave$raw)
-          } else {
-            ui_required <- c(ui_required, b)
-          }
-        }
-      }
-    }
+    # Normalize both sides to avoid whitespace/NBSP mismatches
+    ui_required_norm <- clean_names(ui_required)
+    available_norm   <- clean_names(colnames(df))
     
     # Validate RAW columns exist in imported file (do NOT require transformed/interaction names)
-    ui_required <- unique(ui_required)
-    ui_required <- ui_required[!is.null(ui_required) & nzchar(ui_required)]
-    missing_columns <- setdiff(ui_required, colnames(df))
+    missing_columns <- setdiff(ui_required_norm, available_norm)
     if (length(missing_columns) > 0) {
       showModal(modalDialog(
         title = "Error",
@@ -6846,20 +6290,21 @@ server= function(input,output,session) {
     iv_name <- "Sample_ID"
     rv_name <- colnames(current_data())[response_var()]
     
-    temp_data <- data.frame(matrix(NA, nrow = nrow(df), ncol = length(ui_required) + 6))
-    temp_data[, 1:2] <- df[, 1:2, drop = FALSE]  # assumes first two cols are ID/RV in imported data
-    temp_data[, 3:(2 + length(ui_required))] <- df[, ui_required, drop = FALSE]
+    # Use original names (not normalized) to preserve canonical headers. We need to map normalized indices back to original names
+    idx_map <- match(ui_required_norm, available_norm)
+    ui_required_orig <- colnames(df)[idx_map]
+    
+    temp_data <- data.frame(matrix(NA, nrow = nrow(df), ncol = length(ui_required_orig) + 6),
+                            check.names = FALSE)
+    temp_data[, 1:2] <- df[, 1:2, drop = FALSE]
+    temp_data[, 3:(2 + length(ui_required_orig))] <- df[, ui_required_orig, drop = FALSE]
     temp_data[, (ncol(temp_data) - 3):ncol(temp_data)] <- -999
     
-    colnames(temp_data) <- c(
-      iv_name,
-      rv_name,
-      ui_required,
-      "Prediction", "Lower_Bound", "Upper_Bound", "Outcome"
-    )
+    # Set column names
+    colnames(temp_data) <- c(iv_name,rv_name,ui_required_orig,"Prediction", "Lower_Bound", "Upper_Bound", "Outcome")
     
-    updateNumericInput(session, "num_preds", value = nrow(temp_data))
-    current_pred_page(1)
+    # After temp_data is built and colnames(temp_data) are set, ensure ID column is character
+    temp_data[[1]] <- as.character(temp_data[[1]])
     
     # Store the displayed prediction table (RAW UI columns), not model columns
     if (model == "Logistic_Regression") {
@@ -6871,30 +6316,26 @@ server= function(input,output,session) {
     } else if (model == "Elastic_Net") {
       EN_pred_table_data(temp_data)
     }
+    pred_table_data(temp_data)
     
-    # Date formatting (unchanged)
-    if (init_ID_format == "YMD") {
-      temp_data[, 1] <- ymd(temp_data[, 1]);        date_format_string <<- "toLocaleDateString"
-    } else if (init_ID_format == "MDY") {
-      temp_data[, 1] <- mdy(temp_data[, 1]);        date_format_string <<- "toLocaleDateString"
-    } else if (init_ID_format == "MDYHM") {
-      temp_data[, 1] <- parse_date_time(temp_data[, 1], c('%m/%d/%y %H:%M'), exact = TRUE)
-      date_format_string <<- "toLocaleString"
-    } else if (init_ID_format == "Character") {
-      date_format_string <<- "Character"
-    } else if (init_ID_format == "Numeric") {
-      date_format_string <<- "Numeric"
-    }
+    # Render (Character ID)
+    current_pred_page(1)
+    renderpreddata(temp_data, column_props, current_pred_page(), output)
     
-    renderpreddata(temp_data, column_props, current_pred_page(), init_ID_format, output)
-    
+    updateNumericInput(session, "num_preds", value = nrow(temp_data))
     removeModal()
     rv_pred$pending <- NULL
+    
   })
   
   # Use selected model for prediction
-  observeEvent(input$model_choice, {
+  observeEvent(input$model_choice, ignoreInit = TRUE, {
     if (isTRUE(loading_project())) return()
+    
+    # Toggle upload control (and visual style)
+    enabled <- input$model_choice != "None"
+    shinyjs::toggleState("pred_file", condition = enabled)
+    shinyjs::toggleClass("pred_file_wrap", class = "disabled", condition = !enabled)
     
     # If user hasn’t chosen a model, clear outputs and stop
     if (identical(input$model_choice, "None")) {
@@ -6911,11 +6352,19 @@ server= function(input,output,session) {
     feature_mismatch(FALSE)
     standard_mismatch(FALSE)
     thresh_mismatch(FALSE)
-    no_resids(FALSE)
+    no_resids(TRUE)
+    
     model_features <- NULL
     per_model_tbl  <- NULL
     resids         <- NULL
     
+    # Small helper to format feature list nicely
+    format_feats <- function(feats) {
+      feats <- unique(as.character(feats))
+      if (length(feats)) paste(feats, collapse = ", ") else "(none)"
+    }
+    
+    # ------------- Model-specific setup -------------
     if (input$model_choice == "Logistic_Regression") {
       
       output$model_text <- renderUI({
@@ -6926,15 +6375,11 @@ server= function(input,output,session) {
         feats <- if (isTRUE(LG_model_PCA())) {
           nm <- names(PCA_scaling_mean())
           if (is.null(nm) || !length(nm)) LG_final_features() else nm
-        } else {
-          LG_final_features()
-        }
-        feats <- unique(feats)
-        feats_str <- if (length(feats)) paste(feats, collapse = ", ") else "(none)"
+        } else LG_final_features()
         
         HTML(paste0(
           "<div style='font-size: 20px; font-weight: bold;'>Model: Logistic Regression</div>",
-          "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ", feats_str, "</div>",
+          "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ", format_feats(feats), "</div>",
           "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
           "<div>Binarize Threshold: ", threshold, "</div>",
           "<div>Critical Probability: ", probability, "</div>"
@@ -6957,7 +6402,6 @@ server= function(input,output,session) {
           feature_mismatch(TRUE)
         } else if (LG_pred_thresh() != LG_thresh()) {
           thresh_mismatch(TRUE)
-        } else {
         }
       } else {
         final_model_PCA(FALSE)
@@ -6971,14 +6415,11 @@ server= function(input,output,session) {
           feature_mismatch(TRUE)
         } else if (LG_pred_thresh() != LG_thresh()) {
           thresh_mismatch(TRUE)
-        } else {
         }
       }
       
       if (!is.null(LG_pred_results()) && !feature_mismatch() && !standard_mismatch() && !thresh_mismatch() && !no_resids()) {
         resids <- sqrt((LG_pred_results()[, 2] - LG_pred_results()[, 3])^2)
-      } else {
-        resids <- NULL
       }
       
     } else if (input$model_choice == "XGB_Classifier") {
@@ -6991,15 +6432,11 @@ server= function(input,output,session) {
         feats <- if (isTRUE(XGBCL_model_PCA())) {
           nm <- names(PCA_scaling_mean())
           if (is.null(nm) || !length(nm)) XGBCL_final_features() else nm
-        } else {
-          XGBCL_final_features()
-        }
-        feats <- unique(feats)
-        feats_str <- if (length(feats)) paste(feats, collapse = ", ") else "(none)"
+        } else XGBCL_final_features()
         
         HTML(paste0(
           "<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost Classifier</div>",
-          "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ", feats_str, "</div>",
+          "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ", format_feats(feats), "</div>",
           "<div style='font-style: italic;'>Predictions: Probabilities of Exceedance</div>",
           "<div>Binarize Threshold: ", threshold, "</div>",
           "<div>Critical Probability: ", probability, "</div>"
@@ -7022,7 +6459,6 @@ server= function(input,output,session) {
           feature_mismatch(TRUE)
         } else if (XGBCL_pred_thresh() != XGBCL_thresh()) {
           thresh_mismatch(TRUE)
-        } else {
         }
       } else {
         final_model_PCA(FALSE)
@@ -7036,14 +6472,11 @@ server= function(input,output,session) {
           feature_mismatch(TRUE)
         } else if (XGBCL_pred_thresh() != XGBCL_thresh()) {
           thresh_mismatch(TRUE)
-        } else {
         }
       }
       
       if (!is.null(XGBCL_pred_results()) && !feature_mismatch() && !standard_mismatch() && !thresh_mismatch() && !no_resids()) {
         resids <- sqrt((XGBCL_pred_results()[, 2] - XGBCL_pred_results()[, 3])^2)
-      } else {
-        resids <- NULL
       }
       
     } else if (input$model_choice == "XGBoost") {
@@ -7052,15 +6485,11 @@ server= function(input,output,session) {
         feats <- if (isTRUE(XGB_model_PCA())) {
           nm <- names(PCA_scaling_mean())
           if (is.null(nm) || !length(nm)) XGB_final_features() else nm
-        } else {
-          XGB_final_features()
-        }
-        feats <- unique(feats)
-        feats_str <- if (length(feats)) paste(feats, collapse = ", ") else "(none)"
+        } else XGB_final_features()
         
         HTML(paste0(
           "<div style='font-size: 20px; font-weight: bold;'>Model: XGBoost</div>",
-          "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ", feats_str, "</div>",
+          "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ", format_feats(feats), "</div>",
           "<div style='font-style: italic;'>Predictions: Response Variable Units</div>",
           "<div>Regulatory Standard: ", input$XGB_stand, "</div>",
           "<div>Decision Criterion: ", input$XGB_dec_crit, "</div>"
@@ -7081,7 +6510,6 @@ server= function(input,output,session) {
           standard_mismatch(TRUE)
         } else if (!identical(model_PCA_axes(), colnames(XGB_pred_results())[4:ncol(XGB_pred_results())])) {
           feature_mismatch(TRUE)
-        } else {
         }
       } else {
         final_model_PCA(FALSE)
@@ -7093,14 +6521,11 @@ server= function(input,output,session) {
           standard_mismatch(TRUE)
         } else if (!identical(model_features, colnames(XGB_pred_results())[4:ncol(XGB_pred_results())])) {
           feature_mismatch(TRUE)
-        } else {
         }
       }
       
       if (!is.null(XGB_pred_results()) && !feature_mismatch() && !standard_mismatch() && !no_resids()) {
         resids <- sqrt((XGB_pred_results()[, 2] - XGB_pred_results()[, 3])^2)
-      } else {
-        resids <- NULL
       }
       
     } else if (input$model_choice == "Elastic_Net") {
@@ -7109,15 +6534,11 @@ server= function(input,output,session) {
         feats <- if (isTRUE(EN_model_PCA())) {
           nm <- names(PCA_scaling_mean())
           if (is.null(nm) || !length(nm)) EN_final_features() else nm
-        } else {
-          EN_final_features()
-        }
-        feats <- unique(feats)
-        feats_str <- if (length(feats)) paste(feats, collapse = ", ") else "(none)"
+        } else EN_final_features()
         
         HTML(paste0(
           "<div style='font-size: 20px; font-weight: bold;'>Model: Elastic Net</div>",
-          "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ", feats_str, "</div>",
+          "<div style='font-size: 16px;'><span style='font-weight: bold;'>Model features:</span> ", format_feats(feats), "</div>",
           "<div style='font-style: italic;'>Predictions: Response Variable Units</div>",
           "<div>Regulatory Standard: ", input$EN_stand, "</div>",
           "<div>Decision Criterion: ", input$EN_dec_crit, "</div>"
@@ -7138,7 +6559,6 @@ server= function(input,output,session) {
           standard_mismatch(TRUE)
         } else if (!identical(model_PCA_axes(), colnames(EN_pred_results())[4:ncol(EN_pred_results())])) {
           feature_mismatch(TRUE)
-        } else {
         }
       } else {
         final_model_PCA(FALSE)
@@ -7150,14 +6570,11 @@ server= function(input,output,session) {
           standard_mismatch(TRUE)
         } else if (!identical(model_features, colnames(EN_pred_results())[4:ncol(EN_pred_results())])) {
           feature_mismatch(TRUE)
-        } else {
         }
       }
       
       if (!is.null(EN_pred_results()) && !feature_mismatch() && !standard_mismatch() && !no_resids()) {
         resids <- sqrt((EN_pred_results()[, 2] - EN_pred_results()[, 3])^2)
-      } else {
-        resids <- NULL
       }
     }
     
@@ -7168,109 +6585,72 @@ server= function(input,output,session) {
       output$pca_model_text <- NULL
     }
     
-    # Build UI feature list for the prediction-entry table
+    # ------------- Build UI feature list for the prediction-entry table -------------
     iv_name <- "Sample_ID"
     rv_name <- colnames(current_data())[response_var()]
-    
-    `%||%` <- function(a, b) if (!is.null(a) && nzchar(a)) a else b
-    
-    # A/O groups and mapping to raw inputs
-    ao_groups <- list(
-      wind    = list(ao = c("WindA","WindO"),
-                     raw = c(rv_ao_map$wind_speed   %||% "Wind Speed",
-                             rv_ao_map$wind_dir     %||% "Wind Direction")),
-      current = list(ao = c("CurrentA","CurrentO"),
-                     raw = c(rv_ao_map$current_speed %||% "Current Speed",
-                             rv_ao_map$current_dir   %||% "Current Direction")),
-      wave    = list(ao = c("WaveA","WaveO"),
-                     raw = c(rv_ao_map$wave_height  %||% "Wave Height",
-                             rv_ao_map$wave_dir     %||% "Wave Direction"))
-    )
-    ao_all <- unlist(lapply(ao_groups, `[[`, "ao"), use.names = FALSE)
-    
-    get_inter_components <- function(term) {
-      s <- sub(INTER_PATTERN, "", term, perl = TRUE)
-      strsplit(s, INTER_SEP, fixed = TRUE)[[1]]
-    }
-    
-    get_base <- function(x) {
-      if (grepl(TRANS_PATTERN, x, perl = TRUE)) {
-        if (exists("base_name", mode = "function")) base_name(x) else sub(TRANS_PATTERN, "", x, perl = TRUE)
-      } else x
-    }
-    
-    # Start from model features excluding A/O components
-    ui_features <- model_features[!model_features %in% ao_all]
-    
-    # Add A/O raw inputs once if the model uses that A/O group
-    for (g in names(ao_groups)) {
-      if (any(model_features %in% ao_groups[[g]]$ao)) {
-        for (nm in ao_groups[[g]]$raw) if (!nm %in% ui_features) ui_features <- c(ui_features, nm)
-      }
-    }
-    
-    # Interactions: add raw bases (replace A/O components with their mapped raw inputs)
-    inter_terms <- model_features[grepl(INTER_PATTERN, model_features, perl = TRUE)]
-    if (length(inter_terms)) {
-      comps  <- lapply(inter_terms, get_inter_components)
-      bases  <- unlist(lapply(comps, function(parts) vapply(parts, get_base, FUN.VALUE = character(1))), use.names = FALSE)
-      if (any(bases %in% c("WindA","WindO")))    for (nm in ao_groups$wind$raw)    if (!nm %in% ui_features) ui_features <- c(ui_features, nm)
-      if (any(bases %in% c("CurrentA","CurrentO"))) for (nm in ao_groups$current$raw) if (!nm %in% ui_features) ui_features <- c(ui_features, nm)
-      if (any(bases %in% c("WaveA","WaveO")))    for (nm in ao_groups$wave$raw)    if (!nm %in% ui_features) ui_features <- c(ui_features, nm)
-    }
-    
-    # Remove transformed and interaction terms from the UI list; add raw bases for transformed terms
-    ui_features <- ui_features[!grepl(TRANS_PATTERN, ui_features, perl = TRUE)]
-    ui_features <- ui_features[!grepl(INTER_PATTERN, ui_features, perl = TRUE)]
-    
-    trans_in_model <- model_features[grepl(TRANS_PATTERN, model_features, perl = TRUE)]
-    if (length(trans_in_model)) {
-      bases <- sub(TRANS_PATTERN, "", trans_in_model, perl = TRUE)
-      for (b in bases) if (!(b %in% ao_all) && !(b %in% ui_features)) ui_features <- c(ui_features, b)
-    }
-    
-    # Deduplicate preserving order
-    ui_features <- unique(ui_features)
+    ui_required <- compute_ui_required(model_features, rv_ao_map)
+    pred_ui_required(ui_required)
+    pred_resp_name(rv_name)
     
     # Build a blank entry template only if no saved table exists for this model
     if (is.null(per_model_tbl)) {
-      temp_data <- data.frame(matrix(-999, nrow = input$num_preds, ncol = length(ui_features) + 6))
-      colnames(temp_data) <- c(iv_name, rv_name, ui_features, "Prediction", "Lower_Bound", "Upper_Bound", "Outcome")
+      temp_data <- data.frame(matrix(-999, nrow = input$num_preds, ncol = length(ui_required) + 6),check.names = FALSE)
+      colnames(temp_data) <- c(iv_name, rv_name, ui_required,"Prediction", "Lower_Bound", "Upper_Bound", "Outcome")
+      
+      # Seed ID as SampleIDn
+      temp_data[[1]] <- sprintf("SampleID%d", seq_len(nrow(temp_data)))
+      
+      # Store
+      switch(input$model_choice,
+             "Logistic_Regression" = LG_pred_table_data(temp_data),
+             "XGB_Classifier"      = XGBCL_pred_table_data(temp_data),
+             "XGBoost"             = XGB_pred_table_data(temp_data),
+             "Elastic_Net"         = EN_pred_table_data(temp_data))
       pred_table_data(temp_data)
+      
     } else {
+      # Ensure ID is character and store
+      per_model_tbl[[1]] <- as.character(per_model_tbl[[1]])
+      switch(input$model_choice,
+             "Logistic_Regression" = LG_pred_table_data(per_model_tbl),
+             "XGB_Classifier"      = XGBCL_pred_table_data(per_model_tbl),
+             "XGBoost"             = XGB_pred_table_data(per_model_tbl),
+             "Elastic_Net"         = EN_pred_table_data(per_model_tbl))
       pred_table_data(per_model_tbl)
     }
+    
+    # Render prediction table and feature ranges
+    current_pred_page(1)
+    renderpreddata(pred_table_data(), column_props, current_pred_page(), output)
     
     # Pass residuals and model features for later use
     pred_residuals(resids)
     pred_model_features(model_features)
     
-    # Feature ranges table (based on UI features present in current_data)
-    present_cols <- ui_features[ui_features %in% colnames(current_data())]
-    
+    # Feature ranges table (based on RAW UI columns present in current_data)
+    present_cols <- ui_required[ui_required %in% colnames(current_data())]
     if (length(present_cols) > 0) {
       selected_data <- current_data()[, present_cols, drop = FALSE]
       for (nm in names(selected_data)) {
-        if (!is.numeric(selected_data[[nm]])) selected_data[[nm]] <- suppressWarnings(as.numeric(selected_data[[nm]]))
+        if (!is.numeric(selected_data[[nm]])) {
+          selected_data[[nm]] <- suppressWarnings(as.numeric(selected_data[[nm]]))
+        }
       }
       min_feats <- apply(selected_data, 2, function(z) suppressWarnings(min(z, na.rm = TRUE)))
       max_feats <- apply(selected_data, 2, function(z) suppressWarnings(max(z, na.rm = TRUE)))
       
-      feature_ranges <- data.frame(matrix(NA, nrow = 2, ncol = length(present_cols) + 1))
+      feature_ranges <- data.frame(matrix(NA, nrow = 2, ncol = length(present_cols) + 1),
+                                   check.names = FALSE)
       feature_ranges[1, 1] <- "Minimum"
       feature_ranges[2, 1] <- "Maximum"
       feature_ranges[1, 2:(1 + length(present_cols))] <- magnitude_round(min_feats)
       feature_ranges[2, 2:(1 + length(present_cols))] <- magnitude_round(max_feats)
       colnames(feature_ranges) <- c("Feature_Characteristic", present_cols)
     } else {
-      feature_ranges <- data.frame(Feature_Characteristic = c("Minimum", "Maximum"))
+      feature_ranges <- data.frame(Feature_Characteristic = c("Minimum", "Maximum"),check.names = FALSE)
     }
     
     model_feature_ranges(feature_ranges)
-    
-    # Render prediction table and feature ranges
-    current_pred_page(1)
-    renderpreddata(pred_table_data(), column_props, current_pred_page(), init_ID_format, output)
     
     output$pd_feat_ranges <- DT::renderDataTable(server = TRUE, {
       datatable(
@@ -7298,120 +6678,199 @@ server= function(input,output,session) {
         )
       )
     })
-  }, ignoreInit = TRUE)
+  })
   
   # Change the number of desired predictions
   observeEvent(input$num_preds, ignoreInit = TRUE, {
-    req(iv$is_valid())
+    req(input$model_choice, input$model_choice != "None")
+    req(iv$is_valid())  # optional
     
-    temp_data <- switch(input$model_choice,
-                        "Logistic_Regression" = LG_pred_table_data(),
-                        "XGB_Classifier"      = XGBCL_pred_table_data(),
-                        "XGBoost"             = XGB_pred_table_data(),
-                        "Elastic_Net"         = EN_pred_table_data(),
-                        NULL
-    )
-    req(!is.null(temp_data))
+    # Fetch current table
+    temp <- switch(input$model_choice,
+                   "Logistic_Regression" = LG_pred_table_data(),
+                   "XGB_Classifier"      = XGBCL_pred_table_data(),
+                   "XGBoost"             = XGB_pred_table_data(),
+                   "Elastic_Net"         = EN_pred_table_data(),
+                   NULL)
+    if (is.null(temp)) temp <- pred_table_data()
     
-    cols      <- colnames(temp_data)
-    n_current <- nrow(temp_data)
-    n_target  <- input$num_preds
+    # Lazy init if still NULL
+    if (is.null(temp)) {
+      ui_required <- pred_ui_required(); rv_name <- pred_resp_name()
+      if (is.null(ui_required) || is.null(rv_name)) return()
+      n <- max(1L, as.integer(input$num_preds))
+      temp1 <- data.frame(matrix(-999, nrow = n, ncol = length(ui_required) + 6), check.names = FALSE)
+      colnames(temp1) <- c("Sample_ID", rv_name, ui_required,
+                           "Prediction", "Lower_Bound", "Upper_Bound", "Outcome")
+      temp1[[1]] <- sprintf("SampleID%d", seq_len(nrow(temp1)))
+      switch(input$model_choice,
+             "Logistic_Regression" = LG_pred_table_data(temp1),
+             "XGB_Classifier"      = XGBCL_pred_table_data(temp1),
+             "XGBoost"             = XGB_pred_table_data(temp1),
+             "Elastic_Net"         = EN_pred_table_data(temp1))
+      pred_table_data(temp1)
+      renderpreddata(temp1, column_props, current_pred_page(), output)
+      return()
+    }
+    
+    # Ensure ID col is character
+    temp[[1]] <- as.character(temp[[1]])
+    
+    n_current <- nrow(temp)
+    n_target  <- max(1L, as.integer(input$num_preds))
     n_new     <- n_target - n_current
     
+    # Indices
+    idx_resp       <- 2L
+    idx_pred_end   <- ncol(temp)
+    idx_pred_start <- idx_pred_end - 3L
+    idx_feat_start <- 3L
+    idx_feat_end   <- idx_pred_start - 1L
+    
+    # New rows with placeholders
+    make_new_rows <- function(df, n_rows) {
+      new_rows <- as.data.frame(lapply(df, function(col) {
+        if (is.numeric(col)) rep(NA_real_, n_rows)
+        else rep(NA_character_, n_rows)
+      }), check.names = FALSE)
+      # Fill placeholders
+      if (idx_feat_end >= idx_feat_start)
+        for (j in idx_feat_start:idx_feat_end) new_rows[[j]] <- rep(-999, n_rows)
+      new_rows[[idx_resp]] <- rep(-999, n_rows)
+      for (j in idx_pred_start:idx_pred_end) new_rows[[j]] <- rep(-999, n_rows)
+      new_rows
+    }
+    
+    # Detector for pure SampleIDn templates
+    is_blank_template <- function(df) {
+      id <- df[[1]]
+      is.character(id) && length(id) > 0 && all(grepl("^SampleID\\d+$", id))
+    }
+    
     if (n_new > 0) {
-      # Append rows with the same columns as temp_data
-      new_rows <- as.data.frame(matrix(-999, nrow = n_new, ncol = length(cols)))
-      names(new_rows) <- cols
-      temp_data1 <- rbind(temp_data, new_rows)
-      
-      # Fill ID/Response for the appended rows with "-999"
-      temp_data1[(n_current + 1):nrow(temp_data1), 1] <- "-999"
-      temp_data1[(n_current + 1):nrow(temp_data1), 2] <- "-999"
-      # Coerce those two columns to character so "-999" shows and avoids NA
-      temp_data1[, 1] <- as.character(temp_data1[, 1])
-      temp_data1[, 2] <- as.character(temp_data1[, 2])
+      # Append and assign IDs to new rows
+      new_rows <- make_new_rows(temp, n_new)
+      temp1 <- rbind(temp, new_rows)
+      temp1[[1]] <- assign_sample_ids(temp1[[1]], n_current + 1L, nrow(temp1))
       
     } else if (n_target == 1) {
-      # Rebuild as a single-row table with same columns
-      temp_data1 <- as.data.frame(matrix(-999, nrow = 1, ncol = length(cols)))
-      names(temp_data1) <- cols
-      
-      # Fill ID/Response for the single row with "-999"
-      temp_data1[1, 1] <- "-999"
-      temp_data1[1, 2] <- "-999"
-      temp_data1[, 1]  <- as.character(temp_data1[, 1])
-      temp_data1[, 2]  <- as.character(temp_data1[, 2])
+      # Rebuild single row
+      temp1 <- as.data.frame(lapply(temp, function(col) {
+        if (is.numeric(col)) NA_real_ else NA_character_
+      }), check.names = FALSE)
+      names(temp1) <- colnames(temp)
+      # Placeholders
+      if (idx_feat_end >= idx_feat_start)
+        for (j in idx_feat_start:idx_feat_end) temp1[[j]] <- -999
+      for (j in idx_pred_start:idx_pred_end) temp1[[j]] <- -999
+      temp1[[idx_resp]] <- -999
+      temp1[[1]] <- "SampleID1"
       
     } else {
-      # Truncate to requested number of rows
-      temp_data1 <- temp_data[seq_len(n_target), , drop = FALSE]
+      # Truncate
+      temp1 <- temp[seq_len(n_target), , drop = FALSE]
+      if (is_blank_template(temp1)) {
+        temp1[[1]] <- sprintf("SampleID%d", seq_len(nrow(temp1)))
+      }
     }
     
-    # Save back to the appropriate store
+    # Store and render
     switch(input$model_choice,
-           "Logistic_Regression" = LG_pred_table_data(temp_data1),
-           "XGB_Classifier"      = XGBCL_pred_table_data(temp_data1),
-           "XGBoost"             = XGB_pred_table_data(temp_data1),
-           "Elastic_Net"         = EN_pred_table_data(temp_data1)
-    )
-    
-    renderpreddata(temp_data1, column_props, current_pred_page(), init_ID_format, output)
+           "Logistic_Regression" = LG_pred_table_data(temp1),
+           "XGB_Classifier"      = XGBCL_pred_table_data(temp1),
+           "XGBoost"             = XGB_pred_table_data(temp1),
+           "Elastic_Net"         = EN_pred_table_data(temp1))
+    pred_table_data(temp1)
+    renderpreddata(temp1, column_props, current_pred_page(), output)
   })
   
-  # Prediction dataset cell editing
-  observeEvent(input$pd_data_cell_edit, ignoreInit = T, {
+  # Data set cell editing
+  observeEvent(input$pd_data_cell_edit, ignoreInit = TRUE, {
+    req(input$model_choice, input$model_choice != "None")
     
-    info = input$pd_data_cell_edit
+    info <- input$pd_data_cell_edit
+    req(info, info$value)
     
-    if (input$model_choice == "Logistic_Regression") {
-      
-      data = LG_pred_table_data()
-      
-    } else if (input$model_choice == "XGB_Classifier") {
-      
-      data = XGBCL_pred_table_data()
-      
-    } else if (input$model_choice == "XGBoost") {
-      
-      data = XGB_pred_table_data()
-      
-    } else if (input$model_choice == "Elastic_Net") {
-      
-      data = EN_pred_table_data()
+    df <- switch(input$model_choice,
+                 "Logistic_Regression" = LG_pred_table_data(),
+                 "XGB_Classifier"      = XGBCL_pred_table_data(),
+                 "XGBoost"             = XGB_pred_table_data(),
+                 "Elastic_Net"         = EN_pred_table_data(),
+                 NULL)
+    req(!is.null(df))
+    
+    row <- info$row
+    col <- info$col + 1L
+    val <- info$value
+    cols <- colnames(df)
+    n    <- ncol(df)
+    
+    idx_id         <- 1L
+    idx_resp       <- 2L
+    idx_pred_start <- n - 3L
+    idx_pred_end   <- n
+    idx_feat_start <- 3L
+    idx_feat_end   <- idx_pred_start - 1L
+    
+    if (identical(val, "") || is.na(val)) {
+      showModal(modalDialog(
+        title = "Input Error",
+        "Missing feature values are not allowed.",
+        easyClose = FALSE, footer = div(modalButton("Close"))
+      ))
+      renderpreddata(df, column_props, current_pred_page(), output)
+      return()
     }
     
-    if (is.null(info) || info$value == "" || is.na(info$value)) {
-      
-      showModal(modalDialog(title = "Input Error",paste("Missing feature values are not allowed."),easyClose = FALSE,footer = div(modalButton('Close'))))
-      renderpreddata(data,column_props,current_pred_page(),init_ID_format,output)
-      
-    } else {
-      
-      i = info$row
-      j = info$col + 1
-      
-      data_new = editData(data,input$pd_data_cell_edit,"pd_data",rownames = FALSE)
-      pred_table_data(data_new)
-      
-      if (input$model_choice == "Logistic_Regression") {
-        
-        LG_pred_table_data(data_new)
-        
-      } else if (input$model_choice == "XGB_Classifier") {
-        
-        XGBCL_pred_table_data(data_new)
-        
-      } else if (input$model_choice == "XGBoost") {
-        
-        XGB_pred_table_data(data_new)
-        
-      } else if (input$model_choice == "Elastic_Net") {
-        
-        EN_pred_table_data(data_new)
+    # Disallow edits to last 4 columns
+    if (col >= idx_pred_start && col <= idx_pred_end) {
+      renderpreddata(df, column_props, current_pred_page(), output)
+      return()
+    }
+    
+    as_num <- function(x) suppressWarnings(as.numeric(x))
+    
+    # Apply edit
+    if (col == idx_id) {
+      df[row, col] <- as.character(val)  # ID stays character
+    } else if (col == idx_resp) {
+      v <- as_num(val)
+      if (is.na(v)) {
+        showModal(modalDialog(
+          title = "Input Error",
+          "Response must be numeric.",
+          easyClose = FALSE, footer = div(modalButton("Close"))
+        ))
+        renderpreddata(df, column_props, current_pred_page(), output)
+        return()
       }
-      
-      renderpreddata(data_new,column_props,current_pred_page(),init_ID_format,output)
+      df[row, col] <- v
+    } else if (col >= idx_feat_start && col <= idx_feat_end) {
+      v <- as_num(val)
+      if (is.na(v)) {
+        showModal(modalDialog(
+          title = "Input Error",
+          sprintf("Feature '%s' must be numeric.", cols[col]),
+          easyClose = FALSE, footer = div(modalButton("Close"))
+        ))
+        renderpreddata(df, column_props, current_pred_page(), output)
+        return()
+      }
+      df[row, col] <- v
+    } else {
+      renderpreddata(df, column_props, current_pred_page(), output)
+      return()
     }
+    
+    # Save and render
+    df[[1]] <- as.character(df[[1]])
+    pred_table_data(df)
+    switch(input$model_choice,
+           "Logistic_Regression" = LG_pred_table_data(df),
+           "XGB_Classifier"      = XGBCL_pred_table_data(df),
+           "XGBoost"             = XGB_pred_table_data(df),
+           "Elastic_Net"         = EN_pred_table_data(df))
+    renderpreddata(df, column_props, current_pred_page(), output)
   })
   
   # Make predictions using selected model
@@ -7424,9 +6883,7 @@ server= function(input,output,session) {
                               "XGB_Classifier"      = XGBCL_pred_table_data(),
                               "XGBoost"             = XGB_pred_table_data(),
                               "Elastic_Net"         = EN_pred_table_data(),
-                              NULL
-    )
-    
+                              NULL)
     if (is.null(prediction_data)) {
       showModal(modalDialog(
         "Missing feature values are not allowed. Provide all feature values to make predictions.",
@@ -7436,13 +6893,20 @@ server= function(input,output,session) {
     }
     
     # 2) Validate no missing values in the UI feature region
-    ui_start <- 3L
-    ui_stop  <- ncol(prediction_data) - 4L  # last 4 are Prediction/Bounds/Outcome
-    ui_df    <- if (ui_stop >= ui_start) prediction_data[, ui_start:ui_stop, drop = FALSE] else NULL
+    idx_id         <- 1L
+    idx_resp       <- 2L
+    idx_pred_end   <- ncol(prediction_data)
+    idx_pred_start <- idx_pred_end - 3L  # Prediction / Lower_Bound / Upper_Bound / Outcome
+    idx_feat_start <- 3L
+    idx_feat_end   <- idx_pred_start - 1L
     
-    if (is.null(ui_df) ||
-        any(is.na(ui_df)) ||
-        any(as.matrix(ui_df) == -999, na.rm = TRUE)) {
+    ui_df <- if (idx_feat_end >= idx_feat_start) {
+      prediction_data[, idx_feat_start:idx_feat_end, drop = FALSE]
+    } else {
+      NULL
+    }
+    
+    if (is.null(ui_df) || any(is.na(ui_df)) || any(as.matrix(ui_df) == -999, na.rm = TRUE)) {
       showModal(modalDialog(
         "Missing feature values detected. Provide all feature values to make predictions.",
         easyClose = FALSE, footer = div(modalButton('Close'))
@@ -7456,136 +6920,71 @@ server= function(input,output,session) {
                              "Logistic_Regression" = LG_final_features(),
                              "XGB_Classifier"      = XGBCL_final_features(),
                              "XGBoost"             = XGB_final_features(),
-                             "Elastic_Net"         = EN_final_features()
-    )
+                             "Elastic_Net"         = EN_final_features())
     
     # 4) Build a working feature frame from the UI table and compute A/O if needed
-    # The UI feature columns (3:ui_stop) contain raw Magnitude/Direction columns (canonical names).
-    df_ui <- as.data.frame(ui_df, stringsAsFactors = FALSE)
+    df_ui <- as.data.frame(ui_df, stringsAsFactors = FALSE, check.names = FALSE)
     
-    # Helper utilities (use globals if available; else fallbacks)
-    AO_COMP_NAMES <- get0("AO_COMP_NAMES",
-                          ifnotfound = c("WindA","WindO","CurrentA","CurrentO","WaveA","WaveO"),
-                          envir = .GlobalEnv)
-    TRANS_PATTERN <- get0("TRANS_PATTERN",
-                          ifnotfound = "^(Log\\.\\.|Inverse\\.\\.|Sqrt\\.\\.|Qdrt\\.\\.|Square\\.\\.|Poly\\.\\.)",
-                          envir = .GlobalEnv)
-    INTER_PATTERN <- get0("INTER_PATTERN",
-                          ifnotfound = "^Int\\.\\.",
-                          envir = .GlobalEnv)
-    INTER_SEP     <- get0("INTER_SEP", ifnotfound = "__", envir = .GlobalEnv)
-    
-    is_transformed_local <- function(nm) grepl(TRANS_PATTERN, nm, perl = TRUE)
-    base_name_local      <- function(nm) sub(TRANS_PATTERN, "", nm, perl = TRUE)
-    is_interaction_local <- function(nm) grepl(INTER_PATTERN, nm, perl = TRUE)
-    parse_inter_local    <- function(nm) {
-      body <- sub(INTER_PATTERN, "", nm, perl = TRUE)
-      strsplit(body, INTER_SEP, fixed = TRUE)[[1L]]
-    }
-    
-    # Prefix -> human kind (compute_transform expects these labels)
-    PREFIX_KIND <- get0("PREFIX_KIND", ifnotfound = NULL, envir = .GlobalEnv)
-    if (is.null(PREFIX_KIND)) {
-      PREFIX_KIND <- c(
-        "Log.."     = "Log10",
-        "Inverse.." = "Inverse",
-        "Sqrt.."    = "Square Root",
-        "Qdrt.."    = "Quad Root",
-        "Square.."  = "Square",
-        "Poly.."    = "Polynomial"
-      )
-    }
-    get_prefix_local <- get0("get_prefix", ifnotfound = NULL, envir = .GlobalEnv)
-    if (is.null(get_prefix_local)) {
-      get_prefix_local <- function(x) {
-        m <- regexpr(TRANS_PATTERN, x, perl = TRUE)
-        if (m[1L] == -1L) return(NA_character_)
-        substr(x, m[1L], m[1L] + attr(m, "match.length")[1L] - 1L)
-      }
-    }
-    
-    # Compute A/O components from raw UI df if the model expects them (directly or in interactions/transforms)
+    # AO components present in the model (direct, transformed bases, or interactions)
+    AO_COMP_NAMES <- get0("AO_COMP_NAMES", envir = .GlobalEnv,
+                          ifnotfound = c("WindA","WindO","CurrentA","CurrentO","WaveA","WaveO"))
     need_AO <- FALSE
     required_AO <- character(0)
+    
     for (f in model_features) {
       if (f %in% AO_COMP_NAMES) {
         need_AO <- TRUE; required_AO <- c(required_AO, f)
-      } else if (is_transformed_local(f)) {
-        b <- base_name_local(f)
+      } else if (is_transformed(f)) {
+        b <- base_name(f)
         if (b %in% AO_COMP_NAMES) { need_AO <- TRUE; required_AO <- c(required_AO, b) }
-      } else if (is_interaction_local(f)) {
-        parts <- parse_inter_local(f)
+      } else if (is_interaction(f)) {
+        parts <- parse_inter_bases(f)
         for (p in parts) {
-          if (is_transformed_local(p)) p <- base_name_local(p)
+          if (is_transformed(p)) p <- base_name(p)
           if (p %in% AO_COMP_NAMES) { need_AO <- TRUE; required_AO <- c(required_AO, p) }
         }
       }
     }
-    # Deduplicate required_AO preserving order
-    if (length(required_AO)) {
-      seen <- new.env(parent = emptyenv()); tmp <- character(0)
-      for (nm in required_AO) if (!exists(nm, envir = seen, inherits = FALSE)) { assign(nm, TRUE, envir = seen); tmp <- c(tmp, nm) }
-      required_AO <- tmp
-    }
-    
-    # `%||%` helper
-    `%||%` <- function(a, b) if (!is.null(a) && is.character(a) && length(a) == 1L && nzchar(a)) a else b
+    if (length(required_AO)) required_AO <- unique(required_AO)
     
     if (need_AO) {
-      # Wind
-      if (any(required_AO %in% c("WindA","WindO"))) {
-        sp <- rv_ao_map$wind_speed %||% "Wind Speed"
-        dr <- rv_ao_map$wind_dir   %||% "Wind Direction"
-        if (!all(c(sp, dr) %in% names(df_ui))) {
-          showModal(modalDialog("Wind raw inputs are missing from the prediction table.", easyClose = TRUE))
-          return()
-        }
-        S <- suppressWarnings(as.numeric(df_ui[[sp]]))
-        D <- suppressWarnings(as.numeric(df_ui[[dr]]))
-        theta <- (D - as.numeric(bo())) * pi / 180
-        df_ui[["WindA"]] <- -S * cos(theta)
-        df_ui[["WindO"]] <-  S * sin(theta)
+      # Check that required raw inputs exist in df_ui based on canonical names from training
+      groups <- list(
+        wind    = list(ao = c("WindA","WindO"),
+                       raw = c(rv_ao_map$wind_speed %||% "Wind Speed",
+                               rv_ao_map$wind_dir   %||% "Wind Direction")),
+        current = list(ao = c("CurrentA","CurrentO"),
+                       raw = c(rv_ao_map$current_speed %||% "Current Speed",
+                               rv_ao_map$current_dir   %||% "Current Direction")),
+        wave    = list(ao = c("WaveA","WaveO"),
+                       raw = c(rv_ao_map$wave_height %||% "Wave Height",
+                               rv_ao_map$wave_dir    %||% "Wave Direction"))
+      )
+      need_raw <- character(0)
+      if (any(required_AO %in% groups$wind$ao))    need_raw <- c(need_raw, groups$wind$raw)
+      if (any(required_AO %in% groups$current$ao)) need_raw <- c(need_raw, groups$current$raw)
+      if (any(required_AO %in% groups$wave$ao))    need_raw <- c(need_raw, groups$wave$raw)
+      
+      missing_raw <- setdiff(need_raw, names(df_ui))
+      if (length(missing_raw)) {
+        showModal(modalDialog(
+          title = "Missing A/O raw inputs",
+          HTML(paste("Prediction table is missing raw input(s):", paste(missing_raw, collapse = ", "))),
+          easyClose = TRUE
+        ))
+        return()
       }
-      # Current
-      if (any(required_AO %in% c("CurrentA","CurrentO"))) {
-        sp <- rv_ao_map$current_speed %||% "Current Speed"
-        dr <- rv_ao_map$current_dir   %||% "Current Direction"
-        if (!all(c(sp, dr) %in% names(df_ui))) {
-          showModal(modalDialog("Current raw inputs are missing from the prediction table.", easyClose = TRUE))
-          return()
-        }
-        S <- suppressWarnings(as.numeric(df_ui[[sp]]))
-        D <- suppressWarnings(as.numeric(df_ui[[dr]]))
-        theta <- (D - as.numeric(bo())) * pi / 180
-        df_ui[["CurrentA"]] <- -S * cos(theta)
-        df_ui[["CurrentO"]] <-  S * sin(theta)
-      }
-      # Wave (height, dir)
-      if (any(required_AO %in% c("WaveA","WaveO"))) {
-        ht <- rv_ao_map$wave_height %||% "Wave Height"
-        dr <- rv_ao_map$wave_dir    %||% "Wave Direction"
-        if (!all(c(ht, dr) %in% names(df_ui))) {
-          showModal(modalDialog("Wave raw inputs are missing from the prediction table.", easyClose = TRUE))
-          return()
-        }
-        H <- suppressWarnings(as.numeric(df_ui[[ht]]))
-        D <- suppressWarnings(as.numeric(df_ui[[dr]]))
-        theta <- (D - as.numeric(bo())) * pi / 180
-        df_ui[["WaveA"]] <- -H * cos(theta)
-        df_ui[["WaveO"]] <-  H * sin(theta)
-      }
+      
+      # Compute AO components using your global helper
+      df_ui <- compute_AO(df_ui, rv_ao_map, bo())
     }
     
     # 4b) Synthesize transformed features from bases using compute_transform
-    if (!exists("compute_transform", mode = "function")) {
-      showModal(modalDialog("compute_transform is not available; cannot compute transformed features.", easyClose = TRUE))
-      return()
-    }
-    trans_feats <- model_features[is_transformed_local(model_features)]
+    trans_feats <- model_features[is_transformed(model_features)]
     if (length(trans_feats)) {
       for (tf in trans_feats) {
         if (tf %in% names(df_ui)) next
-        base <- base_name_local(tf)
+        base <- base_name(tf)
         if (!base %in% names(df_ui)) {
           showModal(modalDialog(
             title = "Missing raw input",
@@ -7594,28 +6993,22 @@ server= function(input,output,session) {
           ))
           return()
         }
-        pref <- get_prefix_local(tf)          # e.g., "Poly.."
-        kind <- PREFIX_KIND[[pref]]           # e.g., "Polynomial"
-        if (is.null(kind) || is.na(kind)) {
-          showModal(modalDialog(sprintf("Unknown transform kind for '%s'.", tf), easyClose = TRUE))
-          return()
-        }
-        df_ui[[tf]] <- compute_transform(df_ui[[base]], kind = kind, base = base)
+        pref <- get_prefix(tf)  # e.g., "Poly.." / "Log.." / ...
+        df_ui[[tf]] <- compute_transform(df_ui[[base]], kind = pref, base = base)
       }
     }
     
-    # 4c) Synthesize interaction features Int..Feat1__Feat2
-    int_feats <- model_features[is_interaction_local(model_features)]
+    # 4c) Synthesize interaction features Int..A__B
+    int_feats <- model_features[is_interaction(model_features)]
     if (length(int_feats)) {
       for (nm in int_feats) {
         if (nm %in% names(df_ui)) next
-        parts <- parse_inter_local(nm)
+        parts <- parse_inter_bases(nm)
         if (length(parts) != 2L) {
           showModal(modalDialog(sprintf("Malformed interaction name '%s'.", nm), easyClose = TRUE))
           return()
         }
         a <- parts[1L]; b <- parts[2L]
-        # If components are transformed, ensure they exist (already handled above). If A/O components, must exist by now.
         if (!all(c(a, b) %in% names(df_ui))) {
           showModal(modalDialog(
             title = "Missing inputs for interactions",
@@ -7630,13 +7023,11 @@ server= function(input,output,session) {
     }
     
     # 5) Build the model input matrix in the exact feature order required by the model
-    
     final_pca <- isTRUE(final_model_PCA())
     pred_pca_data <- NULL
     pred_feat_data <- NULL
     
     if (final_pca) {
-
       base_vars <- names(PCA_scaling_mean())
       if (!length(base_vars)) {
         showModal(modalDialog("PCA scaling information is missing. Cannot compute PCA features.", easyClose = TRUE))
@@ -7655,39 +7046,31 @@ server= function(input,output,session) {
       
       # Build numeric matrix X in base_vars order
       pred_base <- df_ui[, base_vars, drop = FALSE]
-      for (nm in names(pred_base)) pred_base[[nm]] <- suppressWarnings(as.numeric(pred_base[[nm]]))
+      pred_base[] <- lapply(pred_base, function(z) suppressWarnings(as.numeric(z)))
       X <- as.matrix(pred_base)
       if (any(!is.finite(X))) {
         bad_cols <- names(which(colSums(!is.finite(X)) > 0))
         showModal(modalDialog(
           title = "Non-numeric pre-PCA inputs",
-          HTML(paste(
-            "These pre-PCA features contain non-numeric values after coercion:",
-            paste(bad_cols, collapse = ", "),
-            "<br/>Please fix the inputs (avoid 'NA' strings, symbols, etc.)."
-          )),
+          HTML(paste("These pre-PCA features contain non-numeric values after coercion:",
+                     paste(bad_cols, collapse = ", "))),
           easyClose = TRUE
         ))
         return()
       }
       
       # Center/scale with sanitized mean/sd
-      mu  <- as.numeric(PCA_scaling_mean()[base_vars])
-      sdv <- as.numeric(PCA_scaling_sd()[base_vars])
-      mu[!is.finite(mu)] <- 0
-      sdv[!is.finite(sdv) | sdv == 0] <- 1
-      Xc <- sweep(X, 2, mu, FUN = "-")
-      Xs <- sweep(Xc, 2, sdv, FUN = "/")
+      mu  <- as.numeric(PCA_scaling_mean()[base_vars]);  mu[!is.finite(mu)] <- 0
+      sdv <- as.numeric(PCA_scaling_sd()[base_vars]);    sdv[!is.finite(sdv) | sdv == 0] <- 1
+      Xs  <- sweep(sweep(X, 2, mu, FUN = "-"), 2, sdv, FUN = "/")
       
-      # Load PCA loadings
+      # Load PCA loadings and align
       rot <- PCA_coefficients()
       if (is.null(rot)) { showModal(modalDialog("PCA coefficients are missing.", easyClose = TRUE)); return() }
       
-      # If loadings were saved as a data.frame with a feature column, use it as rownames
       if (is.data.frame(rot)) {
         key_candidates <- intersect(names(rot), c("Feature","feature","Variable","variable","Name","name","feat"))
-        key <- NULL
-        if (length(key_candidates)) key <- key_candidates[1]
+        key <- if (length(key_candidates)) key_candidates[1] else NULL
         if (is.null(key)) {
           char_cols <- names(rot)[vapply(rot, function(x) is.character(x) || is.factor(x), logical(1))]
           for (cc in char_cols) {
@@ -7698,9 +7081,8 @@ server= function(input,output,session) {
         if (!is.null(key)) {
           rn_from <- as.character(rot[[key]])
           rot_num <- rot[, setdiff(names(rot), key), drop = FALSE]
-          for (nm in names(rot_num)) rot_num[[nm]] <- suppressWarnings(as.numeric(rot_num[[nm]]))
-          rot <- as.matrix(rot_num)
-          rownames(rot) <- rn_from
+          rot_num[] <- lapply(rot_num, function(x) suppressWarnings(as.numeric(x)))
+          rot <- as.matrix(rot_num); rownames(rot) <- rn_from
         } else {
           rot <- as.matrix(rot)
         }
@@ -7709,50 +7091,38 @@ server= function(input,output,session) {
       }
       
       rn <- rownames(rot); cn <- colnames(rot)
-      
-      # Auto-detect transposed loadings: if rownames don’t include base_vars but colnames do
       need_transpose <- (is.null(rn) || !any(rn %in% base_vars)) && (!is.null(cn) && any(cn %in% base_vars))
       if (need_transpose) { rot <- t(rot); rn <- rownames(rot); cn <- colnames(rot) }
       
-      rn_safe <- if (is.null(rn)) character(0) else rn
-      missing_in_rot <- setdiff(base_vars, rn_safe)
+      missing_in_rot <- setdiff(base_vars, if (is.null(rn)) character(0) else rn)
       if (length(missing_in_rot)) {
-        peek_rn <- if (!is.null(rn)) paste(head(rn, 10), collapse = ", ") else "<none>"
-        peek_cn <- if (!is.null(cn)) paste(head(cn, 10), collapse = ", ") else "<none>"
         showModal(modalDialog(
           title = "PCA loadings mismatch",
-          HTML(paste0(
-            "The PCA loadings do not contain rows for these features:<br/>",
-            paste(missing_in_rot, collapse = ", "),
-            "<br/><br/>Row names seen (first 10): ", peek_rn,
-            "<br/>Col names seen (first 10): ", peek_cn
-          )),
+          HTML(paste0("PCA loadings do not contain rows for: ", paste(missing_in_rot, collapse = ", "))),
           easyClose = TRUE
         ))
         return()
       }
       
-      # Reorder rows to match base_vars, then select axes
       rot <- rot[base_vars, , drop = FALSE]
       axes <- model_PCA_axes()
       if (!length(axes)) { showModal(modalDialog("Model PCA axes are not available.", easyClose = TRUE)); return() }
       
-      if (is.character(axes)) {
+      rot_sub <- if (is.character(axes)) {
         if (!all(axes %in% colnames(rot))) {
           showModal(modalDialog(
             title = "Missing PCA axes",
-            HTML(paste("Model requested axes not present in loadings:",
-                       paste(setdiff(axes, colnames(rot)), collapse = ", "))),
+            HTML(paste("Requested axes not present:", paste(setdiff(axes, colnames(rot)), collapse = ", "))),
             easyClose = TRUE
           ))
           return()
         }
-        rot_sub <- rot[, axes, drop = FALSE]
+        rot[, axes, drop = FALSE]
       } else {
         if (any(axes < 1 | axes > ncol(rot))) {
           showModal(modalDialog("Requested PCA axes are out of range.", easyClose = TRUE)); return()
         }
-        rot_sub <- rot[, axes, drop = FALSE]
+        rot[, axes, drop = FALSE]
       }
       
       if (any(!is.finite(rot_sub))) {
@@ -7760,53 +7130,24 @@ server= function(input,output,session) {
         return()
       }
       
-      # Project to PCA scores
       scores <- Xs %*% as.matrix(rot_sub)
       colnames(scores) <- colnames(rot_sub)
       pred_pca_data <- as.data.frame(scores, stringsAsFactors = FALSE)
       
-      # Optional diagnostics
-      # message("PCA dims: Xs=", paste(dim(Xs), collapse = "x"),
-      #         " rot_sub=", paste(dim(rot_sub), collapse = "x"),
-      #         " scores=", paste(dim(pred_pca_data), collapse = "x"))
-      # print(head(pred_pca_data, 3))
-      # print(apply(pred_pca_data, 2, sd, na.rm = TRUE))
-      
-      # Optional: warn if all PCs are still constant/NA
-      all_const_or_na <- all(vapply(pred_pca_data, function(z) {
-        z2 <- na.omit(z); length(z2) < 2 || sd(z2) == 0
-      }, logical(1)))
-      if (all_const_or_na) warning("All PCA score columns are constant or NA across prediction rows; recheck scaling/loadings alignment.")
-      
     } else {
-
-      missing_feats <- setdiff(model_features, names(df_ui))
-      if (length(missing_feats) > 0) {
-        showModal(modalDialog(
-          title = "Missing required features",
-          HTML(paste("The following required model features are missing:",
-                     paste(missing_feats, collapse = ", "))),
-          easyClose = TRUE
-        ))
-        return()
-      }
-      
-      # Determine the exact column order expected by the model
+      # Non-PCA: validate presence and order
       expected_names <- model_features
       
-      # Prefer model-specific feature_name vectors when available (e.g., xgboost)
+      # Prefer model-specific names if available
       xgb_names   <- tryCatch(get("XGB_model", inherits = TRUE)$feature_names, error = function(e) NULL)
       xgbcl_names <- tryCatch(get("XGBCL_model", inherits = TRUE)$feature_names, error = function(e) NULL)
       
-      if (identical(input$model_choice, "XGBoost") &&
-          !is.null(xgb_names) && length(xgb_names) > 0) {
+      if (identical(input$model_choice, "XGBoost") && !is.null(xgb_names) && length(xgb_names) > 0) {
         expected_names <- xgb_names
-      } else if (identical(input$model_choice, "XGB_Classifier") &&
-                 !is.null(xgbcl_names) && length(xgbcl_names) > 0) {
+      } else if (identical(input$model_choice, "XGB_Classifier") && !is.null(xgbcl_names) && length(xgbcl_names) > 0) {
         expected_names <- xgbcl_names
       }
       
-      # Validate presence of all expected columns
       missing_expected <- setdiff(expected_names, names(df_ui))
       if (length(missing_expected) > 0) {
         showModal(modalDialog(
@@ -7817,82 +7158,78 @@ server= function(input,output,session) {
         return()
       }
       
-      # Slice in the expected order and coerce to numeric
       pred_feat_data <- as.data.frame(df_ui[, expected_names, drop = FALSE])
       pred_feat_data[] <- lapply(pred_feat_data, function(z) suppressWarnings(as.numeric(z)))
     }
     
     # 6) Predict with the chosen model
-    resids  <- pred_residuals()
-    rv_val  <- prediction_data[, 2, drop = TRUE]  # response column for outcome labelling
+    resids   <- pred_residuals()
+    rv_val   <- prediction_data[, idx_resp, drop = TRUE]
     outcomes <- character(nrow(prediction_data))
+    predictions <- NULL
     
     if (input$model_choice == "Logistic_Regression") {
       predictions <- if (final_pca) {
-        predict(model, newx = as.matrix(pred_pca_data), type = "response", scale = LG_standardize())
+        predict(model, newx   = as.matrix(pred_pca_data),
+                type   = "response", scale = LG_standardize())
       } else {
-        predict(model, newx = as.matrix(pred_feat_data), type = "response", scale = LG_standardize())
+        predict(model, newx   = as.matrix(pred_feat_data),
+                type   = "response", scale = LG_standardize())
       }
-      
       for (i in seq_len(nrow(prediction_data))) {
         if (is.numeric(rv_val[i])) {
           outcomes[i] <- ifelse(predictions[i] >= LG_crit_prob() && rv_val[i] >= LG_thresh(), "TP",
                                 ifelse(predictions[i] <= LG_crit_prob() && rv_val[i] <= LG_thresh(), "TN",
                                        ifelse(predictions[i] >= LG_crit_prob() && rv_val[i] <= LG_thresh(), "FP", "FN")))
-        } else {
-          outcomes[i] <- NA
-        }
+        } else outcomes[i] <- NA
       }
       
     } else if (input$model_choice == "XGB_Classifier") {
       predictions <- if (final_pca) {
-        predict(model, newdata = as.matrix(pred_pca_data), type = "response", scale = XGBCL_standardize())
+        predict(model, newdata = as.matrix(pred_pca_data),
+                type   = "response", scale = XGBCL_standardize())
       } else {
-        predict(model, newdata = as.matrix(pred_feat_data), type = "response", scale = XGBCL_standardize())
+        predict(model, newdata = as.matrix(pred_feat_data),
+                type   = "response", scale = XGBCL_standardize())
       }
-      
       for (i in seq_len(nrow(prediction_data))) {
         if (is.numeric(rv_val[i])) {
           outcomes[i] <- ifelse(predictions[i] >= XGBCL_crit_prob() && rv_val[i] >= XGBCL_thresh(), "TP",
                                 ifelse(predictions[i] <= XGBCL_crit_prob() && rv_val[i] <= XGBCL_thresh(), "TN",
                                        ifelse(predictions[i] >= XGBCL_crit_prob() && rv_val[i] <= XGBCL_thresh(), "FP", "FN")))
-        } else {
-          outcomes[i] <- NA
-        }
+        } else outcomes[i] <- NA
       }
       
     } else if (input$model_choice == "XGBoost") {
       predictions <- if (final_pca) {
-        predict(model, newdata = as.matrix(pred_pca_data), scale = XGB_standardize())
+        predict(model, newdata = as.matrix(pred_pca_data),
+                scale  = XGB_standardize())
       } else {
-        predict(model, newdata = as.matrix(pred_feat_data), scale = XGB_standardize())
+        predict(model, newdata = as.matrix(pred_feat_data),
+                scale  = XGB_standardize())
       }
-      
       for (i in seq_len(nrow(prediction_data))) {
         if (is.numeric(rv_val[i])) {
           outcomes[i] <- ifelse(predictions[i] >= input$XGB_dec_crit && rv_val[i] >= input$XGB_stand, "TP",
                                 ifelse(predictions[i] <= input$XGB_dec_crit && rv_val[i] <= input$XGB_stand, "TN",
                                        ifelse(predictions[i] >= input$XGB_dec_crit && rv_val[i] <= input$XGB_stand, "FP", "FN")))
-        } else {
-          outcomes[i] <- NA
-        }
+        } else outcomes[i] <- NA
       }
       
     } else if (input$model_choice == "Elastic_Net") {
       predictions <- if (final_pca) {
-        predict(model, newx = as.matrix(pred_pca_data), scale = EN_standardize())
+        predict(model, newx   = as.matrix(pred_pca_data),
+                scale  = EN_standardize())
       } else {
-        predict(model, newx = as.matrix(pred_feat_data), scale = EN_standardize())
+        predict(model, newx   = as.matrix(pred_feat_data),
+                scale  = EN_standardize())
       }
-      
       for (i in seq_len(nrow(prediction_data))) {
         if (is.numeric(rv_val[i])) {
           outcomes[i] <- ifelse(predictions[i] >= input$EN_dec_crit && rv_val[i] >= input$EN_stand, "TP",
                                 ifelse(predictions[i] <= input$EN_dec_crit && rv_val[i] <= input$EN_stand, "TN",
                                        ifelse(predictions[i] >= input$EN_dec_crit && rv_val[i] <= input$EN_stand, "FP", "FN")))
-        } else {
-          outcomes[i] <- NA
-        }
+        } else outcomes[i] <- NA
       }
     }
     
@@ -7909,34 +7246,31 @@ server= function(input,output,session) {
         lower_bound[lower_bound < 0] <- 0
       }
     } else {
-      upper_bound <- rep(NA, length(predictions))
-      lower_bound <- rep(NA, length(predictions))
+      upper_bound <- rep(NA_real_, length(predictions))
+      lower_bound <- rep(NA_real_, length(predictions))
     }
     
     # 8) Update only the last four columns of the displayed table
     displayed <- prediction_data
-    displayed[, ncol(displayed) - 3] <- round(predictions, 3)   # Prediction
-    displayed[, ncol(displayed) - 2] <- lower_bound             # Lower_Bound
-    displayed[, ncol(displayed) - 1] <- upper_bound             # Upper_Bound
-    displayed[, ncol(displayed)]     <- outcomes                # Outcome
+    displayed[, idx_pred_start]     <- round(predictions, 3)  # Prediction
+    displayed[, idx_pred_start + 1] <- lower_bound            # Lower_Bound
+    displayed[, idx_pred_start + 2] <- upper_bound            # Upper_Bound
+    displayed[, idx_pred_start + 3] <- outcomes               # Outcome
     
     # 9) Save back and render
+    # Ensure ID stays character for display
+    displayed[[1]] <- as.character(displayed[[1]])
+    
     pred_table_data(displayed)
     switch(input$model_choice,
            "Logistic_Regression" = LG_pred_table_data(displayed),
            "XGB_Classifier"      = XGBCL_pred_table_data(displayed),
            "XGBoost"             = XGB_pred_table_data(displayed),
-           "Elastic_Net"         = EN_pred_table_data(displayed)
-    )
+           "Elastic_Net"         = EN_pred_table_data(displayed))
     
-    output$pd_data <- renderpreddata(pred_table_data(), column_props, current_pred_page(), init_ID_format, output)
+    renderpreddata(displayed, column_props, current_pred_page(), output)
   })
-  
-  # Disconnect the opened SQLite database
-  session$onSessionEnded(function() {
-    dbDisconnect(temp_db)
-  })
-  
+
 }
 
 shinyApp(ui, server)

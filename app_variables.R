@@ -49,30 +49,28 @@ rv_ao_map = reactiveValues(wind_speed=NULL, wind_dir=NULL, current_speed=NULL, c
 rv_trans = reactiveValues(full = NULL)
 rv_inter <- reactiveValues(table = NULL)
 rv_import <- reactiveValues(pending_df = NULL, ext = NULL)
+pred_ui_required <- reactiveVal(NULL)
+pred_resp_name   <- reactiveVal(NULL)
+rv_save <- reactiveValues(sp = 0L, sd = 0L)
 
 # General non-reactive variables
 init_data = NULL
 init_column_props = hash()
 column_props = hash()
-init_ID_format = NULL
 id_var = 1
 ignored_rows = NULL
 num_rows_per_page = 20
-date_format_string = "MDY"
 plot_delay = 900
 
 AO_COMP_NAMES <- c("WindA", "WindO", "CurrentA", "CurrentO", "WaveA", "WaveO")
 
 #Feature Transformations
 prefix_map <- c("Log10" = "Log..", "Inverse" = "Inverse..", "Square" = "Square..",
-                "Square Root" = "Sqrt..", "Quad Root" = "Qdrt..", "Polynomial" = "Poly..")
+    "Square Root" = "Sqrt..", "Quad Root" = "Qdrt..", "Polynomial" = "Poly..")
 TRANS_PREFIXES <- unname(prefix_map)
 TRANS_PATTERN  <- sprintf("^(%s)", paste(vapply(TRANS_PREFIXES, escape_regex, ""), collapse = "|"))
-
 PREFIX_KIND    <- setNames(names(prefix_map), TRANS_PREFIXES)
 POLY_COEFFS <- new.env(parent = emptyenv())
-
-#Feature Interactions
 INTER_PREFIX   <- "Int.."
 INTER_SEP      <- "__"
 INTER_PATTERN  <- sprintf("^%s", escape_regex(INTER_PREFIX))
@@ -97,8 +95,6 @@ colsamp_set = reactiveVal(0.8)
 xgb_select_result = reactiveVal()
 xgb_select_calculation = NULL
 running = reactiveVal(FALSE)
-# xgb_hyper_result = reactiveVal()
-# xgb_hyper_calculation = NULL
 
 # XGBCL hyperparameters
 xgbcl_tree_method_set = reactiveVal("hist")

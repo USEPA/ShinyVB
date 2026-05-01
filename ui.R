@@ -299,6 +299,99 @@ ui = fluidPage(
       padding: 0px 0px;
     }
     
+    #pred_file_wrap.disabled {
+      opacity: 0.5;
+    }
+    #pred_file_wrap.disabled .btn,
+    #pred_file_wrap.disabled input,
+    #pred_file_wrap.disabled label {
+      cursor: not-allowed !important;
+    }
+
+    #center-controls .shiny-input-container,
+    #center-controls .form-group,
+    #center-controls .input-group,
+    #center-controls .mb-3 {
+      margin-bottom: 0 !important;
+    }
+    #center-controls .help-block,
+    #center-controls small.form-text {
+      margin: 0 !important;
+    }
+
+    #center-controls .input-group .btn,
+    #center-controls .btn-file,
+    #center-controls label.btn {
+      min-width: 125px;
+      white-space: nowrap;
+      justify-content: center;
+    }
+    #center-controls .shiny-file-input-progress,
+    #center-controls [id$='_progress'],
+    #center-controls .progress.shiny-file-input-progress {
+      display: none !important;
+      height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    #load_saved_file .shiny-file-input-progress {
+      display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important;
+    }
+    
+    .btn-tall {
+      min-height: 38px;
+      padding: 20px 16px;
+      font-size: 16px !important;
+      background-color: #01796F !important;
+    }
+    
+    .btn-save {
+      min-height: 35px;
+      background-color: #4F6776 !important;
+      border-color: #aaaaaa !important;
+      color: #fff !important;
+    }
+    
+    .btn-save:hover,
+    .btn-save:focus {
+      background-color: #334551 !important;
+      border-color: #aaaaaa !important;
+      color: #fff !important;
+      text-decoration: none !important;
+    }
+    
+    .btn-save2 {
+      min-height: 35px;
+      background-color: #1E90FF !important;
+      border-color: #aaaaaa !important;
+      color: #fff !important;
+    }
+    
+    .btn-save2:hover,
+    .btn-save2:focus {
+      background-color: #0C3A66 !important;
+      border-color: #aaaaaa !important;
+      color: #fff !important;
+      text-decoration: none !important;
+    }
+    
+    .btn-special {
+      min-height: 33px !important;
+      padding: 3px 3px !important;
+      background-color: #4682B4 !important;
+      border-color: #aaaaaa !important;
+      color: #fff !important;
+    }
+    
+    .btn-special:hover,
+    .btn-special:focus {
+      background-color: #324AB2 !important;
+      border-color: #aaaaaa !important;
+      color: #fff !important;
+      text-decoration: none !important;
+    }
+    
   ")),
   
   tags$script(HTML(
@@ -310,6 +403,13 @@ ui = fluidPage(
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    });",
+    
+    "$(document).on('click', '#open_saved_file', function(e) {
+      e.preventDefault();
+      var $inp = $('#load_saved_file input[type=file]');
+      if (!$inp.length) $inp = $('#load_saved_file');
+      if ($inp.length && $inp[0]) $inp[0].click();
     });",
     
     "$(document).ready(function() {

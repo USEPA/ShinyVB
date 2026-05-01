@@ -105,6 +105,45 @@ create_data = function(data,rv,feats_to_use,ignored_rows,randomize,standardize) 
   created_data = data1
 }
 
+db_snapshot <- function(conn) {
+  ok <- FALSE
+  try(ok <- DBI::dbIsValid(conn), silent = TRUE)
+  if (!isTRUE(ok)) return(NULL)
+  tabs <- DBI::dbListTables(conn)
+  setNames(lapply(tabs, function(t) DBI::dbReadTable(conn, t)), tabs)
+}
+
+do_save <- function(save_type, fname, temp_db = NULL, session, extras = list()) {
+  
+  tmp <- tempfile(fileext = ".RData")
+  
+  save_list <- c(
+    list(
+      type         = save_type,
+      Version      = version,
+      temp_db      = NULL,
+      temp_db_dump = db_snapshot(temp_db)
+    ),
+    extras  # everything else you gathered in server
+  )
+  
+  save(save_list, file = tmp)
+  
+  alias <- paste0("download_", basename(tmp))
+  shiny::addResourcePath(alias, dirname(tmp))
+  
+  port <- session$clientData$url_port
+  port <- if (!is.null(port) && nzchar(port)) paste0(":", port) else ""
+  
+  url <- paste0(
+    session$clientData$url_protocol, "//",
+    session$clientData$url_hostname, port, "/",
+    alias, "/", basename(tmp)
+  )
+  
+  session$sendCustomMessage("download", list(filename = fname, url = url))
+}
+
 custom_xgb_loss = function(preds, dtrain, rw) {
   labels = getinfo(dtrain, "label")
   
@@ -146,7 +185,26 @@ magnitude_round = function(x) {
   )
 }
 
-`%||%` <- function(a, b) if (!is.null(a)) a else b
+is_string <- function(x) {
+  is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+}
+
+`%||%` <- function(a, b) {
+  if (is_string(a)) return(a)
+  if (!is.null(a))  return(a)  # preserve non-character values (numeric, logical, list, etc.)
+  b
+}
+
+read_input_file <- function(path, name) {
+  ext <- tolower(tools::file_ext(name))
+  if (ext %in% c("xlsx", "xls")) {
+    df <- openxlsx::read.xlsx(path, check.names = FALSE)
+  } else {
+    df <- data.table::fread(path, sep = "auto", data.table = FALSE, showProgress = FALSE)
+  }
+  df[] <- lapply(df, function(col) if (is.factor(col)) as.character(col) else col)
+  df
+}
 
 get_current_response_name <- function() {
   df <- try(current_data(), silent = TRUE)
@@ -161,86 +219,11 @@ set_prev_response_name <- function(name) {
   options(ShinyVB.prev_resp_name = if (is.null(name)) NULL else as.character(name))
 }
 
-parse_id_any_datetime_minute <- function(x, tz = Sys.timezone(), excel_ext = NULL, locale = "C") {
-  # Already POSIXct -> floor to minute
-  if (inherits(x, c("POSIXct", "POSIXt"))) {
-    return(lubridate::floor_date(x, unit = "minute"))
-  }
-  # Already Date -> coerce to POSIXct at midnight
-  if (inherits(x, "Date")) {
-    return(as.POSIXct(x, tz = tz))
-  }
-  # Excel numeric serials (xlsx) -> convert using Excel origin
-  if (is.numeric(x) && (is.null(excel_ext) || identical(excel_ext, "xlsx"))) {
-    px <- as.POSIXct(x * 86400, origin = "1899-12-30", tz = tz)
-    return(lubridate::floor_date(px, unit = "minute"))
-  }
-  
-  # Character inputs: normalize whitespace
-  chr <- gsub("[[:space:]]+", " ", trimws(as.character(x)))
-  
-  # Broad lubridate orders: MDY, YMD, DMY; 4-digit and 2-digit years; 12/24h; optional seconds
-  orders <- c(
-    # MDY (month/day/year)
-    "mdYIMSp","mdYIMp","mdYHMS","mdYHM","mdY",
-    "mdyIMSp","mdyIMp","mdyHMS","mdyHM","mdy",
-    # YMD (year-month-day)
-    "YmdIMSp","YmdIMp","YmdHMS","YmdHM","Ymd",
-    "ymdIMSp","ymdIMp","ymdHMS","ymdHM","ymd",
-    # DMY (day-month-year)
-    "dmYIMSp","dmYIMp","dmYHMS","dmYHM","dmY",
-    "dmyIMSp","dmyIMp","dmyHMS","dmyHM","dmy"
-  )
-  
-  px <- suppressWarnings(
-    lubridate::parse_date_time(chr, orders = orders, truncated = 1, exact = TRUE, tz = tz, locale = locale)
-  )
-  
-  # Fallback with explicit base::strptime formats for remaining NAs, including month names
-  na_idx <- which(is.na(px))
-  if (length(na_idx) > 0L) {
-    old_loc <- tryCatch(Sys.getlocale("LC_TIME"), error = function(e) NA_character_)
-    if (!is.na(old_loc)) on.exit(try(Sys.setlocale("LC_TIME", old_loc), silent = TRUE), add = TRUE)
-    try(Sys.setlocale("LC_TIME", "C"), silent = TRUE)
-    
-    fmts <- c(
-      # MDY with slash/dash, 4-digit year, 12/24h, with/without seconds
-      "%m/%d/%Y %I:%M:%S %p","%m/%d/%Y %I:%M %p","%m/%d/%Y %H:%M:%S","%m/%d/%Y %H:%M","%m/%d/%Y",
-      "%m-%d-%Y %I:%M:%S %p","%m-%d-%Y %I:%M %p","%m-%d-%Y %H:%M:%S","%m-%d-%Y %H:%M","%m-%d-%Y",
-      # MDY 2-digit year
-      "%m/%d/%y %I:%M:%S %p","%m/%d/%y %I:%M %p","%m/%d/%y %H:%M:%S","%m/%d/%y %H:%M","%m/%d/%y",
-      "%m-%d-%y %I:%M:%S %p","%m-%d-%y %I:%M %p","%m-%d-%y %H:%M:%S","%m-%d-%y %H:%M","%m-%d-%y",
-      # YMD with slash/dash
-      "%Y/%m/%d %I:%M:%S %p","%Y/%m/%d %I:%M %p","%Y/%m/%d %H:%M:%S","%Y/%m/%d %H:%M","%Y/%m/%d",
-      "%Y-%m-%d %I:%M:%S %p","%Y-%m-%d %I:%M %p","%Y-%m-%d %H:%M:%S","%Y-%m-%d %H:%M","%Y-%m-%d",
-      # DMY with slash/dash
-      "%d/%m/%Y %I:%M:%S %p","%d/%m/%Y %I:%M %p","%d/%m/%Y %H:%M:%S","%d/%m/%Y %H:%M","%d/%m/%Y",
-      "%d-%m-%Y %I:%M:%S %p","%d-%m-%Y %I:%M %p","%d-%m-%Y %H:%M:%S","%d-%m-%Y %H:%M","%d-%m-%Y",
-      # Month-name variants
-      "%b %d, %Y %H:%M:%S","%b %d, %Y %H:%M","%b %d, %Y",
-      "%B %d, %Y %H:%M:%S","%B %d, %Y %H:%M","%B %d, %Y"
-    )
-    
-    for (fmt in fmts) {
-      remaining <- na_idx[is.na(px[na_idx])]
-      if (!length(remaining)) break
-      parsed <- as.POSIXct(chr[remaining], format = fmt, tz = tz)
-      ok <- !is.na(parsed)
-      if (any(ok)) px[remaining][ok] <- parsed[ok]
-    }
-  }
-  
-  lubridate::floor_date(px, unit = "minute")
-}
-
-# Renders a modeling/prediction DT with consistent options and a wide, non-wrapping ID column.
-model_dt <- function(df,date_format_string,num_rows_per_page,id_col = 1,id_width = "180px",tz = Sys.timezone()) {
+# Renders a modeling/prediction DT with consistent options and wide, non-wrapping ID
+model_dt <- function(df,num_rows_per_page,id_width = "180px") {
   if (is.null(df)) return(NULL)
   
-  # Format ID as "M/D/YYYY HH:MM" only when converted from numeric Excel serials
-  if (ncol(df) >= id_col && identical(date_format_string, "Date_MDY_HM")) {
-    df[[id_col]] <- format_id_MDY_HM(df[[id_col]], tz = tz)
-  }
+  df[[1]] = as.character(df[[1]])
   
   DT::datatable(
     df,
@@ -271,107 +254,124 @@ model_dt <- function(df,date_format_string,num_rows_per_page,id_col = 1,id_width
       )
     )
   ) %>%
-    DT::formatStyle(id_col, `white-space` = "nowrap", `min-width` = id_width)
+    DT::formatStyle(1, `white-space` = "nowrap", `min-width` = id_width)
 }
 
-# Format a vector to "M/D/YYYY HH:MM" for display (handles AM/PM and extra spaces)
-format_id_MDY_HM <- function(x, tz = Sys.timezone()) {
-  # Normalize multiple spaces and trim
-  normalize <- function(xc) trimws(gsub("\\s+", " ", as.character(xc)))
-  
-  # Parse character to POSIXct robustly
-  char_to_posix <- function(s) {
-    # Try lubridate first (AM/PM-aware)
-    dt <- suppressWarnings(
-      lubridate::parse_date_time(
-        s,
-        orders = c("mdY IMSp","mdY IMp","mdY HM","mdY HMS",
-                   "Ymd IMSp","Ymd IMp","Ymd HM","Ymd HMS",
-                   "dmY IMSp","dmY IMp","dmY HM","dmY HMS"),
-        truncated = 1, exact = TRUE, tz = tz
+build_interactions <- function(df,response_idx,ignored,threshold,rv_inter,output,session,navigate = FALSE) {
+  # Validate data
+  if (is.null(df) || !is.data.frame(df) || ncol(df) < 3L) {
+    rv_inter$table <- NULL
+    output$interactions_table <- DT::renderDataTable(server = FALSE, {
+      DT::datatable(
+        data.frame(Message = "No data available."),
+        rownames = FALSE, selection = "none",
+        options = list(dom = "t", paging = FALSE)
       )
-    )
-    miss <- is.na(dt)
-    # Fallbacks with explicit formats
-    if (any(miss)) {
-      dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %I:%M:%S %p", tz = tz))
+    })
+    return(invisible(NULL))
+  }
+  
+  # Drop ignored rows (logical mask or integer indices)
+  if (!is.null(ignored) && length(ignored) > 0) {
+    if (is.logical(ignored) && length(ignored) == nrow(df)) {
+      df <- df[!ignored, , drop = FALSE]
+    } else {
+      drop_idx <- as.integer(ignored)
+      keep <- setdiff(seq_len(nrow(df)), drop_idx)
+      df <- df[keep, , drop = FALSE]
     }
-    miss <- is.na(dt)
-    if (any(miss)) {
-      dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %I:%M %p", tz = tz))
+  }
+  
+  # Response column
+  rv_name <- if (is.numeric(response_idx)) colnames(df)[response_idx] else as.character(response_idx)
+  y <- suppressWarnings(as.numeric(df[[rv_name]]))
+  
+  # Candidate features (excludes ID/response/derived; includes A/O as you specified)
+  base_feats <- get_interaction_candidates(df, include_AO = TRUE)
+  base_feats <- setdiff(base_feats, rv_name)
+  if (length(base_feats) < 2L) {
+    rv_inter$table <- NULL
+    output$interactions_table <- DT::renderDataTable(server = FALSE, {
+      DT::datatable(
+        data.frame(Message = "Not enough numeric features to compute interactions."),
+        rownames = FALSE, selection = "none",
+        options = list(dom = "t", paging = FALSE)
+      )
+    })
+    return(invisible(NULL))
+  }
+  
+  thr <- if (is.null(threshold) || !is.finite(threshold)) 0.7 else threshold
+  
+  # Compute correlations for pairs i < j
+  res <- vector("list", length = 0L)
+  k <- 1L
+  for (ii in seq_len(length(base_feats) - 1L)) {
+    a <- base_feats[ii]
+    xa <- suppressWarnings(as.numeric(df[[a]]))
+    for (jj in (ii + 1L):length(base_feats)) {
+      b <- base_feats[jj]
+      xb <- suppressWarnings(as.numeric(df[[b]]))
+      prod <- xa * xb
+      mask <- is.finite(prod) & is.finite(y)
+      if (sum(mask) >= 3 && stats::sd(prod[mask]) > 0 && stats::sd(y[mask]) > 0) {
+        ct <- suppressWarnings(stats::cor.test(prod[mask], y[mask], method = "pearson"))
+        r  <- unname(ct$estimate)
+        p  <- unname(ct$p.value)
+        if (is.finite(r) && abs(r) >= thr) {
+          res[[k]] <- data.frame(
+            Feat1 = a, Feat2 = b,
+            Correlation = as.numeric(r),
+            p_val = as.numeric(p),
+            stringsAsFactors = FALSE
+          )
+          k <- k + 1L
+        }
+      }
     }
-    dt
   }
   
-  # Build POSIXct vector by input type
-  if (inherits(x, c("POSIXct", "POSIXt"))) {
-    dt <- x
-    s  <- as.character(x)
-  } else if (inherits(x, "Date")) {
-    dt <- as.POSIXct(x, tz = tz)
-    s  <- as.character(x)
-  } else if (is.numeric(x)) {
-    # Treat numeric as Excel serial DAYS (Windows origin)
-    dt <- as.POSIXct(x * 86400, origin = "1899-12-30", tz = tz)
-    s  <- as.character(x)
-  } else if (is.character(x)) {
-    s  <- normalize(x)
-    dt <- char_to_posix(s)
-  } else {
-    # Unknown type: return input as character
-    return(as.character(x))
+  inter_tbl <- if (length(res)) do.call(rbind, res) else NULL
+  rv_inter$table <- inter_tbl
+  
+  output$interactions_table <- DT::renderDataTable(server = FALSE, {
+    if (is.null(inter_tbl) || nrow(inter_tbl) == 0) {
+      DT::datatable(
+        data.frame(Message = "No interactions exceed the threshold."),
+        rownames = FALSE, selection = "none",
+        options = list(dom = "t", paging = FALSE)
+      )
+    } else {
+      inter_tbl$Correlation <- round(inter_tbl$Correlation, 4)
+      inter_tbl$p_Value <- ifelse(
+        is.na(inter_tbl$p_val),
+        NA_character_,
+        ifelse(inter_tbl$p_val < 1e-4, "<0.0001",
+               formatC(inter_tbl$p_val, format = "fg", digits = 4))
+      )
+      DT::datatable(
+        inter_tbl[, c("Feat1", "Feat2", "Correlation", "p_Value")],
+        rownames = FALSE,
+        selection = "multiple",
+        options = list(
+          autoWidth  = FALSE,
+          dom        = "tip",
+          paging     = TRUE,
+          pageLength = 50,
+          ordering   = FALSE,
+          scrollX    = TRUE,
+          columnDefs = list(list(targets = 0:3, className = "dt-center"))
+        )
+      )
+    }
+  })
+  
+  if (isTRUE(navigate)) {
+    updateTabsetPanel(session, inputId = "shinyVB",  selected = "Data")
+    updateTabsetPanel(session, inputId = "data_tabs", selected = "Interactions")
   }
   
-  # Floor to minute and format; keep originals where parsing failed
-  dt  <- lubridate::floor_date(dt, unit = "minute")
-  out <- s
-  ok  <- !is.na(dt)
-  if (any(ok)) {
-    y  <- format(dt[ok], "%Y")
-    m  <- as.integer(format(dt[ok], "%m"))
-    d  <- as.integer(format(dt[ok], "%d"))
-    hm <- format(dt[ok], "%H:%M")
-    out[ok] <- sprintf("%d/%d/%s %s", m, d, y, hm)
-  }
-  out
-}
-
-id_to_posix <- function(x, tz = Sys.timezone()) {
-  if (inherits(x, c("POSIXct", "POSIXt"))) return(x)
-  if (inherits(x, "Date")) return(as.POSIXct(x, tz = tz))
-  if (is.numeric(x))       return(as.POSIXct(x * 86400, origin = "1899-12-30", tz = tz))
-  
-  # Character: normalize whitespace, including non-breaking space \u00A0
-  s <- trimws(gsub("[[:space:]\u00A0]+", " ", as.character(x)))
-  
-  # Try lubridate (AM/PM-aware), then explicit formats
-  dt <- suppressWarnings(
-    lubridate::parse_date_time(
-      s,
-      orders = c("mdY IMSp","mdY IMp","mdY HM","mdY HMS",
-                 "Ymd IMSp","Ymd IMp","Ymd HM","Ymd HMS",
-                 "dmY IMSp","dmY IMp","dmY HM","dmY HMS"),
-      truncated = 1, exact = TRUE, tz = tz
-    )
-  )
-  miss <- is.na(dt)
-  if (any(miss)) {
-    dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %I:%M:%S %p", tz = tz))
-  }
-  miss <- is.na(dt)
-  if (any(miss)) {
-    dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %I:%M %p", tz = tz))
-  }
-  # Last-ditch 24h formats
-  miss <- is.na(dt)
-  if (any(miss)) {
-    dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %H:%M:%S", tz = tz))
-  }
-  miss <- is.na(dt)
-  if (any(miss)) {
-    dt[miss] <- suppressWarnings(as.POSIXct(s[miss], format = "%m/%d/%Y %H:%M", tz = tz))
-  }
-  dt
+  invisible(inter_tbl)
 }
 
 clear_trans_table <- function(drop_transforms= TRUE,drop_interactions = TRUE,drop_AO= FALSE,column_props= NULL) {
@@ -434,6 +434,86 @@ clear_trans_table <- function(drop_transforms= TRUE,drop_interactions = TRUE,dro
   invisible(NULL)
 }
 
+# Collapse whitespace and trim (handles NBSP too)
+clean_names <- function(n) {
+  n <- gsub("[[:space:]\u00A0]+", " ", n)
+  trimws(n)
+}
+
+get_inter_components <- function(term) {
+  s <- sub(INTER_PATTERN, "", term, perl = TRUE)
+  strsplit(s, INTER_SEP, fixed = TRUE)[[1]]
+}
+get_base <- function(x) {
+  if (grepl(TRANS_PATTERN, x, perl = TRUE)) {
+    if (exists("base_name", mode = "function")) base_name(x) else sub(TRANS_PATTERN, "", x, perl = TRUE)
+  } else x
+}
+
+# Compute the RAW columns required to show in the prediction UI
+compute_ui_required <- function(model_features, rv_ao_map = NULL) {
+  # Ensure a clean character vector of model feature names
+  cols <- unique(as.character(model_features))
+  cols <- clean_names(cols)
+  
+  # AO component names (canonical)
+  ao_comp <- get0("AO_COMP_NAMES", envir = .GlobalEnv,
+                  ifnotfound = c("WindA","WindO","CurrentA","CurrentO","WaveA","WaveO"))
+  
+  # Canonical raw names from training (fallbacks if not yet defined)
+  ao_map <- .get_ao_map(rv_ao_map)
+  ao_raw <- list(
+    wind    = c(ao_map$wind_speed   %||% "Wind Speed",
+                ao_map$wind_dir     %||% "Wind Direction"),
+    current = c(ao_map$current_speed%||% "Current Speed",
+                ao_map$current_dir  %||% "Current Direction"),
+    wave    = c(ao_map$wave_height  %||% "Wave Height",
+                ao_map$wave_dir     %||% "Wave Direction")
+  )
+  
+  # Start with non-transformed, non-interaction, non-A/O features
+  ui_required <- cols[
+    !grepl(get0("TRANS_PATTERN", envir = .GlobalEnv, ifnotfound = ""), cols, perl = TRUE) &
+      !grepl(get0("INTER_PATTERN", envir = .GlobalEnv, ifnotfound = ""), cols, perl = TRUE) &
+      !(cols %in% ao_comp)
+  ]
+  
+  # Add bases for transformed features
+  trans_in_model <- cols[grepl(get0("TRANS_PATTERN", envir = .GlobalEnv, ifnotfound = ""), cols, perl = TRUE)]
+  if (length(trans_in_model)) {
+    bases <- vapply(trans_in_model, base_name, FUN.VALUE = character(1))
+    ui_required <- c(ui_required, bases)
+  }
+  
+  # If the model directly includes AO components, include their raw inputs
+  if (any(cols %in% c("WindA","WindO")))    ui_required <- c(ui_required, ao_raw$wind)
+  if (any(cols %in% c("CurrentA","CurrentO"))) ui_required <- c(ui_required, ao_raw$current)
+  if (any(cols %in% c("WaveA","WaveO")))    ui_required <- c(ui_required, ao_raw$wave)
+  
+  # Add bases for interaction terms; for AO components add raw inputs, otherwise add the base
+  inter_terms <- cols[grepl(get0("INTER_PATTERN", envir = .GlobalEnv, ifnotfound = ""), cols, perl = TRUE)]
+  if (length(inter_terms)) {
+    for (t in inter_terms) {
+      parts <- parse_inter_bases(t)  # returns c(a, b)
+      for (p in parts) {
+        b <- base_name(p)  # remove any transform prefixes from the interaction component
+        if (b %in% c("WindA","WindO")) {
+          ui_required <- c(ui_required, ao_raw$wind)
+        } else if (b %in% c("CurrentA","CurrentO")) {
+          ui_required <- c(ui_required, ao_raw$current)
+        } else if (b %in% c("WaveA","WaveO")) {
+          ui_required <- c(ui_required, ao_raw$wave)
+        } else {
+          ui_required <- c(ui_required, b)
+        }
+      }
+    }
+  }
+  
+  # De-duplicate and normalize
+  ui_required <- unique(ui_required)
+  clean_names(ui_required)
+}
 get_interaction_candidates <- function(df, include_AO = TRUE) {
   nm <- names(df)
   id_name <- nm[1L]
@@ -455,7 +535,6 @@ get_interaction_candidates <- function(df, include_AO = TRUE) {
   
   cand
 }
-
 build_transform_candidates <- function(df) {
   if (is.null(df) || !is.data.frame(df) || ncol(df) < 2L) return(character(0))
   nm <- names(df)
@@ -481,6 +560,106 @@ is_transformed <- function(nm) grepl(TRANS_PATTERN, nm, perl = TRUE)
 base_name      <- function(nm) sub(TRANS_PATTERN, "", nm, perl = TRUE)
 get_prefix     <- function(nm) regmatches(nm, regexpr(TRANS_PATTERN, nm, perl = TRUE))
 make_name      <- function(kind, feat) paste0(prefix_map[[kind]], feat)
+
+# Continue SampleID numbering for newly appended rows
+# vec: character ID vector
+# from, to: indices (1-based) to fill (inclusive)
+assign_sample_ids <- function(vec, from, to) {
+  if (from > to) return(vec)
+  rng <- from:to
+  # Look at existing IDs (before 'from') and find the highest SampleID<number>
+  existing <- vec[seq_len(max(from - 1L, 0L))]
+  m <- regmatches(existing, regexpr("^SampleID(\\d+)$", existing))
+  nums <- suppressWarnings(as.integer(sub("^SampleID(\\d+)$", "\\1", m)))
+  start <- if (length(nums) && any(!is.na(nums))) max(nums, na.rm = TRUE) + 1L else from
+  vec[rng] <- sprintf("SampleID%d", seq_len(length(rng)) + start - 1L)
+  vec
+}
+
+# Build a blank prediction table with placeholders and the correct ID seeding per mode
+# ui_required: character vector of RAW feature names to show in the UI
+build_blank_pred_table <- function(ui_required, rv_name, n, id_mode, base_date = get_base_date()) {
+  stopifnot(length(rv_name) == 1L)
+  n <- max(1L, as.integer(n))
+  temp <- data.frame(matrix(-999, nrow = n, ncol = length(ui_required) + 6), check.names = FALSE)
+  colnames(temp) <- c("Sample_ID", rv_name, ui_required,
+                      "Prediction", "Lower_Bound", "Upper_Bound", "Outcome")
+  
+  # Placeholders
+  idx_resp       <- 2L
+  idx_pred_end   <- ncol(temp)
+  idx_pred_start <- idx_pred_end - 3L
+  idx_feat_start <- 3L
+  idx_feat_end   <- idx_pred_start - 1L
+  
+  temp[[idx_resp]] <- -999
+  if (idx_feat_end >= idx_feat_start) {
+    for (j in idx_feat_start:idx_feat_end) temp[[j]] <- -999
+  }
+  for (j in idx_pred_start:idx_pred_end) temp[[j]] <- -999
+  
+  # Seed ID per mode
+  if (identical(id_mode, "Character")) {
+    temp[[1]] <- sprintf("SampleID%d", seq_len(nrow(temp)))
+  } else if (identical(id_mode, "Numeric")) {
+    temp[[1]] <- as.numeric(seq_len(nrow(temp)))
+  } else { # "Date"
+    temp[[1]] <- seq.Date(from = base_date, by = "day", length.out = nrow(temp))
+  }
+  
+  # Normalize storage (collapses midnight POSIXct to Date if needed)
+  ensure_id_type(temp, idx_id = 1L, id_mode = id_mode)
+}
+
+# Make appended rows with class-aware NA and -999 placeholders (ID assigned later)
+make_new_rows_pred <- function(df, n_rows) {
+  n_rows <- as.integer(n_rows)
+  stopifnot(n_rows > 0L)
+  idx_pred_end   <- ncol(df)
+  idx_pred_start <- idx_pred_end - 3L
+  idx_feat_start <- 3L
+  idx_feat_end   <- idx_pred_start - 1L
+  idx_resp       <- 2L
+  
+  new_rows <- as.data.frame(lapply(df, function(col) {
+    if (inherits(col, c("POSIXct", "POSIXt"))) rep(as.POSIXct(NA), n_rows)
+    else if (is.numeric(col)) rep(NA_real_, n_rows)
+    else if (is.character(col)) rep(NA_character_, n_rows)
+    else rep(NA, n_rows)
+  }), check.names = FALSE)
+  
+  if (idx_feat_end >= idx_feat_start) {
+    for (j in idx_feat_start:idx_feat_end) new_rows[[j]] <- rep(-999, n_rows)
+  }
+  new_rows[[idx_resp]] <- rep(-999, n_rows)
+  for (j in idx_pred_start:idx_pred_end) new_rows[[j]] <- rep(-999, n_rows)
+  
+  new_rows
+}
+
+# SampleIDn template detector
+is_blank_sampleid_template <- function(df, idx_id = 1L) {
+  id <- df[[idx_id]]
+  is.character(id) && length(id) > 0 && all(grepl("^SampleID\\d+$", id))
+}
+
+# Per-model getters/setters to de-duplicate switch(..)
+get_pred_table <- function(model) {
+  switch(model,
+         "Logistic_Regression" = LG_pred_table_data(),
+         "XGB_Classifier"      = XGBCL_pred_table_data(),
+         "XGBoost"             = XGB_pred_table_data(),
+         "Elastic_Net"         = EN_pred_table_data(),
+         NULL)
+}
+set_pred_table <- function(model, df, sync_display = TRUE) {
+  switch(model,
+         "Logistic_Regression" = LG_pred_table_data(df),
+         "XGB_Classifier"      = XGBCL_pred_table_data(df),
+         "XGBoost"             = XGB_pred_table_data(df),
+         "Elastic_Net"         = EN_pred_table_data(df))
+  if (isTRUE(sync_display)) pred_table_data(df)
+}
 
 canonicalize_kind <- function(kind) {
   # Normalize to 1-length string
